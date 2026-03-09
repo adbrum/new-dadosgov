@@ -575,17 +575,6 @@ wheels = [
 ]
 
 [[package]]
-name = "dotenv"
-version = "0.9.9"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "python-dotenv" },
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/b2/b7/545d2c10c1fc15e48653c91efde329a790f2eecfbbf2bd16003b5db2bab0/dotenv-0.9.9-py2.py3-none-any.whl", hash = "sha256:29cf74a087b31dafdb5a446b6d7e11cbce8ed2741540e2339c69fbef92c94ce9", size = 1892, upload-time = "2025-02-19T22:15:01.647Z" },
-]
-
-[[package]]
 name = "email-validator"
 version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -596,6 +585,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/f5/22/900cb125c76b7aaa450ce02fd727f452243f2e91a61af068b40adba60ea9/email_validator-2.3.0.tar.gz", hash = "sha256:9fc05c37f2f6cf439ff414f8fc46d917929974a82244c20eb10231ba60c54426", size = 51238, upload-time = "2025-08-26T13:09:06.831Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/de/15/545e2b6cf2e3be84bc1ed85613edd75b8aea69807a71c26f4ca6a9258e82/email_validator-2.3.0-py3-none-any.whl", hash = "sha256:80f13f623413e6b197ae73bb10bf4eb0908faf509ad8362c5edeb0be7fd450b4", size = 35604, upload-time = "2025-08-26T13:09:05.858Z" },
+]
+
+[[package]]
+name = "execnet"
+version = "2.1.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/bf/89/780e11f9588d9e7128a3f87788354c7946a9cbb1401ad38a48c4db9a4f07/execnet-2.1.2.tar.gz", hash = "sha256:63d83bfdd9a23e35b9c6a3261412324f964c2ec8dcd8d3c6916ee9373e0befcd", size = 166622, upload-time = "2025-11-12T09:56:37.75Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ab/84/02fc1827e8cdded4aa65baef11296a9bbe595c474f0d6d758af082d849fd/execnet-2.1.2-py3-none-any.whl", hash = "sha256:67fba928dd5a544b783f6056f449e5e3931a5c378b128bc18501f7ea79e296ec", size = 40708, upload-time = "2025-11-12T09:56:36.333Z" },
 ]
 
 [[package]]
@@ -1423,21 +1421,6 @@ wheels = [
 ]
 
 [[package]]
-name = "owslib"
-version = "0.35.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "lxml" },
-    { name = "python-dateutil" },
-    { name = "pyyaml" },
-    { name = "requests" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/bf/03/5df0b995a3a6eefc24cc2320e3fe830d95e76ee6b0b1c6c9d0f1d4040bbe/owslib-0.35.0.tar.gz", hash = "sha256:0182f377bb30d25b78284bbaf82a12dece97902ed844cee88791ff38665b9b00", size = 194282, upload-time = "2025-10-28T15:13:42.594Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/cd/12/74c145b9e273b2b479f1ea578c7778d96d0c34f2d112fd0ec96c905bb792/owslib-0.35.0-py3-none-any.whl", hash = "sha256:01648ea9b2b86502f456ad68a8dd07131d336416c5637f34adb358aafc0ad380", size = 240487, upload-time = "2025-10-28T15:13:41.399Z" },
-]
-
-[[package]]
 name = "packaging"
 version = "25.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1823,6 +1806,19 @@ wheels = [
 ]
 
 [[package]]
+name = "pytest-xdist"
+version = "3.8.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "execnet" },
+    { name = "pytest" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/78/b4/439b179d1ff526791eb921115fca8e44e596a13efeda518b9d845a619450/pytest_xdist-3.8.0.tar.gz", hash = "sha256:7e578125ec9bc6050861aa93f2d59f1d8d085595d6551c2c90b6f4fad8d3a9f1", size = 88069, upload-time = "2025-07-01T13:30:59.346Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ca/31/d4e37e9e550c2b92a9cbc2e4d0b7420a27224968580b5a447f420847c975/pytest_xdist-3.8.0-py3-none-any.whl", hash = "sha256:202ca578cfeb7370784a8c33d6d05bc6e13b4f25b5053c30a152269fd10f0b88", size = 46396, upload-time = "2025-07-01T13:30:56.632Z" },
+]
+
+[[package]]
 name = "python-dateutil"
 version = "2.9.0.post0"
 source = { registry = "https://pypi.org/simple" }
@@ -1832,15 +1828,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/66/c0/0c8b6ad9f17a802ee498c46e004a0eb49bc148f2fd230864601a86dcf6db/python-dateutil-2.9.0.post0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 342432, upload-time = "2024-03-01T18:36:20.211Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl", hash = "sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427", size = 229892, upload-time = "2024-03-01T18:36:18.57Z" },
-]
-
-[[package]]
-name = "python-dotenv"
-version = "1.2.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/f0/26/19cadc79a718c5edbec86fd4919a6b6d3f681039a2f6d66d14be94e75fb9/python_dotenv-1.2.1.tar.gz", hash = "sha256:42667e897e16ab0d66954af0e60a9caa94f0fd4ecf3aaf6d2d260eec1aa36ad6", size = 44221, upload-time = "2025-10-26T15:12:10.434Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/14/1b/a298b06749107c305e1fe0f814c6c74aea7b2f1e10989cb30f544a1b3253/python_dotenv-1.2.1-py3-none-any.whl", hash = "sha256:b81ee9561e9ca4004139c6cbba3a238c32b03e4894671e181b671e8cb8425d61", size = 21230, upload-time = "2025-10-26T15:12:09.109Z" },
 ]
 
 [[package]]
@@ -1899,6 +1886,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/eb/2e/79c822141bfd05a853236b504869ebc6b70159afc570e1d5a20641782eaa/pyyaml_env_tag-1.1.tar.gz", hash = "sha256:2eb38b75a2d21ee0475d6d97ec19c63287a7e140231e4214969d0eac923cd7ff", size = 5737, upload-time = "2025-05-13T15:24:01.64Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/04/11/432f32f8097b03e3cd5fe57e88efb685d964e2e5178a48ed61e841f7fdce/pyyaml_env_tag-1.1-py3-none-any.whl", hash = "sha256:17109e1a528561e32f026364712fee1264bc2ea6715120891174ed1b980d2e04", size = 4722, upload-time = "2025-05-13T15:23:59.629Z" },
+]
+
+[[package]]
+name = "qrcode"
+version = "8.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8f/b2/7fc2931bfae0af02d5f53b174e9cf701adbb35f39d69c2af63d4a39f81a9/qrcode-8.2.tar.gz", hash = "sha256:35c3f2a4172b33136ab9f6b3ef1c00260dd2f66f858f24d88418a015f446506c", size = 43317, upload-time = "2025-05-01T15:44:24.726Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/dd/b8/d2d6d731733f51684bbf76bf34dab3b70a9148e8f2cef2bb544fccec681a/qrcode-8.2-py3-none-any.whl", hash = "sha256:16e64e0716c14960108e85d853062c9e8bba5ca8252c0b4d0231b9df4060ff4f", size = 45986, upload-time = "2025-05-01T15:44:22.781Z" },
 ]
 
 [[package]]
@@ -2394,6 +2393,7 @@ wheels = [
 
 [[package]]
 name = "udata"
+version = "15.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "authlib" },
@@ -2407,7 +2407,6 @@ dependencies = [
     { name = "celery" },
     { name = "celerybeat-mongo" },
     { name = "click" },
-    { name = "dotenv" },
     { name = "email-validator" },
     { name = "factory-boy" },
     { name = "feedgenerator" },
@@ -2440,12 +2439,11 @@ dependencies = [
     { name = "mistune" },
     { name = "mongoengine" },
     { name = "netaddr" },
-    { name = "owslib" },
     { name = "pillow" },
     { name = "pydenticon" },
     { name = "pymongo" },
     { name = "python-dateutil" },
-    { name = "pytz" },
+    { name = "qrcode" },
     { name = "rdflib" },
     { name = "redis" },
     { name = "requests" },
@@ -2482,6 +2480,7 @@ dev = [
     { name = "pytest-flask" },
     { name = "pytest-mock" },
     { name = "pytest-sugar" },
+    { name = "pytest-xdist" },
     { name = "requests-mock" },
     { name = "ruff" },
 ]
@@ -2499,7 +2498,6 @@ requires-dist = [
     { name = "celery", specifier = ">=5.4.0,<6.0.0" },
     { name = "celerybeat-mongo", specifier = ">=0.2.0,<1.0.0" },
     { name = "click", specifier = ">=8.1.8,<9.0.0" },
-    { name = "dotenv", specifier = ">=0.9.9" },
     { name = "email-validator", specifier = ">=2.2.0,<3.0.0" },
     { name = "factory-boy", specifier = ">=3.3.3,<4.0.0" },
     { name = "feedgenerator", specifier = ">=2.1.0,<3.0.0" },
@@ -2532,12 +2530,11 @@ requires-dist = [
     { name = "mistune", specifier = ">=3.1.3,<4.0.0" },
     { name = "mongoengine", specifier = ">=0.29.1,<1.0.0" },
     { name = "netaddr", specifier = ">=1.3.0,<2.0.0" },
-    { name = "owslib", specifier = ">=0.31.0,<1.0.0" },
     { name = "pillow", specifier = ">=11.0.0,<13.0.0" },
     { name = "pydenticon", specifier = ">=0.3.1,<1.0.0" },
     { name = "pymongo", specifier = ">=4.11.3,<5.0.0" },
     { name = "python-dateutil", specifier = ">=2.9.0.post0,<3.0.0" },
-    { name = "pytz" },
+    { name = "qrcode", specifier = ">=8.2,<9.0" },
     { name = "rdflib", specifier = ">=7.1.3,<8.0.0" },
     { name = "redis", specifier = ">=5.0.0,<8.0.0" },
     { name = "requests", specifier = ">=2.32.4,<3.0.0" },
@@ -2574,6 +2571,7 @@ dev = [
     { name = "pytest-flask", specifier = ">=1.3.0,<2.0" },
     { name = "pytest-mock", specifier = ">=3.14.0,<4.0" },
     { name = "pytest-sugar", specifier = ">=1.0.0,<2.0" },
+    { name = "pytest-xdist", specifier = ">=3.5.0,<4.0" },
     { name = "requests-mock", specifier = ">=1.12.1,<2.0" },
     { name = "ruff", specifier = ">=0.11.0,<1.0" },
 ]

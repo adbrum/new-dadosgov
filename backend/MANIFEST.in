@@ -1,5 +1,0 @@
-include LICENSE MANIFEST.in README.md CHANGELOG.md
-
-recursive-include udata *
-
-global-exclude *~ *.egg *.pyc

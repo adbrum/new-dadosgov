@@ -1,0 +1,13 @@
+{
+  "extends": [
+    "config:base"
+  ],
+  "baseBranches": ["main"],
+  "enabledManagers": ["pep621"],
+  "pep621": {
+    "fileMatch": ["pyproject.toml"]
+  },
+  "automerge": true,
+  "prHourlyLimit": 5,
+  "masterIssueApproval": true
+}

@@ -1,87 +1,72 @@
 from copy import copy
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
-from mongoengine import EmbeddedDocument
 from mongoengine.errors import ValidationError
-from mongoengine.fields import (
-    BaseField,
-    BooleanField,
-    DateTimeField,
-    EmbeddedDocumentField,
-    FloatField,
-    IntField,
-    StringField,
-)
+from mongoengine.fields import BaseField
 from mongoengine.signals import pre_save
 
 from udata.errors import ConfigError
 from udata.i18n import _
 from udata.models import Dataset
 from udata.mongo import build_test_config, db, validate_config
-from udata.mongo.datetime_fields import DateField, DateRange, Datetimed
-from udata.mongo.document import UDataDocument as Document
-from udata.mongo.extras_fields import ExtrasField
-from udata.mongo.slug_fields import SlugField
-from udata.mongo.url_field import URLField
-from udata.mongo.uuid_fields import AutoUUIDField
 from udata.settings import Defaults
 from udata.tests.api import PytestOnlyDBTestCase
 from udata.tests.helpers import assert_equal_dates, assert_json_equal
 
 
-class UUIDTester(Document):
-    uuid = AutoUUIDField()
+class UUIDTester(db.Document):
+    uuid = db.AutoUUIDField()
 
 
-class UUIDAsIdTester(Document):
-    id = AutoUUIDField(primary_key=True)
+class UUIDAsIdTester(db.Document):
+    id = db.AutoUUIDField(primary_key=True)
 
 
-class SlugTester(Document):
-    title = StringField()
-    slug = SlugField(populate_from="title", max_length=1000)
+class SlugTester(db.Document):
+    title = db.StringField()
+    slug = db.SlugField(populate_from="title", max_length=1000)
     meta = {
         "allow_inheritance": True,
     }
 
 
-class SlugUpdateTester(Document):
-    title = StringField()
-    slug = SlugField(populate_from="title", update=True)
+class SlugUpdateTester(db.Document):
+    title = db.StringField()
+    slug = db.SlugField(populate_from="title", update=True)
 
 
-class DateTester(Document):
-    a_date = DateField()
+class DateTester(db.Document):
+    a_date = db.DateField()
 
 
-class DateRangeTester(Document):
-    temporal = EmbeddedDocumentField(DateRange)
+class DateRangeTester(db.Document):
+    temporal = db.EmbeddedDocumentField(db.DateRange)
 
 
-class RequiredDateRangeTester(Document):
-    temporal = EmbeddedDocumentField(DateRange, required=True)
+class RequiredDateRangeTester(db.Document):
+    temporal = db.EmbeddedDocumentField(db.DateRange, required=True)
 
 
-class DateTesterWithDefault(Document):
-    a_date = DateField(default=date.today)
+class DateTesterWithDefault(db.Document):
+    a_date = db.DateField(default=date.today)
 
 
 class InheritedSlugTester(SlugTester):
-    other = StringField()
+    other = db.StringField()
 
 
-class DatetimedTester(Datetimed, Document):
-    name = StringField()
+class DatetimedTester(db.Datetimed, db.Document):
+    name = db.StringField()
 
 
-class URLTester(Document):
-    url = URLField()
+class URLTester(db.Document):
+    url = db.URLField()
 
 
-class PrivateURLTester(Document):
-    url = URLField(private=True)
+class PrivateURLTester(db.Document):
+    url = db.URLField(private=True)
 
 
 class AutoUUIDFieldTest(PytestOnlyDBTestCase):
@@ -123,7 +108,7 @@ class SlugFieldTest(PytestOnlyDBTestCase):
         # It isn't registered on startup
         startup_receivers = copy(pre_save.receivers)
         assert not any(
-            getattr(receiver, "__func__", None) == SlugField.populate_on_pre_save
+            getattr(receiver, "__func__", None) == db.SlugField.populate_on_pre_save
             for receiver in pre_save.receivers_for(SlugUpdateTester)
         )
 
@@ -131,7 +116,7 @@ class SlugFieldTest(PytestOnlyDBTestCase):
 
         # It is registered when initializing a new SlugUpdateTester with a SlugField
         assert any(
-            getattr(receiver, "__func__", None) == SlugField.populate_on_pre_save
+            getattr(receiver, "__func__", None) == db.SlugField.populate_on_pre_save
             for receiver in pre_save.receivers_for(SlugUpdateTester)
         )
         assert hasattr(SlugUpdateTester.slug, "owner")
@@ -147,7 +132,7 @@ class SlugFieldTest(PytestOnlyDBTestCase):
 
         # It is also registered when updating an existing SlugUpdateTester with a SlugField
         assert any(
-            getattr(receiver, "__func__", None) == SlugField.populate_on_pre_save
+            getattr(receiver, "__func__", None) == db.SlugField.populate_on_pre_save
             for receiver in pre_save.receivers_for(SlugUpdateTester)
         )
         assert tester.slug == "other-title"
@@ -268,27 +253,27 @@ class SlugFieldTest(PytestOnlyDBTestCase):
         assert last_obj.slug.endswith("-10")
 
     def test_multiple_spaces(self):
-        field = SlugField()
+        field = db.SlugField()
         assert field.slugify("a  b") == "a-b"
 
     def test_lower_case_default(self):
-        field = SlugField()
+        field = db.SlugField()
         assert field.slugify("ABC") == "abc"
 
     def test_lower_case_false(self):
-        field = SlugField(lower_case=False)
+        field = db.SlugField(lower_case=False)
         assert field.slugify("AbC") == "AbC"
 
     def test_custom_separator(self):
-        field = SlugField(separator="+")
+        field = db.SlugField(separator="+")
         assert field.slugify("a b") == "a+b"
 
     def test_is_stripped(self):
-        field = SlugField()
+        field = db.SlugField()
         assert field.slugify("  ab  ") == "ab"
 
     def test_special_chars_are_normalized(self):
-        field = SlugField()
+        field = db.SlugField()
         assert field.slugify("à-€-ü") == "a-eur-u"
 
 
@@ -438,25 +423,25 @@ class URLFieldTest(PytestOnlyDBTestCase):
 
 class DatetimedTest(PytestOnlyDBTestCase):
     def test_class(self):
-        assert isinstance(DatetimedTester.created_at, DateTimeField)
-        assert isinstance(DatetimedTester.last_modified, DateTimeField)
+        assert isinstance(DatetimedTester.created_at, db.DateTimeField)
+        assert isinstance(DatetimedTester.last_modified, db.DateTimeField)
 
     def test_new_instance(self):
-        now = datetime.now(UTC)
+        now = datetime.utcnow()
         datetimed = DatetimedTester()
 
-        assert now <= datetimed.created_at <= datetime.now(UTC)
-        assert now <= datetimed.last_modified <= datetime.now(UTC)
+        assert now <= datetimed.created_at <= datetime.utcnow()
+        assert now <= datetimed.last_modified <= datetime.utcnow()
 
     def test_save_new_instance(self):
-        now = datetime.now(UTC)
+        now = datetime.utcnow()
         datetimed = DatetimedTester.objects.create()
 
-        assert now <= datetimed.created_at <= datetime.now(UTC)
-        assert now <= datetimed.last_modified <= datetime.now(UTC)
+        assert now <= datetimed.created_at <= datetime.utcnow()
+        assert now <= datetimed.last_modified <= datetime.utcnow()
 
     def test_save_last_modified_instance(self):
-        now = datetime.now(UTC)
+        now = datetime.utcnow()
         earlier = now - timedelta(days=1)
         datetimed = DatetimedTester.objects.create(created_at=earlier, last_modified=earlier)
 
@@ -467,7 +452,7 @@ class DatetimedTest(PytestOnlyDBTestCase):
         assert_equal_dates(datetimed.last_modified, now)
 
     def test_save_last_modified_instance_manually_set(self):
-        now = datetime.now(UTC)
+        now = datetime.utcnow()
         manual = now - timedelta(days=1)
         earlier = now - timedelta(days=2)
         datetimed = DatetimedTester.objects.create(created_at=earlier, last_modified=earlier)
@@ -480,7 +465,7 @@ class DatetimedTest(PytestOnlyDBTestCase):
         assert_equal_dates(datetimed.last_modified, manual)
 
     def test_save_last_modified_instance_manually_set_same_value(self):
-        now = datetime.now(UTC)
+        now = datetime.utcnow()
         manual = now - timedelta(days=1)
         earlier = now - timedelta(days=2)
         datetimed = DatetimedTester.objects.create(created_at=earlier, last_modified=earlier)
@@ -499,10 +484,10 @@ class DatetimedTest(PytestOnlyDBTestCase):
 
 class ExtrasFieldTest(PytestOnlyDBTestCase):
     def test_default_validate_primitive_type(self):
-        class Tester(Document):
-            extras = ExtrasField()
+        class Tester(db.Document):
+            extras = db.ExtrasField()
 
-        now = datetime.now(UTC)
+        now = datetime.utcnow()
         today = date.today()
 
         tester = Tester(
@@ -518,8 +503,8 @@ class ExtrasFieldTest(PytestOnlyDBTestCase):
         tester.validate()
 
     def test_can_only_register_db_type(self):
-        class Tester(Document):
-            extras = ExtrasField()
+        class Tester(db.Document):
+            extras = db.ExtrasField()
 
         with pytest.raises(TypeError):
             Tester.extras.register("test", datetime)
@@ -527,16 +512,16 @@ class ExtrasFieldTest(PytestOnlyDBTestCase):
     @pytest.mark.parametrize(
         "dbtype,value",
         [
-            (IntField, 42),
-            (FloatField, 0.42),
-            (BooleanField, True),
-            (DateTimeField, datetime.now(UTC)),
-            (DateField, date.today()),
+            (db.IntField, 42),
+            (db.FloatField, 0.42),
+            (db.BooleanField, True),
+            (db.DateTimeField, datetime.utcnow()),
+            (db.DateField, date.today()),
         ],
     )
     def test_validate_registered_db_type(self, dbtype, value):
-        class Tester(Document):
-            extras = ExtrasField()
+        class Tester(db.Document):
+            extras = db.ExtrasField()
 
         Tester.extras.register("test", dbtype)
 
@@ -545,42 +530,42 @@ class ExtrasFieldTest(PytestOnlyDBTestCase):
     @pytest.mark.parametrize(
         "dbtype,value",
         [
-            (IntField, datetime.now(UTC)),
-            (FloatField, datetime.now(UTC)),
-            (BooleanField, 42),
-            (DateTimeField, 42),
-            (DateField, 42),
+            (db.IntField, datetime.utcnow()),
+            (db.FloatField, datetime.utcnow()),
+            (db.BooleanField, 42),
+            (db.DateTimeField, 42),
+            (db.DateField, 42),
         ],
     )
     def test_fail_to_validate_wrong_type(self, dbtype, value):
-        class Tester(Document):
-            extras = ExtrasField()
+        class Tester(db.Document):
+            extras = db.ExtrasField()
 
         Tester.extras.register("test", dbtype)
 
-        with pytest.raises(ValidationError):
+        with pytest.raises(db.ValidationError):
             Tester(extras={"test": value}).validate()
 
     def test_validate_custom_type(self):
-        class Tester(Document):
-            extras = ExtrasField()
+        class Tester(db.Document):
+            extras = db.ExtrasField()
 
         @Tester.extras("test")
         class Custom(BaseField):
             def validate(self, value):
                 if not isinstance(value, dict):
-                    raise ValidationError("Should be a dict instance")
+                    raise db.ValidationError("Should be a dict instance")
 
         tester = Tester(extras={"test": {}})
         tester.validate()
 
     def test_validate_registered_type_embedded_document(self):
-        class Tester(Document):
-            extras = ExtrasField()
+        class Tester(db.Document):
+            extras = db.ExtrasField()
 
         @Tester.extras("test")
-        class EmbeddedExtra(EmbeddedDocument):
-            name = StringField(required=True)
+        class EmbeddedExtra(db.EmbeddedDocument):
+            name = db.StringField(required=True)
 
         tester = Tester(extras={"test": {}})
         with pytest.raises(ValidationError):
@@ -593,12 +578,12 @@ class ExtrasFieldTest(PytestOnlyDBTestCase):
         tester.validate()
 
     def test_is_json_serializable(self):
-        class Tester(Document):
-            extras = ExtrasField()
+        class Tester(db.Document):
+            extras = db.ExtrasField()
 
         @Tester.extras("embedded")
-        class EmbeddedExtra(EmbeddedDocument):
-            name = StringField(required=True)
+        class EmbeddedExtra(db.EmbeddedDocument):
+            name = db.StringField(required=True)
 
         tester = Tester(
             extras={

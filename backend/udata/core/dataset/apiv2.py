@@ -162,14 +162,12 @@ dataset_fields = apiv2.model(
             description="Link to the dataset community resources",
         ),
         "frequency": fields.Raw(
-            attribute=lambda d: (
-                {
-                    "id": (d.frequency or UpdateFrequency.UNKNOWN).id,
-                    "label": (d.frequency or UpdateFrequency.UNKNOWN).label,
-                }
-                if request.headers.get(FULL_OBJECTS_HEADER, False, bool)
-                else (d.frequency or UpdateFrequency.UNKNOWN)
-            ),
+            attribute=lambda d: {
+                "id": (d.frequency or UpdateFrequency.UNKNOWN).id,
+                "label": (d.frequency or UpdateFrequency.UNKNOWN).label,
+            }
+            if request.headers.get(FULL_OBJECTS_HEADER, False, bool)
+            else (d.frequency or UpdateFrequency.UNKNOWN),
             enum=list(UpdateFrequency),
             default=UpdateFrequency.UNKNOWN,
             required=True,
@@ -204,11 +202,9 @@ dataset_fields = apiv2.model(
             spatial_coverage_fields, allow_null=True, description="The spatial coverage"
         ),
         "license": fields.Raw(
-            attribute=lambda d: (
-                marshal(d.license or DEFAULT_LICENSE, license_fields)
-                if request.headers.get(FULL_OBJECTS_HEADER, False, bool)
-                else (d.license.id if d.license is not None else None)
-            ),
+            attribute=lambda d: marshal(d.license or DEFAULT_LICENSE, license_fields)
+            if request.headers.get(FULL_OBJECTS_HEADER, False, bool)
+            else (d.license.id if d.license is not None else None),
             default=DEFAULT_LICENSE["id"],
             description="The dataset license (full License object if `X-Get-Datasets-Full-Objects` is set, ID of the license otherwise)",
         ),
@@ -262,11 +258,6 @@ resource_page_fields = apiv2.model(
 dataset_page_fields = apiv2.model(
     "DatasetPage", fields.pager(dataset_fields), mask="data{{{0}}},*".format(DEFAULT_MASK_APIV2)
 )
-dataset_search_page_fields = apiv2.model(
-    "DatasetSearchPage",
-    fields.search_pager(dataset_fields),
-    mask="data{{{0}}},*".format(DEFAULT_MASK_APIV2),
-)
 
 specific_resource_fields = apiv2.model(
     "SpecificResource",
@@ -301,7 +292,7 @@ class DatasetSearchAPI(API):
 
     @apiv2.doc("search_datasets")
     @apiv2.expect(search_parser)
-    @apiv2.marshal_with(dataset_search_page_fields)
+    @apiv2.marshal_with(dataset_page_fields)
     def get(self):
         """List or search all datasets"""
         args = search_parser.parse_args()
@@ -342,10 +333,11 @@ class DatasetAPI(API):
     @apiv2.marshal_with(dataset_fields)
     def get(self, dataset):
         """Get a dataset given its identifier"""
-        if not dataset.permissions["read"].can():
-            if not dataset.private and dataset.deleted:
+        if not dataset.permissions["edit"].can():
+            if dataset.private:
+                apiv2.abort(404)
+            elif dataset.deleted:
                 apiv2.abort(410, "Dataset has been deleted")
-            apiv2.abort(404)
         return dataset
 
 
@@ -358,10 +350,11 @@ class DatasetExtrasAPI(API):
     @apiv2.doc("get_dataset_extras")
     def get(self, dataset):
         """Get a dataset extras given its identifier"""
-        if not dataset.permissions["read"].can():
-            if not dataset.private and dataset.deleted:
+        if not dataset.permissions["edit"].can():
+            if dataset.private:
+                apiv2.abort(404)
+            elif dataset.deleted:
                 apiv2.abort(410, "Dataset has been deleted")
-            apiv2.abort(404)
         return dataset.extras
 
     @apiv2.secure
@@ -409,10 +402,11 @@ class ResourcesAPI(API):
     @apiv2.marshal_with(resource_page_fields)
     def get(self, dataset):
         """Get the given dataset resources, paginated."""
-        if not dataset.permissions["read"].can():
-            if not dataset.private and dataset.deleted:
+        if not dataset.permissions["edit"].can():
+            if dataset.private:
+                apiv2.abort(404)
+            elif dataset.deleted:
                 apiv2.abort(410, "Dataset has been deleted")
-            apiv2.abort(404)
         args = resources_parser.parse_args()
         page = args["page"]
         page_size = args["page_size"]
@@ -455,10 +449,11 @@ class DatasetSchemasAPI(API):
     @apiv2.marshal_with(schema_fields)
     def get(self, dataset):
         """Get a dataset schemas given its identifier"""
-        if not dataset.permissions["read"].can():
-            if not dataset.private and dataset.deleted:
+        if not dataset.permissions["edit"].can():
+            if dataset.private:
+                apiv2.abort(404)
+            elif dataset.deleted:
                 apiv2.abort(410, "Dataset has been deleted")
-            apiv2.abort(404)
 
         pipeline = [
             {
@@ -497,10 +492,11 @@ class ResourceAPI(API):
     def get(self, rid):
         dataset = Dataset.objects(resources__id=rid).first()
         if dataset:
-            if not dataset.permissions["read"].can():
-                if not dataset.private and dataset.deleted:
+            if not dataset.permissions["edit"].can():
+                if dataset.private:
+                    apiv2.abort(404)
+                elif dataset.deleted:
                     apiv2.abort(410, "Dataset has been deleted")
-                apiv2.abort(404)
             resource = get_by(dataset.resources, "id", rid)
         else:
             resource = CommunityResource.objects(id=rid).first()
@@ -529,10 +525,11 @@ class ResourceExtrasAPI(ResourceMixin, API):
     @apiv2.doc("get_resource_extras")
     def get(self, dataset, rid):
         """Get a resource extras given its identifier"""
-        if not dataset.permissions["read"].can():
-            if not dataset.private and dataset.deleted:
+        if not dataset.permissions["edit"].can():
+            if dataset.private:
+                apiv2.abort(404)
+            elif dataset.deleted:
                 apiv2.abort(410, "Dataset has been deleted")
-            apiv2.abort(404)
         resource = self.get_resource_or_404(dataset, rid)
         return resource.extras
 

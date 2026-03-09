@@ -1,10 +1,6 @@
-from mongoengine.errors import ValidationError
-from mongoengine.fields import StringField
-
 from udata.core.owned import Owned, OwnedQuerySet
 from udata.i18n import lazy_gettext as _
-from udata.mongo.document import UDataDocument as Document
-from udata.mongo.url_field import URLField
+from udata.mongo import db
 
 __all__ = ("ContactPoint",)
 
@@ -24,17 +20,17 @@ CONTACT_ROLES = {
 }
 
 
-class ContactPoint(Document, Owned):
-    name = StringField(max_length=255, required=True)
-    email = StringField(max_length=255)
-    contact_form = URLField()
-    role = StringField(required=True, choices=list(CONTACT_ROLES))
+class ContactPoint(db.Document, Owned):
+    name = db.StringField(max_length=255, required=True)
+    email = db.StringField(max_length=255)
+    contact_form = db.URLField()
+    role = db.StringField(required=True, choices=list(CONTACT_ROLES))
 
     meta = {"queryset_class": OwnedQuerySet}
 
     def validate(self, clean=True):
         if self.role == "contact" and not self.email and not self.contact_form:
-            raise ValidationError(
+            raise db.ValidationError(
                 _("At least an email or a contact form is required for a contact point")
             )
         return super().validate(clean=clean)

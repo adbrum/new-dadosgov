@@ -1,21 +1,20 @@
 from flask import current_app
 from langdetect import detect
-from mongoengine import EmbeddedDocument, signals
-from mongoengine.fields import DictField, EmbeddedDocumentField, StringField
+from mongoengine import signals
 
-from udata.mongo.document import UDataDocument as Document
+from udata.mongo import db
 
 from .constants import NO_SPAM, NOT_CHECKED, POTENTIAL_SPAM, SPAM_STATUS_CHOICES
 from .signals import on_new_potential_spam
 
 
-class SpamInfo(EmbeddedDocument):
-    status = StringField(choices=SPAM_STATUS_CHOICES, default=NOT_CHECKED)
-    callbacks = DictField(default={})
+class SpamInfo(db.EmbeddedDocument):
+    status = db.StringField(choices=SPAM_STATUS_CHOICES, default=NOT_CHECKED)
+    callbacks = db.DictField(default={})
 
 
 class SpamMixin(object):
-    spam = EmbeddedDocumentField(SpamInfo)
+    spam = db.EmbeddedDocumentField(SpamInfo)
 
     attributes_before = None
     detect_spam_enabled: bool = True
@@ -44,7 +43,7 @@ class SpamMixin(object):
 
         # We do not want to check embedded document here, they will be checked
         # during the clean of their parents.
-        if isinstance(self, Document):
+        if isinstance(self, db.Document):
             self.detect_spam()
 
     def save_without_spam_detection(self):
@@ -120,7 +119,7 @@ class SpamMixin(object):
         we want to check for spam on all the fields.
         On subsequent requests we want to check only the modified fields.
         """
-        if isinstance(self, Document) or isinstance(self, EmbeddedDocument):
+        if isinstance(self, db.Document) or isinstance(self, db.EmbeddedDocument):
             return self._created
         else:
             raise RuntimeError("SpamMixin should be a Document or an EmbeddedDocument")
@@ -153,7 +152,7 @@ class SpamMixin(object):
     def spam_is_whitelisted(self) -> bool:
         return False
 
-    def spam_report_message(self, breadcrumb=None):
+    def spam_report_message(self):
         return f"Spam potentiel sur {type(self).__name__}"
 
     def _report(self, text, breadcrumb, reason):

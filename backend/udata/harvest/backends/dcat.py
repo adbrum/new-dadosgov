@@ -1,5 +1,4 @@
 import logging
-from abc import ABC, abstractmethod
 from datetime import date
 from typing import ClassVar, Generator
 
@@ -16,7 +15,6 @@ from udata.i18n import gettext as _
 from udata.rdf import (
     DCAT,
     DCT,
-    GEODCAT,
     HYDRA,
     SPDX,
     guess_format,
@@ -26,7 +24,7 @@ from udata.rdf import (
 )
 from udata.storage.s3 import store_as_json
 
-from .base import BaseBackend, HarvestExtraConfig, HarvestFeature
+from .base import BaseBackend, HarvestExtraConfig
 
 log = logging.getLogger(__name__)
 
@@ -127,7 +125,7 @@ class DcatBackend(BaseBackend):
         else:
             self.job.data["graphs"] = serialized_graphs
 
-    def get_format(self) -> str:
+    def get_format(self):
         fmt = guess_format(self.source.url)
         # if format can't be guessed from the url
         # we fallback on the declared Content-Type
@@ -256,21 +254,14 @@ class DcatBackend(BaseBackend):
         raise ValueError(f"Unable to find dataset with DCT.identifier:{item.remote_id}")
 
 
-class BaseCswDcatBackend(DcatBackend, ABC):
+class CswDcatBackend(DcatBackend):
     """
-    Abstract base CSW to DCAT harvester.
-
-    Once items are retrieved from CSW, the parsing of these items is the same as DcatBackend.
+    CSW harvester fetching records as DCAT.
+    The parsing of items is then the same as for the DcatBackend.
     """
 
-    extra_configs = (
-        HarvestExtraConfig(
-            _("Remote URL prefix"),
-            "remote_url_prefix",
-            str,
-            _("A prefix used to build the remote URL of the harvested items."),
-        ),
-    )
+    name = "csw-dcat"
+    display_name = "CSW-DCAT"
 
     # CSW_REQUEST is based on:
     # - Request syntax from spec [1] and example requests [1] [2].
@@ -336,6 +327,8 @@ class BaseCswDcatBackend(DcatBackend, ABC):
     </csw:GetRecords>
     """
 
+    CSW_OUTPUT_SCHEMA = "http://www.w3.org/ns/dcat#"
+
     SAXON_SECURITY_FEATURES = {
         "http://saxon.sf.net/feature/allow-external-functions": "false",
         "http://saxon.sf.net/feature/parserFeature?uri=http://apache.org/xml/features/nonvalidating/load-external-dtd": "false",
@@ -354,36 +347,15 @@ class BaseCswDcatBackend(DcatBackend, ABC):
         self.xpath_proc = self.saxon_proc.new_xpath_processor()
         self.xpath_proc.declare_namespace("csw", CSW_NAMESPACE)
 
-    @property
-    @abstractmethod
-    def output_schema(self) -> str:
-        """
-        Return the CSW `outputSchema` property.
-        """
-        pass
-
-    @abstractmethod
-    def as_dcat(self, tree: PyXdmNode) -> PyXdmNode:
-        """
-        Return the input tree as a DCAT tree.
-        """
-        pass
-
-    @override
-    def get_format(self) -> str:
-        return "xml"
-
-    @override
     def walk_graph(self, url: str, fmt: str) -> Generator[tuple[int, Graph], None, None]:
         """
-        Yield all RDF pages as `Graph` from the source.
+        Yield all RDF pages as `Graph` from the source
         """
-        output_schema = self.output_schema
         page_number = 0
         start = 1
 
         while True:
-            data = self.CSW_REQUEST.format(output_schema=output_schema, start=start)
+            data = self.CSW_REQUEST.format(output_schema=self.CSW_OUTPUT_SCHEMA, start=start)
             response = self.post(url, data=data, headers={"Content-Type": "application/xml"})
             response.raise_for_status()
 
@@ -417,11 +389,19 @@ class BaseCswDcatBackend(DcatBackend, ABC):
                     return
 
             page_number += 1
-            start = self._next_position(start, search_results)
+            start = self.next_position(start, search_results)
             if not start:
                 return
 
-    def _next_position(self, start: int, search_results: PyXdmNode) -> int | None:
+    def as_dcat(self, tree: PyXdmNode) -> PyXdmNode:
+        """
+        Return the input tree as a DCAT tree.
+        For CswDcatBackend, this method return the incoming tree as-is, since it's already DCAT.
+        For subclasses of CswDcatBackend, this method should convert the incoming tree to DCAT.
+        """
+        return tree
+
+    def next_position(self, start: int, search_results: PyXdmNode) -> int | None:
         next_record = int(search_results.get_attribute_value("nextRecord"))
         matched_count = int(search_results.get_attribute_value("numberOfRecordsMatched"))
         returned_count = int(search_results.get_attribute_value("numberOfRecordsReturned"))
@@ -443,41 +423,25 @@ class BaseCswDcatBackend(DcatBackend, ABC):
         return None if should_break else next_record
 
 
-class CswDcatBackend(BaseCswDcatBackend):
-    """
-    CSW harvester fetching records as DCAT.
-    """
-
-    name = "csw-dcat"
-    display_name = "CSW-DCAT"
-
-    features = (
-        *BaseCswDcatBackend.features,
-        HarvestFeature(
-            "geodcatap",
-            _("GeoDCAT-AP"),
-            _("Request GeoDCAT-AP to the CSW server (must be supported by the server)."),
-            default=False,
-        ),
-    )
-
-    @property
-    @override
-    def output_schema(self) -> str:
-        return GEODCAT if self.has_feature("geodcatap") else DCAT
-
-    @override
-    def as_dcat(self, tree: PyXdmNode) -> PyXdmNode:
-        return tree
-
-
-class CswIso19139DcatBackend(BaseCswDcatBackend):
+class CswIso19139DcatBackend(CswDcatBackend):
     """
     CSW harvester fetching records as ISO-19139 and using XSLT to convert them to DCAT.
+    The parsing of items is then the same as for the DcatBackend.
     """
 
     name = "csw-iso-19139"
     display_name = "CSW-ISO-19139"
+
+    extra_configs = (
+        HarvestExtraConfig(
+            _("Remote URL prefix"),
+            "remote_url_prefix",
+            str,
+            _("A prefix used to build the remote URL of the harvested items."),
+        ),
+    )
+
+    CSW_OUTPUT_SCHEMA = "http://www.isotc211.org/2005/gmd"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -488,11 +452,6 @@ class CswIso19139DcatBackend(BaseCswDcatBackend):
         self.xslt_exec.set_parameter(
             "CoupledResourceLookUp", self.saxon_proc.make_string_value("disabled")
         )
-
-    @property
-    @override
-    def output_schema(self) -> str:
-        return "http://www.isotc211.org/2005/gmd"
 
     @override
     def as_dcat(self, tree: PyXdmNode) -> PyXdmNode:

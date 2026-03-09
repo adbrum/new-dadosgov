@@ -231,17 +231,24 @@ class RandomBackend(BaseBackend):
 
 ```
 
-You need to properly expose the harvester as a `udata.harvesters` entrypoint in your `pyproject.toml`:
+You need to properly expose the harvester as a `udata.harvesters` entrypoint in your `setup.py`:
 
-```toml
-[project.entry-points."udata.harvesters"]
-random = "canonical.path.to_the:RandomBackend"
+```python
+setup(
+    '...'
+    entry_points={
+        'udata.harvesters': [
+            'random = canonical.path.to_the:RandomBackend',
+        ]
+    },
+    '...'
+)
 ```
 
 The easiest way is to start from the
 [dedicated cookiecutter template][cookiecutter-template]:
 
-```shell
+```bash
 pip install cookiecutter
 cookiecutter gh:opendatateam/cookiecutter-udata-harvester
 ```

@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime
 
 from flask import make_response, redirect, request, url_for
 from mongoengine.queryset.visitor import Q
@@ -29,11 +29,9 @@ from udata.core.storages.api import (
     uploaded_image_fields,
 )
 from udata.models import ContactPoint
-from udata.mongo.errors import FieldValidationError
 from udata.rdf import RDF_EXTENSIONS, graph_response, negociate_content
 
 from .api_fields import (
-    invite_fields,
     member_fields,
     org_fields,
     org_page_fields,
@@ -42,22 +40,17 @@ from .api_fields import (
     refuse_membership_fields,
     request_fields,
 )
-from .constants import DEFAULT_ROLE, ORG_ROLES
+from .constants import ORG_ROLES
 from .forms import (
     MemberForm,
-    MembershipInviteForm,
     MembershipRefuseForm,
     MembershipRequestForm,
     OrganizationForm,
 )
 from .models import Member, MembershipRequest, Organization
+from .permissions import EditOrganizationPermission, OrganizationPrivatePermission
 from .rdf import build_org_catalog
-from .tasks import (
-    notify_membership_invitation,
-    notify_membership_invitation_canceled,
-    notify_membership_request,
-    notify_membership_response,
-)
+from .tasks import notify_membership_request, notify_membership_response, notify_new_member
 
 DEFAULT_SORTING = "-created_at"
 SUGGEST_SORTING = "-metrics.followers"
@@ -76,8 +69,6 @@ class OrgApiParser(ModelApiParser):
 
     def __init__(self):
         super().__init__()
-        # Uses __badges__ (not available_badges) so that users can still filter
-        # by any existing badge, even hidden ones.
         self.parser.add_argument(
             "badge",
             type=str,
@@ -158,7 +149,7 @@ class OrganizationAPI(API):
     @api.marshal_with(org_fields)
     def get(self, org):
         """Get a organization given its identifier"""
-        if org.deleted and not org.permissions["private"].can():
+        if org.deleted and not OrganizationPrivatePermission(org).can():
             api.abort(410, "Organization has been deleted")
         return org
 
@@ -177,7 +168,7 @@ class OrganizationAPI(API):
         request_deleted = request.json.get("deleted", True)
         if org.deleted and request_deleted is not None:
             api.abort(410, "Organization has been deleted")
-        org.permissions["edit"].test()
+        EditOrganizationPermission(org).test()
         form = api.validate(OrganizationForm, org)
         return form.save()
 
@@ -190,10 +181,10 @@ class OrganizationAPI(API):
         args = org_delete_parser.parse_args()
         if org.deleted:
             api.abort(410, "Organization has been deleted")
-        org.permissions["delete"].test()
+        EditOrganizationPermission(org).test()
         send_legal_notice_on_deletion(org, args)
 
-        org.deleted = datetime.now(UTC)
+        org.deleted = datetime.utcnow()
         org.save()
         return "", 204
 
@@ -288,7 +279,7 @@ class AvailableOrganizationBadgesAPI(API):
     @api.doc("available_organization_badges")
     def get(self):
         """List all available organization badges and their labels"""
-        return Organization.available_badges()
+        return Organization.__badges__
 
 
 @ns.route("/<org:org>/badges/", endpoint="organization_badges")
@@ -371,7 +362,8 @@ class MembershipRequestAPI(API):
         args = requests_parser.parse_args()
         if args["user"]:
             if not current_user.is_authenticated or (
-                str(current_user.id) != args["user"] and not org.permissions["members"].can()
+                str(current_user.id) != args["user"]
+                and not OrganizationPrivatePermission(org).can()
             ):
                 api.abort(
                     403,
@@ -384,7 +376,7 @@ class MembershipRequestAPI(API):
                     if (r.status == args["status"] and str(r.user.id) == args["user"])
                 ]
             return [r for r in org.requests if str(r.user.id) == args["user"]]
-        org.permissions["members"].test()
+        OrganizationPrivatePermission(org).test()
         if args["status"]:
             return [r for r in org.requests if r.status == args["status"]]
         else:
@@ -427,18 +419,15 @@ class MembershipAcceptAPI(MembershipAPI):
     @api.marshal_with(member_fields)
     def post(self, org, id):
         """Accept user membership to a given organization."""
-        org.permissions["members"].test()
+        EditOrganizationPermission(org).test()
         membership_request = self.get_or_404(org, id)
-
-        if membership_request.kind == "invitation":
-            api.abort(400, "Use the cancel endpoint for invitations")
 
         if org.is_member(membership_request.user):
             return org.member(membership_request.user), 409
 
         membership_request.status = "accepted"
         membership_request.handled_by = current_user._get_current_object()
-        membership_request.handled_on = datetime.now(UTC)
+        membership_request.handled_on = datetime.utcnow()
         member = Member(user=membership_request.user, role="editor")
 
         org.members.append(member)
@@ -458,16 +447,12 @@ class MembershipRefuseAPI(MembershipAPI):
     @api.doc("refuse_membership", **common_doc)
     def post(self, org, id):
         """Refuse user membership to a given organization."""
-        org.permissions["members"].test()
+        EditOrganizationPermission(org).test()
         membership_request = self.get_or_404(org, id)
-
-        if membership_request.kind == "invitation":
-            api.abort(400, "Use the cancel endpoint for invitations")
-
         form = api.validate(MembershipRefuseForm)
         membership_request.status = "refused"
         membership_request.handled_by = current_user._get_current_object()
-        membership_request.handled_on = datetime.now(UTC)
+        membership_request.handled_on = datetime.utcnow()
         membership_request.refusal_comment = form.comment.data
 
         org.save()
@@ -478,120 +463,37 @@ class MembershipRefuseAPI(MembershipAPI):
         return {}, 200
 
 
-@ns.route("/<org:org>/membership/<uuid:id>/cancel/", endpoint="cancel_membership")
-class MembershipCancelAPI(MembershipAPI):
-    @api.secure
-    @api.doc("cancel_membership", **common_doc)
-    @api.response(400, "Membership request is not pending")
-    def post(self, org, id):
-        """Cancel a pending invitation for a given organization."""
-        org.permissions["members"].test()
-        membership_request = self.get_or_404(org, id)
-
-        if membership_request.kind != "invitation":
-            api.abort(400, "Only invitations can be canceled")
-
-        if membership_request.status != "pending":
-            api.abort(400, "Only pending invitations can be canceled")
-
-        membership_request.status = "canceled"
-        membership_request.handled_by = current_user._get_current_object()
-        membership_request.handled_on = datetime.utcnow()
-
-        org.save()
-        MembershipRequest.after_handle.send(membership_request, org=org)
-
-        notify_membership_invitation_canceled.delay(str(org.id), str(membership_request.id))
-
-        return {}, 200
-
-
-@ns.route("/<org:org>/member/", endpoint="invite_member", doc=common_doc)
-class MemberInviteAPI(API):
-    @api.secure
-    @api.expect(invite_fields)
-    @api.marshal_with(request_fields, code=201)
-    @api.doc("invite_organization_member")
-    @api.response(403, "Not Authorized")
-    @api.response(400, "Bad Request")
-    def post(self, org):
-        """Invite a user or email to join the organization."""
-        from udata.core.user.models import User
-
-        org.permissions["members"].test()
-        form = api.validate(MembershipInviteForm)
-
-        user_id = form.user.data
-        email = form.email.data
-        role = form.role.data or DEFAULT_ROLE
-        comment = form.comment.data
-
-        if user_id and email:
-            raise FieldValidationError(field="user", message="Cannot provide both user and email")
-
-        user = None
-
-        # If user ID provided, get user
-        if user_id:
-            user = User.objects(id=user_id).first()
-            if not user:
-                raise FieldValidationError(field="user", message=f"Unknown user '{user_id}'")
-
-        # If email provided (and no user), check if it matches an existing user
-        if email and not user:
-            user = User.objects(email=email.lower()).first()
-            if user:
-                email = None  # User found, use user instead of email
-
-        # Validate we have either user or email
-        if not user and not email:
-            raise FieldValidationError(field="user", message="Either user or email is required")
-
-        # Check if user is already a member or has a pending request/invitation
-        email_lower = email.lower() if email else None
-        for member in org.members:
-            if user and member.user == user:
-                raise FieldValidationError(field="user", message="User is already a member")
-
-        for req in org.requests:
-            if req.status != "pending":
-                continue
-            if user and req.user == user:
-                raise FieldValidationError(
-                    field="user", message="A request or invitation is already pending for this user"
-                )
-            if email_lower and req.email and req.email.lower() == email_lower:
-                raise FieldValidationError(
-                    field="email", message="An invitation is already pending for this email"
-                )
-
-        # Create invitation
-        invitation = MembershipRequest(
-            kind="invitation",
-            user=user,
-            email=email.lower() if email else None,
-            created_by=current_user._get_current_object(),
-            role=role,
-            comment=comment,
-        )
-        org.requests.append(invitation)
-        org.save()
-        MembershipRequest.after_create.send(invitation, org=org)
-
-        notify_membership_invitation.delay(str(org.id), str(invitation.id))
-
-        return invitation, 201
-
-
 @ns.route("/<org:org>/member/<user:user>/", endpoint="member", doc=common_doc)
 class MemberAPI(API):
+    @api.secure
+    @api.expect(member_fields)
+    @api.marshal_with(member_fields, code=201)
+    @api.doc("create_organization_member")
+    @api.response(403, "Not Authorized")
+    @api.response(409, "User is already member", member_fields)
+    def post(self, org, user):
+        """Add a member into a given organization."""
+        EditOrganizationPermission(org).test()
+        if org.is_member(user):
+            return org.member(user), 409
+        member = Member(user=user)
+        form = api.validate(MemberForm, member)
+        form.populate_obj(member)
+        org.members.append(member)
+        org.count_members()
+        org.save()
+
+        notify_new_member.delay(str(org.id), str(member.user.email))
+
+        return member, 201
+
     @api.secure
     @api.expect(member_fields)
     @api.marshal_with(member_fields)
     @api.doc("update_organization_member", responses={403: "Not Authorized"})
     def put(self, org, user):
         """Update member status into a given organization."""
-        org.permissions["members"].test()
+        EditOrganizationPermission(org).test()
         member = org.member(user)
         form = api.validate(MemberForm, member)
         form.populate_obj(member)
@@ -603,7 +505,7 @@ class MemberAPI(API):
     @api.doc("delete_organization_member", responses={403: "Not Authorized"})
     def delete(self, org, user):
         """Delete member from an organization"""
-        org.permissions["members"].test()
+        EditOrganizationPermission(org).test()
         member = org.member(user)
         if member:
             Organization.objects(id=org.id).update_one(pull__members=member)
@@ -657,7 +559,7 @@ class AvatarAPI(API):
     @api.marshal_with(uploaded_image_fields)
     def post(self, org):
         """Upload a new logo"""
-        org.permissions["edit"].test()
+        EditOrganizationPermission(org).test()
         parse_uploaded_image(org.logo)
         org.save()
         return {"image": org.logo}
@@ -668,7 +570,7 @@ class AvatarAPI(API):
     @api.marshal_with(uploaded_image_fields)
     def put(self, org):
         """Set the logo BBox"""
-        org.permissions["edit"].test()
+        EditOrganizationPermission(org).test()
         parse_uploaded_image(org.logo)
         return {"image": org.logo}
 
@@ -685,7 +587,7 @@ class OrgDatasetsAPI(API):
         """List organization datasets (including private ones when member)"""
         args = dataset_parser.parse()
         qs = Dataset.objects.owned_by(org)
-        if not org.permissions["private"].can():
+        if not OrganizationPrivatePermission(org).can():
             qs = qs(private__ne=True)
         return qs.order_by(args["sort"]).paginate(args["page"], args["page_size"])
 
@@ -697,7 +599,7 @@ class OrgReusesAPI(API):
     def get(self, org):
         """List organization reuses (including private ones when member)"""
         qs = Reuse.objects.owned_by(org)
-        if not org.permissions["private"].can():
+        if not OrganizationPrivatePermission(org).can():
             qs = qs(private__ne=True)
         return list(qs)
 

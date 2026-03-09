@@ -3,13 +3,12 @@ from uuid import uuid4
 import pytest
 from bson import ObjectId
 from flask import url_for
-from mongoengine.fields import StringField
 
 from udata import routing
 from udata.core.spatial.factories import GeoZoneFactory
 from udata.core.spatial.models import GeoZone
-from udata.mongo.document import UDataDocument as Document
-from udata.mongo.slug_fields import SlugField, SlugFollow
+from udata.mongo import db
+from udata.mongo.slug_fields import SlugFollow
 from udata.tests import PytestOnlyTestCase
 from udata.tests.api import PytestOnlyDBTestCase
 from udata.tests.helpers import assert200, assert404, assert_redirects
@@ -46,16 +45,16 @@ class UUIDConverterTest(PytestOnlyTestCase):
         assert404(client.get("/uuid/bad"))
 
 
-class Tester(Document):
-    slug = StringField()
+class Tester(db.Document):
+    slug = db.StringField()
 
 
-class SlugTester(Document):
-    slug = SlugField()
+class SlugTester(db.Document):
+    slug = db.SlugField()
 
 
-class RedirectTester(Document):
-    slug = SlugField(follow=True)
+class RedirectTester(db.Document):
+    slug = db.SlugField(follow=True)
 
 
 class TesterConverter(routing.ModelConverter):

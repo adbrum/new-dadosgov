@@ -1,22 +1,20 @@
 import logging
 
-from mongoengine import EmbeddedDocument
-from mongoengine.fields import ReferenceField, StringField
-
 from udata.api_fields import field, generate_fields
 from udata.core.organization.api_fields import org_ref_fields
 from udata.core.organization.models import MembershipRequest, Organization
 from udata.core.user.api_fields import user_ref_fields
 from udata.core.user.models import User
 from udata.features.notifications.actions import notifier
+from udata.models import db
 
 log = logging.getLogger(__name__)
 
 
 @generate_fields()
-class MembershipRequestNotificationDetails(EmbeddedDocument):
+class MembershipRequestNotificationDetails(db.EmbeddedDocument):
     request_organization = field(
-        ReferenceField(Organization),
+        db.ReferenceField(Organization),
         readonly=True,
         nested_fields=org_ref_fields,
         auditable=False,
@@ -24,58 +22,9 @@ class MembershipRequestNotificationDetails(EmbeddedDocument):
         filterable={},
     )
     request_user = field(
-        ReferenceField(User),
+        db.ReferenceField(User),
         nested_fields=user_ref_fields,
         readonly=True,
-        auditable=False,
-        allow_null=True,
-        filterable={},
-    )
-    kind = field(
-        StringField(default="request"),
-        readonly=True,
-        auditable=False,
-        filterable={},
-    )
-
-
-@generate_fields()
-class NewBadgeNotificationDetails(EmbeddedDocument):
-    organization = field(
-        ReferenceField(Organization),
-        readonly=True,
-        nested_fields=org_ref_fields,
-        auditable=False,
-        allow_null=True,
-        filterable={},
-    )
-    kind = field(
-        StringField(),
-        readonly=True,
-        auditable=False,
-        allow_null=True,
-        filterable={},
-    )
-
-
-@generate_fields()
-class MembershipAcceptedNotificationDetails(EmbeddedDocument):
-    organization = field(
-        ReferenceField(Organization),
-        readonly=True,
-        nested_fields=org_ref_fields,
-        auditable=False,
-        allow_null=True,
-        filterable={},
-    )
-
-
-@generate_fields()
-class MembershipRefusedNotificationDetails(EmbeddedDocument):
-    organization = field(
-        ReferenceField(Organization),
-        readonly=True,
-        nested_fields=org_ref_fields,
         auditable=False,
         allow_null=True,
         filterable={},
@@ -86,44 +35,37 @@ class MembershipRefusedNotificationDetails(EmbeddedDocument):
 def on_new_membership_request(request: MembershipRequest, **kwargs):
     from udata.features.notifications.models import Notification
 
-    """Create notification when a new membership request or invitation is created"""
+    """Create notification when a new membership request is created"""
     organization = kwargs.get("org")
 
     if organization is None:
         return
 
-    if request.kind == "invitation":
-        # Invitation: notify the invited user
-        if request.user is None:
-            return
-        recipients = [request.user]
-    else:
-        # Request: notify all org admins
-        recipients = [member.user for member in organization.members if member.role == "admin"]
+    # Get all admin users for the organization
+    admin_users = [member.user for member in organization.members if member.role == "admin"]
 
-    for recipient in recipients:
+    # For each pending request, check if a notification already exists
+    for admin_user in admin_users:
         try:
+            # Check if notification already exists
             existing = Notification.objects(
-                user=recipient,
-                handled_at=None,
+                user=admin_user,
                 details__request_organization=organization,
                 details__request_user=request.user,
             ).first()
 
             if not existing:
                 notification = Notification(
-                    user=recipient,
+                    user=admin_user,
                     details=MembershipRequestNotificationDetails(
-                        request_organization=organization,
-                        request_user=request.user,
-                        kind=request.kind,
+                        request_organization=organization, request_user=request.user
                     ),
                 )
                 notification.created_at = request.created
                 notification.save()
         except Exception as e:
             log.error(
-                f"Error creating notification for user {recipient.id} "
+                f"Error creating notification for user {admin_user.id} "
                 f"and organization {organization.id}: {e}"
             )
 

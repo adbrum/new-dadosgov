@@ -1,20 +1,19 @@
 from bson import ObjectId
-from mongoengine.fields import GenericReferenceField, ReferenceField, StringField
 from werkzeug.datastructures import MultiDict
 
 from udata.forms import ModelForm, fields
-from udata.mongo.document import UDataDocument as Document
+from udata.mongo import db
 from udata.tests import TestCase
 from udata.utils import faker
 
 
-class Nested(Document):
-    name = StringField()
+class Nested(db.Document):
+    name = db.StringField()
 
 
-class WithReference(Document):
-    name = StringField()
-    nested = ReferenceField(Nested)
+class WithReference(db.Document):
+    name = db.StringField()
+    nested = db.ReferenceField(Nested)
 
 
 class WithReferenceForm(ModelForm):
@@ -127,26 +126,26 @@ class ModelFieldWithReferenceTest(ModelFieldTestMixin, TestCase):
         self.assertEqual(len(form.errors["nested"]), 1)
 
 
-class Nested2(Document):
+class Nested2(db.Document):
     """A dummy model just to nesting/ReferenceField"""
 
-    name = StringField()
+    name = db.StringField()
 
 
-class Nested3(Document):
+class Nested3(db.Document):
     """A dummy model just to nesting/ReferenceField"""
 
-    name = StringField()
+    name = db.StringField()
 
 
-class WithGeneric(Document):
-    name = StringField()
-    nested = GenericReferenceField()
+class WithGeneric(db.Document):
+    name = db.StringField()
+    nested = db.GenericReferenceField()
 
 
-class WithGenericChoices(Document):
-    name = StringField()
-    nested = GenericReferenceField(choices=[Nested, Nested2])
+class WithGenericChoices(db.Document):
+    name = db.StringField()
+    nested = db.GenericReferenceField(choices=[Nested, Nested2])
 
 
 class WithGenericForm(ModelForm):

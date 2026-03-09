@@ -1,14 +1,13 @@
 from flask_security import current_user
-from mongoengine.fields import ReferenceField
 
 from udata.i18n import lazy_gettext as _
-from udata.models import Activity, Organization
+from udata.models import Activity, Organization, db
 
 __all__ = ("UserCreatedOrganization", "UserUpdatedOrganization", "OrgRelatedActivity")
 
 
 class OrgRelatedActivity(object):
-    related_to = ReferenceField("Organization")
+    related_to = db.ReferenceField("Organization")
     template = "activity/organization.html"
 
 

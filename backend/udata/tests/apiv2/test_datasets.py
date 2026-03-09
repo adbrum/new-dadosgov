@@ -1,7 +1,6 @@
 from datetime import datetime
 
 from flask import url_for
-from mongoengine.fields import DateTimeField
 
 import udata.core.organization.constants as org_constants
 from udata.core.dataset.apiv2 import DEFAULT_PAGE_SIZE
@@ -13,7 +12,7 @@ from udata.core.dataset.factories import (
 from udata.core.dataset.models import ResourceMixin
 from udata.core.organization.factories import Member, OrganizationFactory
 from udata.core.reuse.factories import ReuseFactory
-from udata.models import Dataset
+from udata.models import Dataset, db
 from udata.tests.api import APITestCase
 from udata.tests.helpers import assert_not_emit
 
@@ -373,7 +372,7 @@ class DatasetExtrasAPITest(APITestCase):
         self.dataset = DatasetFactory(owner=self.user)
 
     def test_get_dataset_extras(self):
-        Dataset.extras.register("check::date", DateTimeField)
+        Dataset.extras.register("check::date", db.DateTimeField)
         self.dataset.extras = {
             "test::extra": "test-value",
             "check::date": datetime.fromisoformat("2024-04-14 08:42:00"),
@@ -508,7 +507,7 @@ class DatasetResourceExtrasAPITest(APITestCase):
 
     def test_get_ressource_extras(self):
         """It should fetch a resource from the API"""
-        ResourceMixin.extras.register("check:date", DateTimeField)
+        ResourceMixin.extras.register("check:date", db.DateTimeField)
 
         resource = ResourceFactory()
         resource.extras = {

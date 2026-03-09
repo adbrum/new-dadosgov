@@ -1,13 +1,12 @@
-from mongoengine.fields import DictField
-
 from udata.api_fields import field
+from udata.mongo import db
 
 __all__ = ("WithMetrics",)
 
 
 class WithMetrics(object):
     metrics = field(
-        DictField(),
+        db.DictField(),
         readonly=True,
         auditable=False,
     )

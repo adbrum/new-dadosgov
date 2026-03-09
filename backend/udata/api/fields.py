@@ -1,8 +1,7 @@
 import datetime
-import inspect
 import logging
-from datetime import UTC
 
+import pytz
 from dateutil.parser import parse
 from flask import request, url_for
 
@@ -32,14 +31,6 @@ from udata.utils import multi_to_dict
 
 log = logging.getLogger(__name__)
 
-# Extract Flask's url_for() reserved arguments dynamically to filter from user-provided query params
-URL_FOR_RESERVED_ARGS = {
-    name
-    for name, param in inspect.signature(url_for).parameters.items()
-    if param.kind in (inspect.Parameter.KEYWORD_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
-    and name != "values"
-}
-
 
 class ISODateTime(String):
     __schema_format__ = "date-time"
@@ -50,13 +41,10 @@ class ISODateTime(String):
         if (
             isinstance(value, datetime.date)
             and not isinstance(value, datetime.datetime)
-            or (isinstance(value, datetime.datetime) and value.tzinfo)
+            or value.tzinfo
         ):
             return value.isoformat()
-        # If naive datetime, localize it to UTC
-        if isinstance(value, datetime.datetime) and not value.tzinfo:
-            return value.replace(tzinfo=UTC).isoformat()
-        return value.isoformat()
+        return pytz.utc.localize(value).isoformat()
 
 
 class Markdown(String):
@@ -78,8 +66,6 @@ class NextPageUrl(String):
         args = multi_to_dict(request.args)
         args.update(request.view_args)
         args["page"] = obj.page + 1
-        for reserved in URL_FOR_RESERVED_ARGS:
-            args.pop(reserved, None)
         return url_for(request.endpoint, _external=True, **args)
 
 
@@ -90,8 +76,6 @@ class PreviousPageUrl(String):
         args = multi_to_dict(request.args)
         args.update(request.view_args)
         args["page"] = obj.page - 1
-        for reserved in URL_FOR_RESERVED_ARGS:
-            args.pop(reserved, None)
         return url_for(request.endpoint, _external=True, **args)
 
 
@@ -122,13 +106,4 @@ def pager(page_fields):
         "next_page": NextPageUrl(description="The next page URL if exists"),
         "previous_page": PreviousPageUrl(description="The previous page URL if exists"),
     }
-    return pager_fields
-
-
-def search_pager(page_fields):
-    """Pager with facets for search endpoints."""
-    pager_fields = pager(page_fields)
-    pager_fields["facets"] = Raw(
-        description="Facets/aggregations for filtering", attribute="facets"
-    )
     return pager_fields

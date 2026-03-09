@@ -16,7 +16,7 @@ As well as a sample application:
 
 import fnmatch
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 
 from authlib.integrations.flask_oauth2 import AuthorizationServer, ResourceProtector
 from authlib.integrations.flask_oauth2.errors import (
@@ -31,16 +31,6 @@ from authlib.oauth2.rfc7636 import CodeChallenge
 from bson import ObjectId
 from flask import abort, current_app, jsonify, render_template, request
 from flask_security.utils import verify_password
-from flask_storage.mongo import ImageField
-from mongoengine import NULLIFY, Q
-from mongoengine.fields import (
-    BooleanField,
-    DateTimeField,
-    IntField,
-    ListField,
-    ReferenceField,
-    StringField,
-)
 from werkzeug.exceptions import Unauthorized
 
 from udata.app import csrf
@@ -49,8 +39,7 @@ from udata.core.organization.models import Organization
 from udata.core.storages import default_image_basename, images
 from udata.i18n import I18nBlueprint
 from udata.i18n import lazy_gettext as _
-from udata.mongo.datetime_fields import Datetimed
-from udata.mongo.document import UDataDocument as Document
+from udata.mongo import db
 from udata.utils import wants_json
 
 blueprint = I18nBlueprint("oauth", __name__, url_prefix="/oauth")
@@ -70,23 +59,23 @@ TOKEN_TYPES = {
 SCOPES = {"default": _("Default scope"), "admin": _("System administrator rights")}
 
 
-class OAuth2Client(ClientMixin, Datetimed, Document):
-    secret = StringField(default=None)
+class OAuth2Client(ClientMixin, db.Datetimed, db.Document):
+    secret = db.StringField(default=None)
 
-    name = StringField(required=True)
-    description = StringField()
+    name = db.StringField(required=True)
+    description = db.StringField()
 
-    owner = ReferenceField("User")
-    organization = ReferenceField(Organization, reverse_delete_rule=NULLIFY)
-    image = ImageField(fs=images, basename=default_image_basename, thumbnails=[150, 25])
+    owner = db.ReferenceField("User")
+    organization = db.ReferenceField(Organization, reverse_delete_rule=db.NULLIFY)
+    image = db.ImageField(fs=images, basename=default_image_basename, thumbnails=[150, 25])
 
-    redirect_uris = ListField(StringField())
-    scope = StringField(default="default")
-    grant_types = ListField(StringField())
-    response_types = ListField(StringField())
+    redirect_uris = db.ListField(db.StringField())
+    scope = db.StringField(default="default")
+    grant_types = db.ListField(db.StringField())
+    response_types = db.ListField(db.StringField())
 
-    confidential = BooleanField(default=False)
-    internal = BooleanField(default=False)
+    confidential = db.BooleanField(default=False)
+    internal = db.BooleanField(default=False)
 
     meta = {"collection": "oauth2_client"}
 
@@ -142,19 +131,19 @@ class OAuth2Client(ClientMixin, Datetimed, Document):
         return bool(self.secret)
 
 
-class OAuth2Token(Document):
-    client = ReferenceField("OAuth2Client", required=True)
-    user = ReferenceField("User")
+class OAuth2Token(db.Document):
+    client = db.ReferenceField("OAuth2Client", required=True)
+    user = db.ReferenceField("User")
 
     # currently only bearer is supported
-    token_type = StringField(choices=list(TOKEN_TYPES), default="Bearer")
+    token_type = db.StringField(choices=list(TOKEN_TYPES), default="Bearer")
 
-    access_token = StringField(unique=True)
-    refresh_token = StringField(unique=True, sparse=True)
-    created_at = DateTimeField(default=lambda: datetime.now(UTC), required=True)
-    expires_in = IntField(required=True, default=TOKEN_EXPIRATION)
-    scope = StringField(default="")
-    revoked = BooleanField(default=False)
+    access_token = db.StringField(unique=True)
+    refresh_token = db.StringField(unique=True, sparse=True)
+    created_at = db.DateTimeField(default=datetime.utcnow, required=True)
+    expires_in = db.IntField(required=True, default=TOKEN_EXPIRATION)
+    scope = db.StringField(default="")
+    revoked = db.BooleanField(default=False)
 
     meta = {"collection": "oauth2_token"}
 
@@ -188,22 +177,21 @@ class OAuth2Token(Document):
             return False
         expired_at = datetime.fromtimestamp(self.get_expires_at())
         expired_at += timedelta(days=REFRESH_EXPIRATION)
-        # expired_at is naive (fromtimestamp), so compare with naive datetime
-        return expired_at > datetime.now(UTC).replace(tzinfo=None)
+        return expired_at > datetime.utcnow()
 
 
-class OAuth2Code(Document):
-    user = ReferenceField("User", required=True)
-    client = ReferenceField("OAuth2Client", required=True)
+class OAuth2Code(db.Document):
+    user = db.ReferenceField("User", required=True)
+    client = db.ReferenceField("OAuth2Client", required=True)
 
-    code = StringField(required=True)
+    code = db.StringField(required=True)
 
-    redirect_uri = StringField()
-    expires = DateTimeField()
+    redirect_uri = db.StringField()
+    expires = db.DateTimeField()
 
-    scope = StringField(default="")
-    code_challenge = StringField()
-    code_challenge_method = StringField()
+    scope = db.StringField(default="")
+    code_challenge = db.StringField()
+    code_challenge_method = db.StringField()
 
     meta = {"collection": "oauth2_code"}
 
@@ -211,8 +199,7 @@ class OAuth2Code(Document):
         return "<OAuth2Code({0.client.name}, {0.user.fullname})>".format(self)
 
     def is_expired(self):
-        # MongoEngine returns naive datetimes, so compare with naive datetime
-        return self.expires < datetime.now(UTC).replace(tzinfo=None)
+        return self.expires < datetime.utcnow()
 
     def get_redirect_uri(self):
         return self.redirect_uri
@@ -227,7 +214,7 @@ class AuthorizationCodeGrant(grants.AuthorizationCodeGrant):
     def save_authorization_code(self, code, request):
         code_challenge = request.data.get("code_challenge")
         code_challenge_method = request.data.get("code_challenge_method")
-        expires = datetime.now(UTC) + timedelta(seconds=GRANT_EXPIRATION)
+        expires = datetime.utcnow() + timedelta(seconds=GRANT_EXPIRATION)
         auth_code = OAuth2Code.objects.create(
             code=code,
             client=ObjectId(request.client.client_id),
@@ -287,7 +274,7 @@ class RevokeToken(RevocationEndpoint):
         elif token_type_hint == "refresh_token":
             return qs.filter(refresh_token=token_string).first()
         else:
-            qs = qs(Q(access_token=token_string) | Q(refresh_token=token_string))
+            qs = qs(db.Q(access_token=token_string) | db.Q(refresh_token=token_string))
             return qs.first()
 
     def revoke_token(self, token, _request):

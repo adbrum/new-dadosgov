@@ -1,6 +1,6 @@
 import logging
 import sys
-from datetime import UTC, datetime
+from datetime import datetime
 
 import click
 import requests
@@ -32,16 +32,6 @@ def iter_adapters():
     return sorted(adapters, key=lambda a: a.model.__name__)
 
 
-def get_date_property(model_name: str) -> str:
-    """Get the date property used for filtering modified objects by model name."""
-    date_properties = {
-        "dataset": "last_modified_internal",
-        "discussion": "created",
-        "dataservice": "metadata_modified_at",
-    }
-    return date_properties.get(model_name, "last_modified")
-
-
 def iter_qs(qs, adapter):
     """Safely iterate over a DB QuerySet yielding a tuple (indexability, serialized documents)"""
     for obj in qs.no_cache().timeout(False):
@@ -59,11 +49,13 @@ def index_model(adapter, start, reindex=False, from_datetime=None):
     model = adapter.model
     search_service_url = current_app.config["SEARCH_SERVICE_API_URL"]
     log.info("Indexing %s objects", model.__name__)
-    model_name = adapter.model.__name__.lower()
     qs = model.objects
     if from_datetime:
-        date_property = get_date_property(model_name)
+        date_property = (
+            "last_modified_internal" if model.__name__.lower() in ["dataset"] else "last_modified"
+        )
         qs = qs.filter(**{f"{date_property}__gte": from_datetime})
+    model_name = adapter.model.__name__.lower()
     index_name = model_name
     if reindex:
         index_name += "-" + default_index_suffix_name(start)
@@ -108,8 +100,11 @@ def finalize_reindex(models, start):
     modified_since_reindex = 0
     for adapter in iter_adapters():
         if not models or adapter.model.__name__.lower() in models:
-            model_name = adapter.model.__name__.lower()
-            date_property = get_date_property(model_name)
+            date_property = (
+                "last_modified_internal"
+                if adapter.model.__name__.lower() in ["dataset"]
+                else "last_modified"
+            )
             modified_since_reindex += adapter.model.objects(
                 **{f"{date_property}__gte": start}
             ).count()
@@ -141,7 +136,7 @@ def index(models=None, reindex=True, from_datetime=None):
         log.error("Missing URL for search service")
         sys.exit(-1)
 
-    start = datetime.now(UTC)
+    start = datetime.utcnow()
     if from_datetime:
         from_datetime = datetime.strptime(from_datetime, TIMESTAMP_FORMAT)
 

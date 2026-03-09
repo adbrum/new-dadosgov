@@ -1,7 +1,6 @@
 from celery.utils.log import get_task_logger
 from flask import current_app
 
-from udata.core.activity.models import Activity
 from udata.core.badges import tasks as badge_tasks
 from udata.core.constants import HVD
 from udata.core.dataservices.models import Dataservice
@@ -30,8 +29,6 @@ def purge_dataservices(self):
             {"$set": {"items.$[item].dataservice": None}},
             array_filters=[{"item.dataservice": dataservice.id}],
         )
-        # Remove activity
-        Activity.objects(related_to=dataservice).delete()
         # Remove associated Transfers
         Transfer.objects(subject=dataservice).delete()
         # Remove dataservices references in Topics

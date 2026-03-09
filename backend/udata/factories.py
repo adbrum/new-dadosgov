@@ -1,18 +1,9 @@
-from typing import TYPE_CHECKING, TypeVar
-
 import factory
 
-from udata.mongo.datetime_fields import DateRange
-
-T = TypeVar("T")
-
-if TYPE_CHECKING:
-    _ModelFactoryBase = factory.mongoengine.MongoEngineFactory[T]
-else:
-    _ModelFactoryBase = factory.mongoengine.MongoEngineFactory
+from .models import db
 
 
-class ModelFactory(_ModelFactoryBase):
+class ModelFactory(factory.mongoengine.MongoEngineFactory):
     class Meta:
         abstract = True
 
@@ -23,7 +14,7 @@ class ModelFactory(_ModelFactoryBase):
 
 class DateRangeFactory(ModelFactory):
     class Meta:
-        model = DateRange
+        model = db.DateRange
 
     start = factory.Faker("date_between", start_date="-10y", end_date="-5y")
     end = factory.Faker("date_between", start_date="-5y", end_date="-2y")

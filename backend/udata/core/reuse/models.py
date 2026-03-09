@@ -1,18 +1,6 @@
 from blinker import Signal
 from flask import url_for
 from flask_babel import LazyString
-from flask_storage.mongo import ImageField
-from mongoengine import PULL, Q
-from mongoengine.errors import ValidationError
-from mongoengine.fields import (
-    BooleanField,
-    DateTimeField,
-    GenericEmbeddedDocumentField,
-    ListField,
-    MapField,
-    ReferenceField,
-    StringField,
-)
 from mongoengine.signals import post_save, pre_save
 from werkzeug.utils import cached_property
 
@@ -26,14 +14,8 @@ from udata.core.reuse.api_fields import BIGGEST_IMAGE_SIZE, reuse_permissions_fi
 from udata.core.storages import default_image_basename, images
 from udata.frontend.markdown import mdstrip
 from udata.i18n import lazy_gettext as _
-from udata.models import Badge, BadgeMixin, BadgesList, WithMetrics
-from udata.mongo.datetime_fields import Datetimed
-from udata.mongo.document import UDataDocument as Document
+from udata.models import Badge, BadgeMixin, BadgesList, WithMetrics, db
 from udata.mongo.errors import FieldValidationError
-from udata.mongo.extras_fields import ExtrasField
-from udata.mongo.slug_fields import SlugField
-from udata.mongo.taglist_field import TagListField
-from udata.mongo.url_field import URLField
 from udata.uris import cdata_url
 from udata.utils import hash_url
 
@@ -49,7 +31,7 @@ class ReuseQuerySet(OwnedQuerySet):
         return self(private__ne=True, datasets__0__exists=True, deleted=None)
 
     def hidden(self):
-        return self(Q(private=True) | Q(datasets__0__exists=False) | Q(deleted__ne=None))
+        return self(db.Q(private=True) | db.Q(datasets__0__exists=False) | db.Q(deleted__ne=None))
 
 
 def check_url_does_not_exists(url, **_kwargs):
@@ -58,17 +40,13 @@ def check_url_does_not_exists(url, **_kwargs):
         raise FieldValidationError(_("This URL is already registered"), field="url")
 
 
-# Uses __badges__ (not available_badges) so that existing badges in DB
-# remain valid even if they are hidden via settings.
-# Uses a standalone function (not a model method) because ReuseBadge is
-# defined before Reuse in the file — Reuse is resolved lazily at call time.
 def validate_badge(value):
     if value not in Reuse.__badges__.keys():
-        raise ValidationError("Unknown badge type")
+        raise db.ValidationError("Unknown badge type")
 
 
 class ReuseBadge(Badge):
-    kind = StringField(required=True, validation=validate_badge)
+    kind = db.StringField(required=True, validation=validate_badge)
 
 
 class ReuseBadgeMixin(BadgeMixin):
@@ -86,34 +64,36 @@ class ReuseBadgeMixin(BadgeMixin):
     nested_filters={"organization_badge": "organization.badges"},
     mask="*,datasets{id,title,uri,page}",
 )
-class Reuse(Datetimed, Auditable, WithMetrics, ReuseBadgeMixin, Linkable, Owned, Document):
+class Reuse(db.Datetimed, Auditable, WithMetrics, ReuseBadgeMixin, Linkable, Owned, db.Document):
     title = field(
-        StringField(required=True),
+        db.StringField(required=True),
         sortable=True,
         show_as_ref=True,
     )
     slug = field(
-        SlugField(max_length=255, required=True, populate_from="title", update=True, follow=True),
+        db.SlugField(
+            max_length=255, required=True, populate_from="title", update=True, follow=True
+        ),
         readonly=True,
         auditable=False,
     )
     description = field(
-        StringField(required=True),
+        db.StringField(required=True),
         markdown=True,
     )
     type = field(
-        StringField(required=True, choices=list(REUSE_TYPES)),
+        db.StringField(required=True, choices=list(REUSE_TYPES)),
         filterable={},
     )
     url = field(
-        URLField(required=True),
+        db.URLField(required=True),
         description="The remote URL (website)",
         checks=[check_url_does_not_exists],
     )
-    urlhash = StringField(required=True, unique=True)
-    image_url = StringField()
+    urlhash = db.StringField(required=True, unique=True)
+    image_url = db.StringField()
     image = field(
-        ImageField(
+        db.ImageField(
             fs=images,
             basename=default_image_basename,
             max_size=IMAGE_MAX_SIZE,
@@ -126,9 +106,9 @@ class Reuse(Datetimed, Auditable, WithMetrics, ReuseBadgeMixin, Linkable, Owned,
         },
     )
     datasets = field(
-        ListField(
+        db.ListField(
             field(
-                ReferenceField("Dataset", reverse_delete_rule=PULL),
+                db.ReferenceField("Dataset", reverse_delete_rule=db.PULL),
                 nested_fields=dataset_fields,
             ),
         ),
@@ -137,41 +117,42 @@ class Reuse(Datetimed, Auditable, WithMetrics, ReuseBadgeMixin, Linkable, Owned,
         },
     )
     dataservices = field(
-        ListField(
-            field(ReferenceField("Dataservice", reverse_delete_rule=PULL)),
+        db.ListField(
+            field(db.ReferenceField("Dataservice", reverse_delete_rule=db.PULL)),
         ),
         filterable={
             "key": "dataservice",
         },
     )
     tags = field(
-        TagListField(),
+        db.TagListField(),
         filterable={
             "key": "tag",
         },
     )
     topic = field(
-        StringField(required=True, choices=list(REUSE_TOPICS)),
+        db.StringField(required=True, choices=list(REUSE_TOPICS)),
         filterable={},
     )
+    # badges = db.ListField(db.EmbeddedDocumentField(ReuseBadge))
 
-    private = field(BooleanField(default=False), filterable={})
+    private = field(db.BooleanField(default=False), filterable={})
 
-    ext = MapField(GenericEmbeddedDocumentField())
-    extras = field(ExtrasField(), auditable=False)
+    ext = db.MapField(db.GenericEmbeddedDocumentField())
+    extras = field(db.ExtrasField(), auditable=False)
 
     featured = field(
-        BooleanField(),
+        db.BooleanField(),
         filterable={},
         readonly=True,
         auditable=False,
     )
     deleted = field(
-        DateTimeField(),
+        db.DateTimeField(),
         auditable=False,
     )
     archived = field(
-        DateTimeField(),
+        db.DateTimeField(),
     )
 
     def __str__(self):
@@ -238,14 +219,11 @@ class Reuse(Datetimed, Auditable, WithMetrics, ReuseBadgeMixin, Linkable, Owned,
         nested_fields=reuse_permissions_fields,
     )
     def permissions(self):
-        from udata.core.dataset.permissions import OwnableReadPermission
-
         from .permissions import ReuseEditPermission
 
         return {
             "delete": ReuseEditPermission(self),
             "edit": ReuseEditPermission(self),
-            "read": OwnableReadPermission(self),
         }
 
     @property

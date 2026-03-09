@@ -3,15 +3,6 @@ import uuid
 from dateutil.parser import parse
 from flask import url_for
 from flask_storage.mongo import ImageReference
-from mongoengine.errors import DoesNotExist
-from mongoengine.errors import ValidationError as MongoValidationError
-from mongoengine.fields import BooleanField as MongoBooleanField
-from mongoengine.fields import DateTimeField as MongoDateTimeField
-from mongoengine.fields import FloatField as MongoFloatField
-from mongoengine.fields import GenericReferenceField, ReferenceField
-from mongoengine.fields import IntField as MongoIntField
-from mongoengine.fields import StringField as MongoStringField
-from mongoengine.fields import UUIDField as MongoUUIDField
 from speaklater import is_lazy_string
 from wtforms import Field as WTField
 from wtforms import Form as WTForm
@@ -22,15 +13,12 @@ from wtforms_json import flatten_json
 
 from udata import tags, uris
 from udata.auth import admin_permission, current_user
+from udata.core.organization.permissions import OrganizationPrivatePermission
 from udata.core.storages import tmp
 from udata.flask_mongoengine.fields import ModelSelectField as BaseModelSelectField
 from udata.forms import ModelForm
 from udata.i18n import lazy_gettext as _
 from udata.models import ContactPoint, Dataset, Organization, Reuse, User, datastore, db
-from udata.mongo.datetime_fields import DateField as MongoDateField
-from udata.mongo.datetime_fields import DateRange
-from udata.mongo.extras_fields import ExtrasField as MongoExtrasField
-from udata.mongo.url_field import URLField as MongoURLField
 from udata.utils import get_by, to_iso_date
 
 from . import widgets
@@ -505,7 +493,7 @@ class ModelField(Field):
         elif not specs.get("id", None):
             raise validators.ValidationError(_('Missing "id" field'))
 
-        if isinstance(model_field, ReferenceField):
+        if isinstance(model_field, db.ReferenceField):
             expected_model = str(model_field.document_type.__name__)
             if "class" not in specs:
                 specs["class"] = expected_model
@@ -514,7 +502,7 @@ class ModelField(Field):
                     expected_model, specs["class"]
                 )
                 raise validators.ValidationError(msg)
-        elif isinstance(model_field, GenericReferenceField):
+        elif isinstance(model_field, db.GenericReferenceField):
             if "class" not in specs:
                 msg = _("Expect both class and identifier")
                 raise validators.ValidationError(msg)
@@ -527,7 +515,7 @@ class ModelField(Field):
 
         try:
             self.data = model.objects.only("id").get(id=oid)
-        except DoesNotExist:
+        except db.DoesNotExist:
             label = "{0}({1})".format(model.__name__, oid)
             msg = _("{0} does not exists").format(label)
             raise validators.ValidationError(msg)
@@ -715,7 +703,7 @@ class DateRangeField(Field):
                 start, end = value.split(" - ")
                 if end is not None:
                     end = parse(end, yearfirst=True).date()
-                self.data = DateRange(
+                self.data = db.DateRange(
                     start=parse(start, yearfirst=True).date(),
                     end=end,
                 )
@@ -724,7 +712,7 @@ class DateRangeField(Field):
                     end = parse(value["end"], yearfirst=True).date()
                 else:
                     end = None
-                self.data = DateRange(
+                self.data = db.DateRange(
                     start=parse(value["start"], yearfirst=True).date(),
                     end=end,
                 )
@@ -799,7 +787,7 @@ class PublishAsField(ModelFieldMixin, Field):
         if self.data:
             if not current_user.is_authenticated:
                 raise validators.ValidationError(_("You must be authenticated"))
-            elif not self.data.permissions["private"].can():
+            elif not OrganizationPrivatePermission(self.data).can():
                 raise validators.ValidationError(_("Permission denied for this organization"))
 
             if self.owner_field:
@@ -828,14 +816,14 @@ def field_parse(cls, value, *args, **kwargs):
 
 class ExtrasField(Field):
     KNOWN_TYPES = {
-        MongoDateTimeField: DateTimeField,
-        MongoDateField: DateField,
-        MongoIntField: IntegerField,
-        MongoBooleanField: BooleanField,
-        MongoStringField: StringField,
-        MongoFloatField: FloatField,
-        MongoURLField: URLField,
-        MongoUUIDField: UUIDField,
+        db.DateTimeField: DateTimeField,
+        db.DateField: DateField,
+        db.IntField: IntegerField,
+        db.BooleanField: BooleanField,
+        db.StringField: StringField,
+        db.FloatField: FloatField,
+        db.URLField: URLField,
+        db.UUIDField: UUIDField,
     }
 
     def __init__(self, *args, **kwargs):
@@ -843,7 +831,7 @@ class ExtrasField(Field):
         if not isinstance(self._form, ModelForm):
             raise ValueError("ExtrasField can only be used within a ModelForm")
         model_field = getattr(self._form.model_class, self.short_name, None)
-        if not model_field or not isinstance(model_field, MongoExtrasField):
+        if not model_field or not isinstance(model_field, db.ExtrasField):
             msg = "Form ExtrasField can only be mapped to a model ExtraField"
             raise ValueError(msg)
 
@@ -887,7 +875,7 @@ class ExtrasField(Field):
         elif self.data:
             try:
                 self.extras.validate(self.data)
-            except MongoValidationError as e:
+            except db.ValidationError as e:
                 self.errors = e.errors if e.errors else [e.message]
         else:
             self.errors = None

@@ -1,17 +1,13 @@
-from datetime import UTC, datetime
+from datetime import datetime
 
-from mongoengine.fields import DateTimeField, GenericReferenceField, ReferenceField
-from mongoengine.signals import post_save
-
-from udata.mongo.document import UDataDocument as Document
-from udata.mongo.queryset import UDataQuerySet
+from udata.mongo import db
 
 from .signals import on_follow, on_unfollow
 
 __all__ = ("Follow",)
 
 
-class FollowQuerySet(UDataQuerySet):
+class FollowQuerySet(db.BaseQuerySet):
     def following(self, user):
         return self(follower=user, until=None)
 
@@ -22,11 +18,11 @@ class FollowQuerySet(UDataQuerySet):
         return self(follower=user, following=following, until=None).count() > 0
 
 
-class Follow(Document):
-    follower = ReferenceField("User", required=True)
-    following = GenericReferenceField()
-    since = DateTimeField(required=True, default=lambda: datetime.now(UTC))
-    until = DateTimeField()
+class Follow(db.Document):
+    follower = db.ReferenceField("User", required=True)
+    following = db.GenericReferenceField()
+    since = db.DateTimeField(required=True, default=datetime.utcnow)
+    until = db.DateTimeField()
 
     meta = {
         "indexes": [
@@ -39,7 +35,7 @@ class Follow(Document):
     }
 
 
-@post_save.connect
+@db.post_save.connect
 def emit_new_follower(sender, document, **kwargs):
     if isinstance(document, Follow):
         if document.until:

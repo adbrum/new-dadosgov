@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -7,7 +7,6 @@ from bson import ObjectId
 from flask import current_app
 from mongoengine import ValidationError as MongoEngineValidationError
 from mongoengine import post_save
-from mongoengine.errors import ValidationError
 
 from udata.app import cache
 from udata.core import metrics
@@ -37,7 +36,7 @@ from udata.core.dataset.models import HarvestDatasetMetadata, HarvestResourceMet
 from udata.core.followers.signals import on_follow, on_unfollow
 from udata.core.reuse.factories import ReuseFactory, VisibleReuseFactory
 from udata.core.user.factories import UserFactory
-from udata.models import Dataset, Follow, License, ResourceSchema, Reuse, Schema
+from udata.models import Dataset, Follow, License, ResourceSchema, Reuse, Schema, db
 from udata.tests.api import PytestOnlyDBTestCase
 from udata.tests.helpers import assert_emit, assert_equal_dates, assert_not_emit
 from udata.utils import faker
@@ -93,7 +92,7 @@ class DatasetModelTest(PytestOnlyDBTestCase):
         resource = ResourceFactory()
         resource.checksum.type = None
 
-        with pytest.raises(ValidationError):
+        with pytest.raises(db.ValidationError):
             dataset.add_resource(resource)
 
     def test_update_resource(self):
@@ -116,7 +115,7 @@ class DatasetModelTest(PytestOnlyDBTestCase):
         dataset = DatasetFactory(owner=user, resources=[resource])
         resource.checksum.type = None
 
-        with pytest.raises(ValidationError):
+        with pytest.raises(db.ValidationError):
             dataset.update_resource(resource)
 
     def test_last_update_with_resource(self):
@@ -163,9 +162,7 @@ class DatasetModelTest(PytestOnlyDBTestCase):
         if freq is None or freq.delta is None:
             assert dataset.next_update is None
         else:
-            # dataset.last_update is naive after save, so compare with naive datetime
-            now_naive = datetime.now(UTC).replace(tzinfo=None)
-            assert_equal_dates(dataset.next_update, freq.next_update(now_naive))
+            assert_equal_dates(dataset.next_update, freq.next_update(datetime.utcnow()))
 
     def test_quality_default(self):
         dataset = DatasetFactory(description="")
@@ -193,7 +190,7 @@ class DatasetModelTest(PytestOnlyDBTestCase):
         dataset = DatasetFactory(
             description="",
             frequency=UpdateFrequency.DAILY,
-            last_modified_internal=datetime.now(UTC) - timedelta(days=1, hours=1),
+            last_modified_internal=datetime.utcnow() - timedelta(days=1, hours=1),
         )
         assert dataset.quality["update_frequency"] is True
         assert dataset.quality["update_fulfilled_in_time"] is True
@@ -203,7 +200,7 @@ class DatasetModelTest(PytestOnlyDBTestCase):
         dataset = DatasetFactory(
             description="",
             frequency=UpdateFrequency.DAILY,
-            last_modified_internal=datetime.now(UTC) - timedelta(days=2, hours=1),
+            last_modified_internal=datetime.utcnow() - timedelta(days=2, hours=1),
         )
         assert dataset.quality["update_frequency"] is True
         assert dataset.quality["update_fulfilled_in_time"] is False
@@ -294,7 +291,7 @@ class DatasetModelTest(PytestOnlyDBTestCase):
     def test_send_on_delete(self):
         dataset = DatasetFactory()
         with assert_emit(Dataset.on_delete):
-            dataset.deleted = datetime.now(UTC)
+            dataset.deleted = datetime.utcnow()
             dataset.save()
 
     def test_ignore_post_save_signal(self):
@@ -383,7 +380,7 @@ class DatasetModelTest(PytestOnlyDBTestCase):
                 mock_resouce_removed.assert_called()
 
             with assert_emit(Dataset.on_delete):
-                dataset.deleted = datetime.now(UTC)
+                dataset.deleted = datetime.utcnow()
                 dataset.save()
                 mock_deleted.assert_called()
 
@@ -401,7 +398,7 @@ class DatasetModelTest(PytestOnlyDBTestCase):
             dataservice = DataserviceFactory(datasets=[dataset])
         with assert_emit(on_follow):
             follow = Follow.objects.create(
-                following=dataset, follower=UserFactory(), since=datetime.now(UTC)
+                following=dataset, follower=UserFactory(), since=datetime.utcnow()
             )
 
         dataset.reload()
@@ -411,13 +408,13 @@ class DatasetModelTest(PytestOnlyDBTestCase):
 
         # Delete related elements
         with assert_emit(Reuse.on_delete):
-            reuse.deleted = datetime.now(UTC)
+            reuse.deleted = datetime.utcnow()
             reuse.save()
         with assert_emit(Dataservice.on_delete):
-            dataservice.deleted_at = datetime.now(UTC)
+            dataservice.deleted_at = datetime.utcnow()
             dataservice.save()
         with assert_emit(on_unfollow):
-            follow.until = datetime.now(UTC)
+            follow.until = datetime.utcnow()
             follow.save()
 
         dataset.reload()
@@ -447,11 +444,11 @@ class DatasetModelTest(PytestOnlyDBTestCase):
 
 class ResourceModelTest(PytestOnlyDBTestCase):
     def test_url_is_required(self):
-        with pytest.raises(ValidationError):
+        with pytest.raises(db.ValidationError):
             DatasetFactory(resources=[ResourceFactory(url=None)])
 
     def test_bad_url(self):
-        with pytest.raises(ValidationError):
+        with pytest.raises(db.ValidationError):
             DatasetFactory(resources=[ResourceFactory(url="not-an-url")])
 
     def test_url_is_stripped(self):
@@ -789,19 +786,19 @@ class ResourceSchemaTest(PytestOnlyDBTestCase):
         resource.schema = Schema(name="etalab/schema-irve-statique", version="1337.42.0")
         resource.validate()
 
-        with pytest.raises(ValidationError):
+        with pytest.raises(db.ValidationError):
             resource.schema = Schema(version="2.0.0")
             resource.validate()
 
-        with pytest.raises(ValidationError):
+        with pytest.raises(db.ValidationError):
             resource.schema = Schema(name="some-name")
             resource.schema.clean(check_schema_in_catalog=True)
 
-        with pytest.raises(ValidationError):
+        with pytest.raises(db.ValidationError):
             resource.schema = Schema(name="etalab/schema-irve-statique", version="1337.42.0")
             resource.schema.clean(check_schema_in_catalog=True)
 
-        with pytest.raises(ValidationError):
+        with pytest.raises(db.ValidationError):
             resource.schema = Schema(version="2.0.0")
             resource.schema.clean(check_schema_in_catalog=True)
 
@@ -812,16 +809,16 @@ class HarvestMetadataTest(PytestOnlyDBTestCase):
 
         harvest_metadata = HarvestDatasetMetadata(
             backend="DCAT",
-            created_at=datetime.now(UTC),
-            modified_at=datetime.now(UTC),
+            created_at=datetime.utcnow(),
+            modified_at=datetime.utcnow(),
             source_id="source_id",
             remote_id="remote_id",
             domain="domain.gouv.fr",
-            last_update=datetime.now(UTC),
+            last_update=datetime.utcnow(),
             remote_url="http://domain.gouv.fr/dataset/remote_url",
             uri="http://domain.gouv.fr/dataset/uri",
             dct_identifier="http://domain.gouv.fr/dataset/identifier",
-            archived_at=datetime.now(UTC),
+            archived_at=datetime.utcnow(),
             archived="not-on-remote",
         )
         dataset.harvest = harvest_metadata
@@ -831,26 +828,26 @@ class HarvestMetadataTest(PytestOnlyDBTestCase):
         harvest_metadata = HarvestDatasetMetadata(created_at="maintenant")
         dataset = DatasetFactory()
         dataset.harvest = harvest_metadata
-        with pytest.raises(ValidationError):
+        with pytest.raises(db.ValidationError):
             dataset.save()
 
     def test_harvest_dataset_metadata_past_modifed_at(self):
         dataset = DatasetFactory()
 
         harvest_metadata = HarvestDatasetMetadata(
-            created_at=datetime.now(UTC),
-            modified_at=datetime.now(UTC),
+            created_at=datetime.utcnow(),
+            modified_at=datetime.utcnow(),
         )
         dataset.harvest = harvest_metadata
         dataset.save()
-        assert_equal_dates(dataset.last_modified, harvest_metadata.modified_at)
+        assert dataset.last_modified == harvest_metadata.modified_at
 
     def test_harvest_resource_metadata_validate_success(self):
         resource = ResourceFactory()
 
         harvest_metadata = HarvestResourceMetadata(
-            issued_at=datetime.now(UTC),
-            modified_at=datetime.now(UTC),
+            issued_at=datetime.utcnow(),
+            modified_at=datetime.utcnow(),
             uri="http://domain.gouv.fr/dataset/uri",
         )
         resource.harvest = harvest_metadata
@@ -860,33 +857,33 @@ class HarvestMetadataTest(PytestOnlyDBTestCase):
         harvest_metadata = HarvestResourceMetadata(issued_at="maintenant")
         resource = ResourceFactory()
         resource.harvest = harvest_metadata
-        with pytest.raises(ValidationError):
+        with pytest.raises(db.ValidationError):
             resource.validate()
 
     def test_harvest_resource_metadata_future_modifed_at(self):
         resource = ResourceFactory()
         harvest_metadata = HarvestResourceMetadata(
-            modified_at=datetime.now(UTC) + timedelta(days=1)
+            modified_at=datetime.utcnow() + timedelta(days=1)
         )
         resource.harvest = harvest_metadata
         resource.validate()
 
-        assert_equal_dates(resource.last_modified, resource.last_modified_internal)
+        assert resource.last_modified == resource.last_modified_internal
 
     def test_harvest_resource_metadata_past_modifed_at(self):
         resource = ResourceFactory()
-        harvest_metadata = HarvestResourceMetadata(modified_at=datetime.now(UTC))
+        harvest_metadata = HarvestResourceMetadata(modified_at=datetime.utcnow())
         resource.harvest = harvest_metadata
         resource.validate()
 
-        assert_equal_dates(resource.last_modified, harvest_metadata.modified_at)
+        assert resource.last_modified == harvest_metadata.modified_at
 
     def test_resource_metadata_extra_modifed_at(self):
         resource = ResourceFactory(filetype="remote")
         resource.extras.update({"analysis:last-modified-at": datetime(2023, 1, 1)})
         resource.validate()
 
-        assert_equal_dates(resource.last_modified, resource.extras["analysis:last-modified-at"])
+        assert resource.last_modified == resource.extras["analysis:last-modified-at"]
 
     def test_quality_cached_next_update_with_date_last_update(self):
         """Test that quality_cached with date (not datetime) last_update can be saved to MongoDB.

@@ -4,15 +4,14 @@ import logging
 import math
 import re
 from collections import Counter
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 from importlib.metadata import version
 from math import ceil
-from typing import Any, Hashable, overload
+from typing import Any, Hashable
 from uuid import UUID, uuid4
 from xml.sax.saxutils import escape
 
 import factory
-import requests
 from bson import ObjectId
 from bson.errors import InvalidId
 from dateutil.parser import ParserError
@@ -114,10 +113,6 @@ class Paginable(object):
     """
     A simple helper mixin for pagination
     """
-
-    page: int
-    page_size: int | None
-    total: int
 
     @property
     def pages(self):
@@ -238,12 +233,9 @@ def safe_harvest_datetime(value: Any, field: str, refuse_future: bool = False) -
     except ParserError:
         log.warning(f"Unparseable {field} value: '{value}'")
         return None
-    if refuse_future and parsed:
-        # Compare with naive datetime (MongoEngine stores naive datetimes)
-        now_naive = datetime.now(UTC).replace(tzinfo=None)
-        if parsed > now_naive:
-            log.warning(f"Future {field} value: '{value}'")
-            return None
+    if refuse_future and parsed and parsed > datetime.utcnow():
+        log.warning(f"Future {field} value: '{value}'")
+        return None
     return parsed
 
 
@@ -370,6 +362,21 @@ PROVIDERS.remove("faker.providers.lorem")
 faker = Faker("fr_FR")  # Use a unicode/utf-8 based locale
 
 
+def generate_tags(nb=3) -> [str]:
+    return [generate_tag() for _ in range(nb)]
+
+
+def generate_tag() -> str:
+    fake_tag: str = faker.word()
+    while len(fake_tag) < tags.TAG_MIN_LENGTH:
+        fake_tag = faker.word()
+    return fake_tag
+
+
+faker.tag = generate_tag
+faker.tags = generate_tags
+
+
 def faker_provider(provider):
     faker.add_provider(provider)
     factory.Faker.add_provider(provider)
@@ -388,15 +395,6 @@ class UDataProvider(BaseProvider):
         """Generate a unique string"""
         return unique_string(length)
 
-    def tag(self) -> str:
-        fake_tag: str = self.generator.word()
-        while len(fake_tag) < tags.TAG_MIN_LENGTH:
-            fake_tag = self.generator.word()
-        return fake_tag
-
-    def tags(self, nb: int = 3) -> list[str]:
-        return [self.tag() for _ in range(nb)]
-
 
 @faker_provider  # Replace the default lorem provider with a unicode one
 class UnicodeLoremProvider(LoremProvider):
@@ -405,15 +403,7 @@ class UnicodeLoremProvider(LoremProvider):
     word_list = [w + "é" for w in LoremProvider.word_list]
 
 
-@overload
-def safe_unicode(string: None) -> None: ...
-
-
-@overload
-def safe_unicode(string: object) -> str: ...
-
-
-def safe_unicode(string: object | None) -> str | None:
+def safe_unicode(string: bytes) -> str | None:
     """Safely transform any object into utf8 decoded str"""
     if string is None:
         return None
@@ -441,7 +431,7 @@ def get_rss_feed_list(queryset: BaseQuerySet, created_at_field: str) -> list[Any
 
     certifed_orgs = Organization.objects(badges__kind=CERTIFIED).only("id")
 
-    created_delay = datetime.now(UTC) - timedelta(
+    created_delay = datetime.utcnow() - timedelta(
         hours=current_app.config["DELAY_BEFORE_APPEARING_IN_RSS_FEED"]
     )
     elements_with_delay = list(
@@ -482,12 +472,3 @@ def wants_json() -> bool:
         return True
 
     return request.accept_mimetypes.best == "application/json"
-
-
-def raise_if_redirect(response):
-    # Raise an error if response is a redirect
-    if 300 <= response.status_code < 400:
-        raise requests.exceptions.HTTPError(
-            f"Redirect ({response.status_code}) not allowed: {response.url} -> {response.headers.get('Location')}",
-            response=response,
-        )

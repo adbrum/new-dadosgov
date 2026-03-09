@@ -17,7 +17,6 @@ class SearchResult(Paginable):
         self._page = kwargs.pop("page")
         self._page_size = kwargs.pop("page_size")
         self._total = kwargs.pop("total")
-        self._facets = kwargs.pop("facets", None)
 
     @property
     def query_string(self):
@@ -37,10 +36,6 @@ class SearchResult(Paginable):
     @property
     def page_size(self):
         return self._page_size
-
-    @property
-    def facets(self):
-        return self._facets or {}
 
     @property
     def class_name(self):

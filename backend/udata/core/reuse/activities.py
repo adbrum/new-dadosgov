@@ -1,15 +1,14 @@
 from flask_security import current_user
-from mongoengine.fields import ReferenceField
 
 from udata.i18n import lazy_gettext as _
-from udata.models import Activity, Reuse
+from udata.models import Activity, Reuse, db
 
 __all__ = ("UserCreatedReuse", "UserUpdatedReuse", "UserDeletedReuse", "ReuseRelatedActivity")
 
 
 class ReuseRelatedActivity(object):
     template = "activity/reuse.html"
-    related_to = ReferenceField("Reuse")
+    related_to = db.ReferenceField("Reuse")
 
 
 class UserCreatedReuse(ReuseRelatedActivity, Activity):

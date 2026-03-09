@@ -1,19 +1,17 @@
 from flask import url_for
-from mongoengine.fields import StringField
 
 from udata.api import api
 from udata.core.dataset.factories import DatasetFactory
 from udata.core.followers.api import FollowAPI
 from udata.core.followers.signals import on_follow, on_unfollow
 from udata.core.user.factories import UserFactory
-from udata.models import Follow
-from udata.mongo.document import UDataDocument as Document
+from udata.models import Follow, db
 
 from . import APITestCase
 
 
-class FakeModel(Document):
-    name = StringField()
+class FakeModel(db.Document):
+    name = db.StringField()
 
     def count_followers(self):
         pass

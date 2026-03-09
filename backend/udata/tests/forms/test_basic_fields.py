@@ -1,16 +1,15 @@
 from werkzeug.datastructures import MultiDict
 
 from udata.forms import Form, fields
-from udata.mongo.document import UDataDocument as Document
-from udata.mongo.url_field import URLField
+from udata.mongo import db
 from udata.tests import TestCase
 from udata.utils import faker
 
 
 class UrlFieldTest(TestCase):
     def factory(self):
-        class Fake(Document):
-            url = URLField()
+        class Fake(db.Document):
+            url = db.URLField()
 
         class FakeForm(Form):
             url = fields.URLField()

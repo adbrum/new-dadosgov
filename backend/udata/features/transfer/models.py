@@ -1,12 +1,11 @@
 import logging
-from datetime import UTC, datetime
+from datetime import datetime
 
 from blinker import Signal
-from mongoengine.fields import DateTimeField, GenericReferenceField, ReferenceField, StringField
 from mongoengine.signals import post_save
 
 from udata.i18n import lazy_gettext as _
-from udata.mongo.document import UDataDocument as Document
+from udata.mongo import db
 
 log = logging.getLogger(__name__)
 
@@ -20,23 +19,22 @@ TRANSFER_STATUS = {
 }
 
 
-class Transfer(Document):
-    user = ReferenceField("User")
-    owner = GenericReferenceField(required=True)
-    recipient = GenericReferenceField(required=True)
-    subject = GenericReferenceField(required=True)
-    comment = StringField()
-    status = StringField(choices=list(TRANSFER_STATUS), default="pending")
+class Transfer(db.Document):
+    user = db.ReferenceField("User")
+    owner = db.GenericReferenceField(required=True)
+    recipient = db.GenericReferenceField(required=True)
+    subject = db.GenericReferenceField(required=True)
+    comment = db.StringField()
+    status = db.StringField(choices=list(TRANSFER_STATUS), default="pending")
 
-    created = DateTimeField(default=lambda: datetime.now(UTC), required=True)
+    created = db.DateTimeField(default=datetime.utcnow, required=True)
 
-    responded = DateTimeField()
-    responder = ReferenceField("User")
-    response_comment = StringField()
+    responded = db.DateTimeField()
+    responder = db.ReferenceField("User")
+    response_comment = db.StringField()
 
     on_create = Signal()
     after_handle = Signal()
-    after_delete = Signal()
 
     meta = {
         "indexes": [
@@ -53,12 +51,6 @@ class Transfer(Document):
         # Only trigger on_create signal on creation, not on every save
         if kwargs.get("created"):
             cls.on_create.send(document)
-
-    def delete(self, *args, **kwargs):
-        """Delete the transfer and ensure after_delete signal is triggered"""
-        result = super().delete(*args, **kwargs)
-        self.after_delete.send(self)
-        return result
 
 
 # Connect the post_save signal

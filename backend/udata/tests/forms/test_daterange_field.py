@@ -1,19 +1,17 @@
 from datetime import date, timedelta
 
-from mongoengine.fields import EmbeddedDocumentField
 from werkzeug.datastructures import MultiDict
 
 from udata.forms import Form, fields
-from udata.mongo.datetime_fields import DateRange
-from udata.mongo.document import UDataDocument as Document
+from udata.mongo import db
 from udata.tests import TestCase
 from udata.utils import to_iso_date
 
 
 class DateRangeFieldTest(TestCase):
     def factory(self):
-        class Fake(Document):
-            daterange = EmbeddedDocumentField(DateRange)
+        class Fake(db.Document):
+            daterange = db.EmbeddedDocumentField(db.DateRange)
 
         class FakeForm(Form):
             daterange = fields.DateRangeField()
@@ -33,7 +31,7 @@ class DateRangeFieldTest(TestCase):
 
     def test_initial_values(self):
         Fake, FakeForm = self.factory()
-        dr = DateRange(start=date.today() - timedelta(days=1), end=date.today())
+        dr = db.DateRange(start=date.today() - timedelta(days=1), end=date.today())
 
         fake = Fake(daterange=dr)
         form = FakeForm(None, obj=fake)
@@ -54,7 +52,7 @@ class DateRangeFieldTest(TestCase):
 
         form.populate_obj(fake)
 
-        self.assertEqual(fake.daterange, DateRange(start=start, end=end))
+        self.assertEqual(fake.daterange, db.DateRange(start=start, end=end))
 
     def test_with_valid_dates_from_json(self):
         Fake, FakeForm = self.factory()
@@ -76,7 +74,7 @@ class DateRangeFieldTest(TestCase):
 
         form.populate_obj(fake)
 
-        self.assertEqual(fake.daterange, DateRange(start=start, end=end))
+        self.assertEqual(fake.daterange, db.DateRange(start=start, end=end))
 
     def test_with_invalid_dates(self):
         Fake, FakeForm = self.factory()

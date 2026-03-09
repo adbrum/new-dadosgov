@@ -1,21 +1,19 @@
-from datetime import UTC, datetime
+from datetime import datetime
 
 from bson import DBRef
 from flask import url_for
 from flask_restx import inputs
 from mongoengine import DO_NOTHING, NULLIFY, Q, signals
-from mongoengine.fields import DateTimeField, GenericLazyReferenceField, ReferenceField, StringField
 
 from udata.api_fields import field, generate_fields
 from udata.core.user.api_fields import user_ref_fields
 from udata.core.user.models import User
-from udata.mongo.document import UDataDocument as Document
-from udata.mongo.queryset import UDataQuerySet
+from udata.mongo import db
 
 from .constants import REPORT_REASONS_CHOICES, REPORTABLE_MODELS
 
 
-class ReportQuerySet(UDataQuerySet):
+class ReportQuerySet(db.BaseQuerySet):
     def unhandled(self):
         return self.filter(dismissed_at=None, subject_deleted_at=None)
 
@@ -41,9 +39,9 @@ def filter_by_handled(base_query, filter_value):
         },
     ],
 )
-class Report(Document):
+class Report(db.Document):
     by = field(
-        ReferenceField(User, reverse_delete_rule=NULLIFY),
+        db.ReferenceField(User, reverse_delete_rule=NULLIFY),
         nested_fields=user_ref_fields,
         description="Only set if a user was connected when reporting an element.",
         readonly=True,
@@ -53,33 +51,33 @@ class Report(Document):
     # Here we use the lazy version of `GenericReferenceField` because we could point to a
     # non existant model (if it was deleted we want to keep the report data).
     subject = field(
-        GenericLazyReferenceField(reverse_delete_rule=DO_NOTHING, choices=REPORTABLE_MODELS)
+        db.GenericLazyReferenceField(reverse_delete_rule=DO_NOTHING, choices=REPORTABLE_MODELS)
     )
 
     subject_deleted_at = field(
-        DateTimeField(),
+        db.DateTimeField(),
         allow_null=True,
         readonly=True,
     )
 
     reason = field(
-        StringField(choices=REPORT_REASONS_CHOICES, required=True),
+        db.StringField(choices=REPORT_REASONS_CHOICES, required=True),
     )
     message = field(
-        StringField(),
+        db.StringField(),
     )
 
     reported_at = field(
-        DateTimeField(default=lambda: datetime.now(UTC), required=True),
+        db.DateTimeField(default=datetime.utcnow, required=True),
         readonly=True,
         sortable=True,
     )
 
     dismissed_at = field(
-        DateTimeField(),
+        db.DateTimeField(),
     )
     dismissed_by = field(
-        ReferenceField(User, reverse_delete_rule=NULLIFY),
+        db.ReferenceField(User, reverse_delete_rule=NULLIFY),
         nested_fields=user_ref_fields,
         allow_null=True,
     )
@@ -100,7 +98,7 @@ class Report(Document):
         """
         if hasattr(document, "deleted") and document.deleted:
             Report.objects(subject=document, subject_deleted_at=None).update(
-                subject_deleted_at=datetime.now(UTC)
+                subject_deleted_at=datetime.utcnow
             )
 
     @classmethod
@@ -112,7 +110,7 @@ class Report(Document):
         # because the document doesn't exist anymore…
         Report.objects(
             subject=DBRef(sender.__name__.lower(), document.id), subject_deleted_at=None
-        ).update(subject_deleted_at=datetime.now(UTC))
+        ).update(subject_deleted_at=datetime.utcnow)
 
 
 for model in REPORTABLE_MODELS:

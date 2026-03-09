@@ -1,35 +1,24 @@
 from flask_restx.inputs import boolean
-from mongoengine import NULLIFY, Q
-from mongoengine.fields import DateTimeField, GenericEmbeddedDocumentField, ReferenceField
+from mongoengine import NULLIFY
 
 from udata.api_fields import field, generate_fields
-from udata.core.discussions.notifications import DiscussionNotificationDetails
-from udata.core.organization.notifications import (
-    MembershipAcceptedNotificationDetails,
-    MembershipRefusedNotificationDetails,
-    MembershipRequestNotificationDetails,
-    NewBadgeNotificationDetails,
-)
+from udata.core.organization.notifications import MembershipRequestNotificationDetails
 from udata.core.user.api_fields import user_ref_fields
 from udata.core.user.models import User
 from udata.features.transfer.notifications import TransferRequestNotificationDetails
-from udata.harvest.notifications import ValidateHarvesterNotificationDetails
+from udata.models import db
 from udata.mongo.datetime_fields import Datetimed
-from udata.mongo.document import UDataDocument as Document
 from udata.mongo.queryset import UDataQuerySet
-from udata.mongo.uuid_fields import AutoUUIDField
 
 
 class NotificationQuerySet(UDataQuerySet):
     def with_organization_in_details(self, organization):
         """This function must be updated to handle new details cases"""
-        return self.filter(
-            Q(details__request_organization=organization) | Q(details__organization=organization)
-        )
+        return self(details__request_organization=organization)
 
     def with_user_in_details(self, user):
         """This function must be updated to handle new details cases"""
-        return self.filter(details__request_user=user)
+        return self(details__request_user=user)
 
 
 def is_handled(base_query, filter_value):
@@ -41,21 +30,21 @@ def is_handled(base_query, filter_value):
 
 
 @generate_fields()
-class Notification(Datetimed, Document):
+class Notification(Datetimed, db.Document):
     meta = {
         "ordering": ["-created_at"],
         "queryset_class": NotificationQuerySet,
     }
 
-    id = field(AutoUUIDField(primary_key=True))
+    id = field(db.AutoUUIDField(primary_key=True))
     handled_at = field(
-        DateTimeField(),
+        db.DateTimeField(),
         sortable=True,
         auditable=False,
         filterable={"key": "handled", "query": is_handled, "type": boolean},
     )
     user = field(
-        ReferenceField(User, reverse_delete_rule=NULLIFY),
+        db.ReferenceField(User, reverse_delete_rule=NULLIFY),
         nested_fields=user_ref_fields,
         readonly=True,
         allow_null=True,
@@ -63,16 +52,8 @@ class Notification(Datetimed, Document):
         filterable={},
     )
     details = field(
-        GenericEmbeddedDocumentField(
-            choices=(
-                MembershipRequestNotificationDetails,
-                TransferRequestNotificationDetails,
-                NewBadgeNotificationDetails,
-                DiscussionNotificationDetails,
-                MembershipAcceptedNotificationDetails,
-                MembershipRefusedNotificationDetails,
-                ValidateHarvesterNotificationDetails,
-            )
+        db.GenericEmbeddedDocumentField(
+            choices=(MembershipRequestNotificationDetails, TransferRequestNotificationDetails)
         ),
         generic=True,
     )

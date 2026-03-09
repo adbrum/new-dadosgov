@@ -1,20 +1,9 @@
-from datetime import UTC, datetime
+from datetime import datetime
 
 from blinker import Signal
 from flask import url_for
 from flask_babel import LazyString
-from mongoengine import PULL, EmbeddedDocument, Q
-from mongoengine.errors import ValidationError
-from mongoengine.fields import (
-    BooleanField,
-    DateTimeField,
-    EmbeddedDocumentField,
-    FloatField,
-    LazyReferenceField,
-    ListField,
-    ReferenceField,
-    StringField,
-)
+from mongoengine import Q
 from mongoengine.signals import post_save
 
 import udata.core.contact_point.api_fields as contact_api_fields
@@ -31,12 +20,7 @@ from udata.core.metrics.helpers import get_stock_metrics
 from udata.core.metrics.models import WithMetrics
 from udata.core.owned import Owned, OwnedQuerySet
 from udata.i18n import lazy_gettext as _
-from udata.models import Badge, BadgeMixin, BadgesList, Discussion, Follow
-from udata.mongo.document import UDataDocument as Document
-from udata.mongo.extras_fields import ExtrasField
-from udata.mongo.slug_fields import SlugField
-from udata.mongo.taglist_field import TagListField
-from udata.mongo.url_field import URLField
+from udata.models import Badge, BadgeMixin, BadgesList, Discussion, Follow, db
 from udata.uris import cdata_url
 
 BADGES: dict[str, LazyString] = {
@@ -57,7 +41,7 @@ class DataserviceQuerySet(OwnedQuerySet):
         return self(archived_at=None, deleted_at=None, private=False)
 
     def hidden(self):
-        return self(Q(private=True) | Q(deleted_at__ne=None) | Q(archived_at__ne=None))
+        return self(db.Q(private=True) | db.Q(deleted_at__ne=None) | db.Q(archived_at__ne=None))
 
     def filter_by_dataset_pagination(self, datasets: list[Dataset], page: int):
         """Paginate the dataservices on the datasets provided.
@@ -96,17 +80,13 @@ class DataserviceQuerySet(OwnedQuerySet):
         return self(dataservices_filter)
 
 
-# Uses __badges__ (not available_badges) so that existing badges in DB
-# remain valid even if they are hidden via settings.
-# Uses a standalone function (not a model method) because DataserviceBadge is
-# defined before Dataservice in the file — Dataservice is resolved lazily at call time.
 def validate_badge(value):
     if value not in Dataservice.__badges__.keys():
-        raise ValidationError("Unknown badge type")
+        raise db.ValidationError("Unknown badge type")
 
 
 class DataserviceBadge(Badge):
-    kind = StringField(required=True, validation=validate_badge)
+    kind = db.StringField(required=True, validation=validate_badge)
 
 
 class DataserviceBadgeMixin(BadgeMixin):
@@ -115,33 +95,33 @@ class DataserviceBadgeMixin(BadgeMixin):
 
 
 @generate_fields()
-class HarvestMetadata(EmbeddedDocument):
-    backend = field(StringField())
-    domain = field(StringField())
+class HarvestMetadata(db.EmbeddedDocument):
+    backend = field(db.StringField())
+    domain = field(db.StringField())
 
-    source_id = field(StringField())
-    source_url = field(URLField())
+    source_id = field(db.StringField())
+    source_url = field(db.URLField())
 
-    remote_id = field(StringField())
-    remote_url = field(URLField())
+    remote_id = field(db.StringField())
+    remote_url = field(db.URLField())
 
     # If the node ID is a `URIRef` it means it links to something external, if it's not an `URIRef` it's often a
     # auto-generated ID just to link multiple RDF node togethers. When exporting as RDF to other catalogs, we
     # want to re-use this node ID (only if it's not auto-generated) to improve compatibility.
     uri = field(
-        URLField(),
+        db.URLField(),
         description="RDF node ID if it's an `URIRef`. `None` if it's not present or if it's a random auto-generated ID inside the graph.",
     )
 
     created_at = field(
-        DateTimeField(), description="Date of the creation as provided by the harvested catalog"
+        db.DateTimeField(), description="Date of the creation as provided by the harvested catalog"
     )
     issued_at = field(
-        DateTimeField(), description="Release date as provided by the harvested catalog"
+        db.DateTimeField(), description="Release date as provided by the harvested catalog"
     )
-    last_update = field(DateTimeField(), description="Date of the last harvesting")
-    archived_at = field(DateTimeField())
-    archived_reason = field(StringField())
+    last_update = field(db.DateTimeField(), description="Date of the last harvesting")
+    archived_at = field(db.DateTimeField())
+    archived_reason = field(db.StringField())
 
 
 def filter_by_topic(base_query, filter_value):
@@ -184,7 +164,7 @@ def filter_by_reuse(base_query, filter_value):
     ],
 )
 class Dataservice(
-    Auditable, WithMetrics, WithAccessType, DataserviceBadgeMixin, Linkable, Owned, Document
+    Auditable, WithMetrics, WithAccessType, DataserviceBadgeMixin, Linkable, Owned, db.Document
 ):
     meta = {
         "indexes": [
@@ -208,72 +188,74 @@ class Dataservice(
         return self.title or ""
 
     title = field(
-        StringField(required=True), example="My awesome API", sortable=True, show_as_ref=True
+        db.StringField(required=True), example="My awesome API", sortable=True, show_as_ref=True
     )
     acronym = field(
-        StringField(max_length=128),
+        db.StringField(max_length=128),
     )
     # /!\ do not set directly the slug when creating or updating a dataset
     # this will break the search indexation
     slug = field(
-        SlugField(max_length=255, required=True, populate_from="title", update=True, follow=True),
+        db.SlugField(
+            max_length=255, required=True, populate_from="title", update=True, follow=True
+        ),
         readonly=True,
     )
     description = field(
-        StringField(default=""),
+        db.StringField(default=""),
         markdown=True,
     )
-    base_api_url = field(URLField(), sortable=True)
+    base_api_url = field(db.URLField(), sortable=True)
 
     machine_documentation_url = field(
-        URLField(), description="Swagger link, OpenAPI format, WMS XML…"
+        db.URLField(), description="Swagger link, OpenAPI format, WMS XML…"
     )
-    technical_documentation_url = field(URLField(), description="HTML version of a Swagger…")
-    business_documentation_url = field(URLField())
+    technical_documentation_url = field(db.URLField(), description="HTML version of a Swagger…")
+    business_documentation_url = field(db.URLField())
 
-    rate_limiting = field(StringField())
-    rate_limiting_url = field(URLField())
+    rate_limiting = field(db.StringField())
+    rate_limiting_url = field(db.URLField())
 
-    availability = field(FloatField(min=0, max=100), example="99.99")
-    availability_url = field(URLField())
+    availability = field(db.FloatField(min=0, max=100), example="99.99")
+    availability_url = field(db.URLField())
 
-    format = field(StringField(choices=DATASERVICE_FORMATS))
+    format = field(db.StringField(choices=DATASERVICE_FORMATS))
 
     license = field(
-        ReferenceField("License"),
+        db.ReferenceField("License"),
         allow_null=True,
         attribute="license.id",
         description="The ID of the license",
     )
 
     tags = field(
-        TagListField(),
+        db.TagListField(),
         filterable={
             "key": "tag",
         },
     )
 
     private = field(
-        BooleanField(default=False),
+        db.BooleanField(default=False),
         description="Is the dataservice private to the owner or the organization",
     )
 
     extras = field(
-        ExtrasField(),
+        db.ExtrasField(),
         auditable=False,
     )
 
     featured = field(
-        BooleanField(),
+        db.BooleanField(),
         filterable={},
         readonly=True,
         auditable=False,
     )
 
     contact_points = field(
-        ListField(
+        db.ListField(
             field(
-                ReferenceField("ContactPoint", reverse_delete_rule=PULL),
+                db.ReferenceField("ContactPoint", reverse_delete_rule=db.PULL),
                 nested_fields=contact_api_fields.contact_point_fields,
                 allow_null=True,
             ),
@@ -284,29 +266,25 @@ class Dataservice(
     )
 
     created_at = field(
-        DateTimeField(
-            verbose_name=_("Creation date"), default=lambda: datetime.now(UTC), required=True
-        ),
+        db.DateTimeField(verbose_name=_("Creation date"), default=datetime.utcnow, required=True),
         readonly=True,
         sortable="created",
     )
     metadata_modified_at = field(
-        DateTimeField(
-            verbose_name=_("Last modification date"),
-            default=lambda: datetime.now(UTC),
-            required=True,
+        db.DateTimeField(
+            verbose_name=_("Last modification date"), default=datetime.utcnow, required=True
         ),
         readonly=True,
         sortable="last_modified",
         auditable=False,
     )
-    deleted_at = field(DateTimeField(), auditable=False)
-    archived_at = field(DateTimeField())
+    deleted_at = field(db.DateTimeField(), auditable=False)
+    archived_at = field(db.DateTimeField())
 
     datasets = field(
-        ListField(
+        db.ListField(
             field(
-                LazyReferenceField(Dataset, passthrough=True),
+                db.LazyReferenceField(Dataset, passthrough=True),
                 nested_fields=dataset_ref_fields,
             )
         ),
@@ -319,7 +297,7 @@ class Dataservice(
     )
 
     harvest = field(
-        EmbeddedDocumentField(HarvestMetadata),
+        db.EmbeddedDocumentField(HarvestMetadata),
         readonly=True,
         auditable=False,
     )
@@ -357,14 +335,11 @@ class Dataservice(
         nested_fields=dataservice_permissions_fields,
     )
     def permissions(self):
-        from udata.core.dataset.permissions import OwnableReadPermission
-
         from .permissions import DataserviceEditPermission
 
         return {
             "delete": DataserviceEditPermission(self),
             "edit": DataserviceEditPermission(self),
-            "read": OwnableReadPermission(self),
         }
 
     def count_discussions(self):

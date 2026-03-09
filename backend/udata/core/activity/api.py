@@ -1,7 +1,6 @@
 import logging
 
 from bson import ObjectId
-from mongoengine import Q
 from mongoengine.errors import DoesNotExist
 
 from udata.api import API, api, fields
@@ -9,7 +8,7 @@ from udata.core.dataset.permissions import OwnableReadPermission
 from udata.core.organization.api_fields import org_ref_fields
 from udata.core.owned import Owned
 from udata.core.user.api_fields import user_ref_fields
-from udata.models import Activity
+from udata.models import Activity, db
 
 log = logging.getLogger(__name__)
 
@@ -85,7 +84,7 @@ class SiteActivityAPI(API):
         qs = Activity.objects
 
         if args["organization"]:
-            qs = qs(Q(organization=args["organization"]) | Q(related_to=args["organization"]))
+            qs = qs(db.Q(organization=args["organization"]) | db.Q(related_to=args["organization"]))
 
         if args["user"]:
             qs = qs(actor=args["user"])

@@ -26,10 +26,10 @@ class OwnablePermission(Permission):
 
 
 class OwnableReadPermission(BasePermission):
-    """Permission to read a hidden ownable object (private or deleted).
+    """Permission to read a private ownable object.
 
-    Always grants access if the object is visible (not private and not deleted).
-    For hidden objects, requires owner, org member, or sysadmin.
+    Always grants access if the object is not private.
+    For private objects, requires owner, org member, or sysadmin.
 
     We inherit from BasePermission instead of udata's Permission because
     Permission automatically adds RoleNeed("admin") to all needs. This means
@@ -39,9 +39,7 @@ class OwnableReadPermission(BasePermission):
     """
 
     def __init__(self, obj):
-        is_private = getattr(obj, "private", False)
-        is_deleted = bool(getattr(obj, "deleted", None) or getattr(obj, "deleted_at", None))
-        if not is_private and not is_deleted:
+        if not getattr(obj, "private", False):
             super().__init__()
             return
 

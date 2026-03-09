@@ -12,10 +12,8 @@ class OrganizationFactory(ModelFactory):
     name = factory.Faker("sentence")
     description = factory.Faker("text")
     members = factory.LazyAttribute(
-        lambda o: (
-            [Member(user=user, role="admin") for user in o.admins]
-            + [Member(user=user, role="editor") for user in o.editors]
-        )
+        lambda o: [Member(user=user, role="admin") for user in o.admins]
+        + [Member(user=user, role="editor") for user in o.editors]
     )
 
     class Params:

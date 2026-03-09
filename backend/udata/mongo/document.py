@@ -1,13 +1,9 @@
 import logging
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, ClassVar
 
 from udata.flask_mongoengine.document import Document
 
 from .queryset import UDataQuerySet
-
-if TYPE_CHECKING:
-    from bson import ObjectId
 
 log = logging.getLogger(__name__)
 
@@ -42,11 +38,6 @@ class UDataDocument(Document):
         "abstract": True,
         "queryset_class": UDataQuerySet,
     }
-
-    # Dynamically created by MongoEngine's metaclass, declared here for type checkers.
-    objects: ClassVar[UDataQuerySet]
-    DoesNotExist: ClassVar[type[Exception]]
-    id: "ObjectId"
 
     def to_dict(self, exclude=None):
         id_field = self._meta["id_field"]

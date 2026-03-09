@@ -61,7 +61,6 @@ topic_fields = apiv2.model(
 )
 
 topic_page_fields = apiv2.model("TopicPage", fields.pager(topic_fields))
-topic_search_page_fields = apiv2.model("TopicSearchPage", fields.search_pager(topic_fields))
 
 element_fields = apiv2.model(
     "TopicElement",

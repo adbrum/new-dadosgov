@@ -1,43 +1,30 @@
 from blinker import Signal
 from flask import url_for
 from mongoengine.errors import DoesNotExist
-from mongoengine.fields import (
-    BooleanField,
-    EmbeddedDocumentField,
-    GenericReferenceField,
-    IntField,
-    ListField,
-    ReferenceField,
-    StringField,
-)
 from mongoengine.signals import post_delete, post_save
 
 from udata.api_fields import field
 from udata.core.activity.models import Auditable
 from udata.core.linkable import Linkable
 from udata.core.owned import Owned, OwnedQuerySet
-from udata.models import SpatialCoverage
-from udata.mongo.datetime_fields import Datetimed
-from udata.mongo.document import UDataDocument as Document
-from udata.mongo.extras_fields import ExtrasField
-from udata.mongo.slug_fields import SlugField
+from udata.models import SpatialCoverage, db
 from udata.search import reindex
 from udata.tasks import as_task_param
 
 __all__ = ("Topic", "TopicElement")
 
 
-class TopicElement(Auditable, Document):
-    title = field(StringField(required=False))
+class TopicElement(Auditable, db.Document):
+    title = field(db.StringField(required=False))
     description = field(
-        StringField(required=False),
+        db.StringField(required=False),
         markdown=True,
     )
-    tags = field(ListField(StringField()))
-    extras = field(ExtrasField())
-    element = field(GenericReferenceField(choices=["Dataset", "Reuse", "Dataservice"]))
+    tags = field(db.ListField(db.StringField()))
+    extras = field(db.ExtrasField())
+    element = field(db.GenericReferenceField(choices=["Dataset", "Reuse", "Dataservice"]))
     # Made optional to allow proper form handling with commit=False
-    topic = field(ReferenceField("Topic", required=False))
+    topic = field(db.ReferenceField("Topic", required=False))
 
     meta = {
         "indexes": [
@@ -73,24 +60,24 @@ class TopicElement(Auditable, Document):
         cls.on_delete.send(document)
 
 
-class Topic(Datetimed, Auditable, Linkable, Document, Owned):
-    name = field(StringField(required=True))
+class Topic(db.Datetimed, Auditable, Linkable, db.Document, Owned):
+    name = field(db.StringField(required=True))
     slug = field(
-        SlugField(max_length=255, required=True, populate_from="name", update=True, follow=True),
+        db.SlugField(max_length=255, required=True, populate_from="name", update=True, follow=True),
         auditable=False,
     )
     description = field(
-        StringField(),
+        db.StringField(),
         markdown=True,
     )
-    tags = field(ListField(StringField()))
-    color = field(IntField())
+    tags = field(db.ListField(db.StringField()))
+    color = field(db.IntField())
 
-    featured = field(BooleanField(default=False), auditable=False)
-    private = field(BooleanField())
-    extras = field(ExtrasField(), auditable=False)
+    featured = field(db.BooleanField(default=False), auditable=False)
+    private = field(db.BooleanField())
+    extras = field(db.ExtrasField(), auditable=False)
 
-    spatial = field(EmbeddedDocumentField(SpatialCoverage))
+    spatial = field(db.EmbeddedDocumentField(SpatialCoverage))
 
     meta = {
         "indexes": [

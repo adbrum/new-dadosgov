@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 
 from udata.utils import (
     daterange_end,
@@ -65,11 +65,11 @@ class DateRangeTest:
         assert daterange_end(today) == today
 
     def test_parse_daterange_start_datetime(self):
-        now = datetime.now(UTC)
+        now = datetime.utcnow()
         assert daterange_start(now) == now.date()
 
     def test_parse_daterange_end_datetime(self):
-        now = datetime.now(UTC)
+        now = datetime.utcnow()
         assert daterange_end(now) == now.date()
 
     def test_parse_daterange_start_full_iso(self):
@@ -246,7 +246,7 @@ class SafeUnicodeTest(object):
 
 class AwareDateTest:
     def test_aware_datetime_to_naiva_datetime(self):
-        aware_date = datetime.now(UTC)
+        aware_date = datetime.utcnow()
         naive_date = to_naive_datetime(aware_date)
         assert naive_date.tzname() is None
 

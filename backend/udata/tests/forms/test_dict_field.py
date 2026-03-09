@@ -1,17 +1,16 @@
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 
-from mongoengine.fields import DictField
 from werkzeug.datastructures import MultiDict
 
 from udata.forms import ModelForm, fields
-from udata.mongo.document import UDataDocument as Document
+from udata.mongo import db
 from udata.tests import PytestOnlyTestCase
 
 
 class DictFieldTest(PytestOnlyTestCase):
     def factory(self):
-        class Fake(Document):
-            raw = DictField()
+        class Fake(db.Document):
+            raw = db.DictField()
 
         class FakeForm(ModelForm):
             model_class = Fake
@@ -31,7 +30,7 @@ class DictFieldTest(PytestOnlyTestCase):
     def test_with_valid_data(self):
         Fake, FakeForm = self.factory()
 
-        now = datetime.now(UTC)
+        now = datetime.utcnow()
         today = date.today()
 
         fake = Fake()

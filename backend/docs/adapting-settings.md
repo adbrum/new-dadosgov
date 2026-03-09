@@ -44,9 +44,9 @@ The site identifier. It is used to attached some database configuration, metrics
 
 ### THEME
 
-**default**: ``None``
+**default**: ``'default'``
 
-The enabled theme name. Note: With the separation of frontend into cdata, themes are now handled separately. This setting may be used for legacy compatibility.
+The enabled theme name.
 
 ### TEMPLATE_CACHE_DURATION
 
@@ -136,13 +136,6 @@ Whether or not to allow private URLs (private IPs...) submission
 
 Whether or not to allow local URLs (localhost...) submission.
 When developping you might need to set this to `True`.
-
-### URLS_RESOLVE_HOSTNAME
-
-**default**: `True`
-
-Whether or not to resolve hostname to in URI validation to check private or local IP.
-⚠ It may impact performances when validating URIs. Be sure to use DNS caching (ex with `dnsmasq` caching).
 
 ### URLS_ALLOW_CREDENTIALS
 
@@ -494,7 +487,7 @@ The default page size for post listing
 The Sentry DSN associated to this udata instance.
 If defined, the Sentry support is automatically activated.
 
-`sentry-sdk[flask]` needs to be installed for this to work. This requirement is specified in [`pyproject.toml`](https://github.com/opendatateam/udata/blob/main/pyproject.toml).
+`sentry-sdk[flask]` needs to be installed for this to work. This requirement is specified in `pyproject.toml`.
 
 ### SENTRY_TAGS
 

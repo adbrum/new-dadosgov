@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 
 import pytest
 from flask import current_app
@@ -20,7 +20,7 @@ class UserTasksTest(APITestCase):
         )
 
         notification_handled_date = (
-            datetime.now(UTC)
+            datetime.utcnow()
             - timedelta(days=current_app.config["DAYS_AFTER_NOTIFICATION_EXPIRED"])
             - timedelta(days=1)  # add margin
         )

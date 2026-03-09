@@ -1,0 +1,232 @@
+import logging
+from datetime import UTC, datetime
+
+from flask import url_for
+from flask_login import current_user
+from mongoengine import EmbeddedDocument
+from mongoengine.fields import (
+    DateTimeField,
+    EmbeddedDocumentField,
+    GenericReferenceField,
+    ListField,
+    ReferenceField,
+    StringField,
+)
+
+from udata.core.linkable import Linkable
+from udata.core.spam.models import SpamMixin, spam_protected
+from udata.i18n import lazy_gettext as _
+from udata.mongo.document import UDataDocument as Document
+from udata.mongo.extras_fields import ExtrasField
+from udata.mongo.uuid_fields import AutoUUIDField
+
+from .signals import (
+    on_discussion_closed,
+    on_discussion_deleted,
+    on_discussion_message_deleted,
+    on_new_discussion,
+    on_new_discussion_comment,
+)
+
+log = logging.getLogger(__name__)
+
+
+class Message(SpamMixin, EmbeddedDocument):
+    verbose_name = _("message")
+
+    id = AutoUUIDField()
+    content = StringField(required=True)
+    posted_on = DateTimeField(default=lambda: datetime.now(UTC), required=True)
+    posted_by = ReferenceField("User")
+    posted_by_organization = ReferenceField("Organization")
+    last_modified_at = DateTimeField()
+
+    @property
+    def permissions(self):
+        from .permissions import DiscussionMessagePermission
+
+        return {
+            "delete": DiscussionMessagePermission(self),
+            "edit": DiscussionMessagePermission(self),
+        }
+
+    @property
+    def posted_by_name(self):
+        return (
+            self.posted_by_organization.name
+            if self.posted_by_organization
+            else self.posted_by.fullname
+        )
+
+    @property
+    def posted_by_org_or_user(self):
+        return self.posted_by_organization or self.posted_by
+
+    def texts_to_check_for_spam(self):
+        return [self.content]
+
+    def spam_report_message(self, breadcrumb):
+        message = "Spam potentiel dans le message"
+        if self.posted_by_org_or_user:
+            message += f" de [{self.posted_by_name}]({self.posted_by_org_or_user.url_for()})"
+
+        if len(breadcrumb) != 2:
+            log.warning(
+                f"`spam_report_message` called on message with a breadcrumb of {len(breadcrumb)} elements.",
+                extra={"breadcrumb": breadcrumb},
+            )
+            return message
+
+        discussion = breadcrumb[0]
+        if not isinstance(discussion, Discussion):
+            log.warning(
+                "`spam_report_message` called on message with a breadcrumb not containing a Discussion at index 0.",
+                extra={"breadcrumb": breadcrumb},
+            )
+            return message
+
+        message += f" sur la discussion « [{discussion.title}]({discussion.url_for()}) »"
+        return message
+
+
+class Discussion(SpamMixin, Linkable, Document):
+    verbose_name = _("discussion")
+
+    user = ReferenceField("User")
+    organization = ReferenceField("Organization")
+
+    subject = GenericReferenceField()
+    title = StringField(required=True)
+    discussion = ListField(EmbeddedDocumentField(Message))
+    created = DateTimeField(default=lambda: datetime.now(UTC), required=True)
+    closed = DateTimeField()
+    closed_by = ReferenceField("User")
+    closed_by_organization = ReferenceField("Organization")
+    extras = ExtrasField()
+
+    meta = {
+        "indexes": [
+            {
+                "fields": ["$title", "$discussion.content"],
+                "default_language": "french",
+                "weights": {"title": 10, "discussion.content": 5},
+            },
+            "user",
+            "subject",
+            "-created",
+        ],
+        "ordering": ["-created"],
+        "auto_create_index_on_save": True,
+    }
+
+    @property
+    def permissions(self):
+        from udata.core.discussions.permissions import (
+            DiscussionAuthorOrSubjectOwnerPermission,
+            DiscussionAuthorPermission,
+        )
+
+        return {
+            "delete": DiscussionAuthorPermission(self),
+            # To edit the title of a discussion we need to be the owner of the first message
+            "edit": DiscussionAuthorPermission(self),
+            "close": DiscussionAuthorOrSubjectOwnerPermission(self),
+        }
+
+    @property
+    def closed_by_name(self):
+        if self.closed_by_organization:
+            return self.closed_by_organization.name
+
+        if self.closed_by:
+            return self.closed_by.fullname
+
+        return None
+
+    @property
+    def closed_by_org_or_user(self):
+        return self.closed_by_organization or self.closed_by
+
+    def person_involved(self, person):
+        """Return True if the given person has been involved in the
+
+        discussion, False otherwise.
+        """
+        return any(message.posted_by == person for message in self.discussion)
+
+    def texts_to_check_for_spam(self):
+        # Discussion should always have a first message but it's not the case in some tests…
+        return [self.title, self.discussion[0].content if len(self.discussion) else ""]
+
+    def embeds_to_check_for_spam(self):
+        return self.discussion[1:]
+
+    def spam_is_whitelisted(self) -> bool:
+        from udata.core.dataset.permissions import OwnablePermission
+        from udata.core.owned import Owned
+
+        if not current_user or not current_user.is_authenticated:
+            return False
+
+        if not isinstance(self.subject, Owned):
+            return False
+
+        # When creating a new Discussion the `subject` is an empty model
+        # with only `id`. We need to fetch it from the database to have
+        # all the required information
+        if not self.subject.owner or not self.subject.organization:
+            self.subject.reload()
+
+        return OwnablePermission(self.subject).can()
+
+    def self_web_url(self, **kwargs):
+        return self.subject.self_web_url(append="/discussions", discussion_id=self.id, **kwargs)
+
+    def self_api_url(self, **kwargs):
+        return url_for("api.discussion", id=self.id, **self._self_api_url_kwargs(**kwargs))
+
+    def spam_report_message(self, breadcrumb):
+        message = f"Spam potentiel sur la discussion « [{self.title}]({self.url_for()}) »"
+        if self.user:
+            message += f" de [{self.user.fullname}]({self.user.url_for()})"
+
+        return message
+
+    def owner_recipients(self, sender=None):
+        """Return the list of users that should be notified about this discussion."""
+        recipients = {m.posted_by.id: m.posted_by for m in self.discussion}
+        if getattr(self.subject, "organization", None):
+            for member in self.subject.organization.members:
+                recipients[member.user.id] = member.user
+        elif getattr(self.subject, "owner", None):
+            recipients[self.subject.owner.id] = self.subject.owner
+
+        if sender:
+            recipients.pop(sender.id, None)
+        return list(recipients.values())
+
+    @spam_protected()
+    def signal_new(self):
+        on_new_discussion.send(self)
+
+    @spam_protected(lambda discussion, message: discussion.discussion[message] if message else None)
+    def signal_close(self, message):
+        on_discussion_closed.send(self, message=message)
+
+    @spam_protected(lambda discussion, message: discussion.discussion[message])
+    def signal_comment(self, message):
+        on_new_discussion_comment.send(self, message=message)
+
+    def delete(self, *args, **kwargs):
+        """Delete the discussion and send deletion signal"""
+        result = super().delete(*args, **kwargs)
+        on_discussion_deleted.send(self)
+        return result
+
+    def remove_message(self, message_index):
+        """Remove a message from the discussion and trigger deletion signal"""
+        if 0 <= message_index < len(self.discussion):
+            message = self.discussion[message_index]
+            self.discussion.pop(message_index)
+            self.save()
+            on_discussion_message_deleted.send(self, message=message)

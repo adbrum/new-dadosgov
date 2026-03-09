@@ -1,0 +1,264 @@
+import logging
+import os
+import sys
+from glob import iglob
+
+import click
+from flask.cli import FlaskGroup, ScriptInfo, shell_command
+
+from udata.app import VERBOSE_LOGGERS, create_app, standalone
+from udata.utils import get_udata_version, safe_unicode
+
+log = logging.getLogger(__name__)
+
+IS_TTY = sys.__stdin__.isatty()
+
+INFO = "➢"
+DEBUG = "⇝"
+OK = "✔"
+KO = "✘"
+WARNING = "⚠"
+HEADER = "✯"
+
+NO_CAST = (int, float, bool)
+
+CONTEXT_SETTINGS = {
+    "auto_envvar_prefix": "udata",
+    "help_option_names": ["-?", "-h", "--help"],
+}
+
+DEFAULT_INFO_SETTINGS = "udata.settings.Defaults"
+
+click.disable_unicode_literals_warning = True
+
+
+def color(name, **kwargs):
+    return lambda t: click.style(str(t), fg=name, **kwargs)
+
+
+green = color("green", bold=True)
+yellow = color("yellow", bold=True)
+red = color("red", bold=True)
+cyan = color("cyan", bold=True)
+magenta = color("magenta", bold=True)
+white = color("white", bold=True)
+echo = click.echo
+
+
+def header(msg):
+    """Display an header"""
+    echo(" ".join((yellow(HEADER), white(safe_unicode(msg)), yellow(HEADER))))
+
+
+def success(msg):
+    """Display a success message"""
+    echo("{0} {1}".format(green(OK), white(safe_unicode(msg))))
+
+
+def error(msg, details=None):
+    """Display an error message with optional details"""
+    msg = "{0} {1}".format(red(KO), white(safe_unicode(msg)))
+    msg = safe_unicode(msg)
+    if details:
+        msg = "\n".join((msg, safe_unicode(details)))
+    echo(format_multiline(msg))
+
+
+def exit_with_error(msg, details=None, code=-1):
+    """Exit with error"""
+    error(msg, details)
+    sys.exit(code)
+
+
+LEVEL_COLORS = {
+    logging.DEBUG: cyan,
+    logging.WARNING: yellow,
+    logging.ERROR: red,
+    logging.CRITICAL: color("white", bg="red", bold=True),
+}
+
+LEVELS_PREFIX = {
+    logging.INFO: cyan(INFO),
+    logging.WARNING: yellow(WARNING),
+}
+
+
+def format_multiline(string):
+    string = safe_unicode(string)
+    string = string.replace("\n", "\n│ ")
+    return safe_unicode(replace_last(string, "│", "└"))
+
+
+def replace_last(string, char, replacement):
+    char = safe_unicode(char)
+    replacement = safe_unicode(replacement)
+    string = safe_unicode(string)
+    return replacement.join(string.rsplit(char, 1))
+
+
+class CliFormatter(logging.Formatter):
+    """
+    Convert a `logging.LogRecord' object into colored text, using ANSI
+    escape sequences.
+    """
+
+    def format(self, record):
+        if not IS_TTY:
+            return super(CliFormatter, self).format(record)
+        record.msg = format_multiline(record.msg)
+        record.msg = " ".join((self._prefix(record), record.msg))
+        record.args = tuple(a if isinstance(a, NO_CAST) else safe_unicode(a) for a in record.args)
+        return super(CliFormatter, self).format(record)
+
+    def formatException(self, ei):
+        """Indent traceback info for better readability"""
+        out = super(CliFormatter, self).formatException(ei)
+        return "│" + format_multiline(out)
+
+    def _prefix(self, record):
+        if record.levelno in LEVELS_PREFIX:
+            return safe_unicode(LEVELS_PREFIX[record.levelno])
+        else:
+            color = LEVEL_COLORS.get(record.levelno, white)
+            return safe_unicode("{0}:".format(color(record.levelname.upper())))
+
+
+class CliHandler(logging.Handler):
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            err = record.levelno >= logging.WARNING
+            click.echo(msg, err=err)
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except Exception:
+            self.handleError(record)
+
+
+def init_logging(app):
+    log_level = logging.DEBUG if app.debug else logging.INFO
+
+    handler = CliHandler()
+    handler.setFormatter(CliFormatter())
+    handler.setLevel(log_level)
+
+    logger = logging.getLogger("__main__")
+    logger.setLevel(log_level)
+    logger.handlers = []
+    logger.addHandler(handler)
+
+    app.logger.setLevel(log_level)
+    app.logger.handlers = []
+    app.logger.addHandler(handler)
+
+    for name in VERBOSE_LOGGERS:
+        logger = logging.getLogger(name)
+        logger.setLevel(logging.WARNING if app.debug else logging.ERROR)
+        logger.handlers = []
+
+    return app
+
+
+def create_cli_app():
+    ctx = click.get_current_context(silent=True)
+    if ctx is not None:
+        settings = ctx.obj.settings
+    else:
+        settings = DEFAULT_INFO_SETTINGS
+    app = create_app(settings, init_logging=init_logging)
+    return standalone(app)
+
+
+MODULES_WITH_COMMANDS = [
+    "api",
+    "core.badges",
+    "core.dataset",
+    "core.jobs",
+    "core.metrics",
+    "core.organization",
+    "core.spatial",
+    "core.user",
+    "harvest",
+    "search",
+]
+
+
+class UdataGroup(FlaskGroup):
+    def __init__(self, *args, **kwargs):
+        self._udata_commands_loaded = False
+        super(UdataGroup, self).__init__(*args, **kwargs)
+
+    def get_command(self, ctx, name):
+        self.load_udata_commands(ctx)
+        return super(UdataGroup, self).get_command(ctx, name)
+
+    def list_commands(self, ctx):
+        self.load_udata_commands(ctx)
+        return super(UdataGroup, self).list_commands(ctx)
+
+    def load_udata_commands(self, ctx):
+        """
+        Load udata commands from:
+        - `udata.commands.*` module
+        - known internal modules with commands
+        """
+        if self._udata_commands_loaded:
+            return
+
+        # Load all commands submodules
+        pattern = os.path.join(os.path.dirname(__file__), "[!_]*.py")
+        for filename in iglob(pattern):
+            module = os.path.splitext(os.path.basename(filename))[0]
+            try:
+                __import__("udata.commands.{0}".format(module))
+            except Exception as e:
+                error("Unable to import {0}".format(module), e)
+
+        # Load all core modules commands
+        for module in MODULES_WITH_COMMANDS:
+            try:
+                __import__("udata.{0}.commands".format(module))
+            except Exception as e:
+                error("Unable to import {0}".format(module), e)
+
+        # Ensure loading happens once
+        self._udata_commands_loaded = False
+
+    def main(self, *args, **kwargs):
+        """
+        Instanciate ScriptInfo before parent does
+        to ensure the `settings` parameters is available to `create_app
+        """
+        obj = kwargs.get("obj")
+        if obj is None:
+            obj = ScriptInfo(create_app=self.create_app)
+        # This is the import line: allows create_app to access the settings
+        obj.settings = kwargs.pop("settings", DEFAULT_INFO_SETTINGS)
+        kwargs["obj"] = obj
+        return super(UdataGroup, self).main(*args, **kwargs)
+
+
+def print_version(ctx, param, value):
+    if not value or ctx.resilient_parsing:
+        return
+    click.echo(get_udata_version())
+    ctx.exit()
+
+
+@click.group(
+    context_settings=CONTEXT_SETTINGS,
+    cls=UdataGroup,
+    create_app=create_cli_app,
+    add_version_option=False,
+    add_default_commands=False,
+)
+@click.option("--version", is_flag=True, callback=print_version, expose_value=False, is_eager=True)
+def cli():
+    """udata management client"""
+
+
+# Adds the default flask shell command
+cli.add_command(shell_command)
+
+if __name__ == "__main__":  # pragma: no cover
+    cli()

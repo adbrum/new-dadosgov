@@ -1,0 +1,909 @@
+from datetime import date, datetime, timedelta, timezone
+from uuid import uuid4
+
+import pytest
+import requests
+from bson import ObjectId
+from flask import current_app
+from mongoengine import ValidationError as MongoEngineValidationError
+from mongoengine import post_save
+
+from udata.app import cache
+from udata.core import metrics
+from udata.core.dataservices.factories import DataserviceFactory
+from udata.core.dataservices.models import Dataservice
+from udata.core.dataset.activities import (
+    UserAddedResourceToDataset,
+    UserCreatedDataset,
+    UserDeletedDataset,
+    UserRemovedResourceFromDataset,
+    UserUpdatedDataset,
+    UserUpdatedResource,
+)
+from udata.core.dataset.constants import UpdateFrequency
+from udata.core.dataset.exceptions import (
+    SchemasCacheUnavailableException,
+    SchemasCatalogNotFoundException,
+)
+from udata.core.dataset.factories import (
+    CommunityResourceFactory,
+    DatasetFactory,
+    LicenseFactory,
+    ResourceFactory,
+    ResourceSchemaMockData,
+)
+from udata.core.dataset.models import HarvestDatasetMetadata, HarvestResourceMetadata
+from udata.core.followers.signals import on_follow, on_unfollow
+from udata.core.reuse.factories import ReuseFactory, VisibleReuseFactory
+from udata.core.user.factories import UserFactory
+from udata.models import Dataset, Follow, License, ResourceSchema, Reuse, Schema, db
+from udata.tests.api import PytestOnlyDBTestCase
+from udata.tests.helpers import assert_emit, assert_equal_dates, assert_not_emit
+from udata.utils import faker
+
+
+class DatasetModelTest(PytestOnlyDBTestCase):
+    def test_add_resource(self):
+        user = UserFactory()
+        dataset = DatasetFactory(owner=user)
+        resource = ResourceFactory()
+        expected_signals = (Dataset.on_resource_added,)
+
+        with assert_emit(*expected_signals):
+            dataset.add_resource(ResourceFactory())
+        assert len(dataset.resources) == 1
+
+        with assert_emit(*expected_signals):
+            dataset.add_resource(resource)
+        assert len(dataset.resources) == 2
+        assert dataset.resources[0].id == resource.id
+        assert dataset.resources[0].dataset == dataset
+
+    def test_add_resource_without_checksum(self):
+        user = UserFactory()
+        dataset = DatasetFactory(owner=user)
+        resource = ResourceFactory(checksum=None)
+        expected_signals = (Dataset.on_resource_added,)
+
+        with assert_emit(*expected_signals):
+            dataset.add_resource(ResourceFactory(checksum=None))
+        assert len(dataset.resources) == 1
+
+        with assert_emit(*expected_signals):
+            dataset.add_resource(resource)
+        assert len(dataset.resources) == 2
+        assert dataset.resources[0].id == resource.id
+
+    def test_add_two_resources_with_same_id(self):
+        uuid = uuid4()
+        user = UserFactory()
+        dataset = DatasetFactory(owner=user)
+        resource_a = ResourceFactory(id=uuid)
+        resource_b = ResourceFactory(id=uuid)
+
+        dataset.add_resource(resource_a)
+        dataset.add_resource(ResourceFactory())
+        with pytest.raises(MongoEngineValidationError):
+            dataset.add_resource(resource_b)
+
+    def test_add_resource_missing_checksum_type(self):
+        user = UserFactory()
+        dataset = DatasetFactory(owner=user)
+        resource = ResourceFactory()
+        resource.checksum.type = None
+
+        with pytest.raises(db.ValidationError):
+            dataset.add_resource(resource)
+
+    def test_update_resource(self):
+        user = UserFactory()
+        resource = ResourceFactory()
+        dataset = DatasetFactory(owner=user, resources=[resource])
+        expected_signals = (Dataset.on_resource_updated,)
+
+        resource.description = "New description"
+
+        with assert_emit(*expected_signals):
+            dataset.update_resource(resource)
+        assert len(dataset.resources) == 1
+        assert dataset.resources[0].id == resource.id
+        assert dataset.resources[0].description == "New description"
+
+    def test_update_resource_missing_checksum_type(self):
+        user = UserFactory()
+        resource = ResourceFactory()
+        dataset = DatasetFactory(owner=user, resources=[resource])
+        resource.checksum.type = None
+
+        with pytest.raises(db.ValidationError):
+            dataset.update_resource(resource)
+
+    def test_last_update_with_resource(self):
+        user = UserFactory()
+        dataset = DatasetFactory(owner=user)
+        resource = ResourceFactory()
+        dataset.add_resource(resource)
+        assert_equal_dates(dataset.last_update, resource.created_at)
+
+    def test_last_update_without_resource(self):
+        user = UserFactory()
+        dataset = DatasetFactory(owner=user)
+        assert_equal_dates(dataset.last_update, dataset.last_modified)
+
+    def test_community_resource(self):
+        user = UserFactory()
+        dataset = DatasetFactory(owner=user)
+        community_resource1 = CommunityResourceFactory()
+        community_resource1.dataset = dataset
+        community_resource1.save()
+        assert len(dataset.community_resources) == 1
+
+        community_resource2 = CommunityResourceFactory()
+        community_resource2.dataset = dataset
+        community_resource2.save()
+        assert len(dataset.community_resources) == 2
+        assert dataset.community_resources[1].id == community_resource1.id
+        assert dataset.community_resources[0].id == community_resource2.id
+
+    def test_community_resource_deleted_dataset(self):
+        dataset = DatasetFactory()
+        community_resource = CommunityResourceFactory(dataset=dataset)
+        community_resource.dataset.delete()
+        community_resource.reload()
+        assert community_resource.dataset is None
+
+    def test_next_update_empty(self):
+        dataset = DatasetFactory()
+        assert dataset.next_update is None
+
+    @pytest.mark.parametrize("freq", list(UpdateFrequency) + [None])
+    def test_next_update(self, freq: UpdateFrequency | None):
+        dataset = DatasetFactory(frequency=freq)
+        if freq is None or freq.delta is None:
+            assert dataset.next_update is None
+        else:
+            assert_equal_dates(dataset.next_update, freq.next_update(datetime.utcnow()))
+
+    def test_quality_default(self):
+        dataset = DatasetFactory(description="")
+        assert dataset.quality == {
+            "license": False,
+            "temporal_coverage": False,
+            "spatial": False,
+            "update_frequency": False,
+            "dataset_description_quality": False,
+            "score": 0,
+        }
+
+    @pytest.mark.parametrize("freq", list(UpdateFrequency) + [None])
+    def test_quality_frequency_update(self, freq: UpdateFrequency | None):
+        dataset = DatasetFactory(description="", frequency=freq)
+        if freq in [None, UpdateFrequency.UNKNOWN]:
+            assert dataset.quality["update_frequency"] is False
+            assert "update_fulfilled_in_time" not in dataset.quality
+        else:
+            assert dataset.quality["update_frequency"] is True
+            assert dataset.quality["update_fulfilled_in_time"] is True
+            assert dataset.quality["score"] == Dataset.normalize_score(2)
+
+    def test_quality_frequency_update_one_day_late(self):
+        dataset = DatasetFactory(
+            description="",
+            frequency=UpdateFrequency.DAILY,
+            last_modified_internal=datetime.utcnow() - timedelta(days=1, hours=1),
+        )
+        assert dataset.quality["update_frequency"] is True
+        assert dataset.quality["update_fulfilled_in_time"] is True
+        assert dataset.quality["score"] == Dataset.normalize_score(2)
+
+    def test_quality_frequency_update_two_days_late(self):
+        dataset = DatasetFactory(
+            description="",
+            frequency=UpdateFrequency.DAILY,
+            last_modified_internal=datetime.utcnow() - timedelta(days=2, hours=1),
+        )
+        assert dataset.quality["update_frequency"] is True
+        assert dataset.quality["update_fulfilled_in_time"] is False
+        assert dataset.quality["score"] == Dataset.normalize_score(1)
+
+    def test_quality_frequency_update_with_harvest_timezone_aware(self):
+        """Test that update_fulfilled_in_time works with timezone-aware harvest dates."""
+        dataset = DatasetFactory(
+            description="",
+            frequency=UpdateFrequency.DAILY,
+            harvest=HarvestDatasetMetadata(
+                modified_at=datetime.now(timezone.utc) - timedelta(hours=1),
+            ),
+        )
+        assert dataset.quality["update_frequency"] is True
+        assert dataset.quality["update_fulfilled_in_time"] is True
+
+    def test_quality_description_length(self):
+        dataset = DatasetFactory(
+            description="a" * (current_app.config.get("QUALITY_DESCRIPTION_LENGTH") - 1)
+        )
+        assert dataset.quality["dataset_description_quality"] is False
+        assert dataset.quality["score"] == 0
+        dataset = DatasetFactory(
+            description="a" * (current_app.config.get("QUALITY_DESCRIPTION_LENGTH") + 1)
+        )
+        assert dataset.quality["dataset_description_quality"] is True
+        assert dataset.quality["score"] == Dataset.normalize_score(1)
+
+    def test_quality_has_open_formats(self):
+        dataset = DatasetFactory(
+            description="",
+        )
+        dataset.add_resource(ResourceFactory(format="pdf"))
+        assert not dataset.quality["has_open_format"]
+        assert dataset.quality["score"] == Dataset.normalize_score(2)
+
+    def test_quality_has_opened_formats(self):
+        dataset = DatasetFactory(
+            description="",
+        )
+        dataset.add_resource(ResourceFactory(format="pdf"))
+        dataset.add_resource(ResourceFactory(format="csv"))
+        assert dataset.quality["has_open_format"]
+        assert dataset.quality["score"] == Dataset.normalize_score(3)
+
+    def test_quality_has_undefined_and_closed_format(self):
+        dataset = DatasetFactory(
+            description="",
+        )
+        dataset.add_resource(ResourceFactory(format=None))
+        dataset.add_resource(ResourceFactory(format="xls"))
+        assert not dataset.quality["has_open_format"]
+        assert dataset.quality["score"] == Dataset.normalize_score(2)
+
+    def test_quality_all(self):
+        user = UserFactory()
+        dataset = DatasetFactory(
+            owner=user, frequency="weekly", tags=["foo", "bar"], description="a" * 42
+        )
+        dataset.add_resource(ResourceFactory(format="pdf"))
+        assert dataset.quality["score"] == Dataset.normalize_score(4)
+        assert sorted(dataset.quality.keys()) == [
+            "all_resources_available",
+            "dataset_description_quality",
+            "has_open_format",
+            "has_resources",
+            "license",
+            "resources_documentation",
+            "score",
+            "spatial",
+            "temporal_coverage",
+            "update_frequency",
+            "update_fulfilled_in_time",
+        ]
+
+    def test_tags_normalized(self):
+        tags = [" one another!", " one another!", 'This IS a "tag"…']
+        dataset = DatasetFactory(tags=tags)
+        assert len(dataset.tags) == 2
+        assert dataset.tags[1] == "this-is-a-tag"
+
+    def test_legacy_frequencies(self):
+        for oldFreq, newFreq in UpdateFrequency._LEGACY_FREQUENCIES.items():  # type: ignore[misc]
+            dataset = DatasetFactory(frequency=oldFreq)
+            assert dataset.frequency == newFreq
+
+    def test_send_on_delete(self):
+        dataset = DatasetFactory()
+        with assert_emit(Dataset.on_delete):
+            dataset.deleted = datetime.utcnow()
+            dataset.save()
+
+    def test_ignore_post_save_signal(self):
+        dataset = DatasetFactory()
+        unexpected_signals = Dataset.after_save, Dataset.on_update
+
+        with assert_not_emit(*unexpected_signals), assert_emit(post_save):
+            dataset.title = "New title"
+            dataset.save(signal_kwargs={"ignores": ["post_save"]})
+
+    def test_dataset_without_private(self):
+        dataset = DatasetFactory()
+        assert dataset.private is False
+
+        dataset.private = None
+        dataset.save()
+        assert dataset.private is False
+
+        dataset.private = True
+        dataset.save()
+        assert dataset.private is True
+
+    def test_dataset_fetch_exclude_resource(self):
+        # Having a dataset with multiple resources
+        dataset_with_resources = DatasetFactory(nb_resources=5)
+        dataset_with_resources = (
+            Dataset.objects.filter(id=dataset_with_resources.id).exclude("resources").first()
+        )
+        assert dataset_with_resources is not None
+        assert dataset_with_resources.resources == []
+
+        assert dataset_with_resources.resources_len == 5
+
+        # Having dataset with resource field missing
+        dataset_insert_without_resources = Dataset._get_collection().insert_one({"_id": ObjectId()})
+
+        dataset_without_resources = (
+            Dataset.objects.filter(id=dataset_insert_without_resources.inserted_id)
+            .exclude("resources")
+            .first()
+        )
+        assert dataset_without_resources is not None
+        assert dataset_without_resources.resources == []
+
+        assert dataset_without_resources.resources_len == 0
+
+    def test_dataset_activities(self, app, mocker):
+        # A user must be authenticated for activities to be emitted
+        from flask_login import login_user
+
+        user = UserFactory()
+
+        mock_created = mocker.patch.object(UserCreatedDataset, "emit")
+        mock_updated = mocker.patch.object(UserUpdatedDataset, "emit")
+        mock_deleted = mocker.patch.object(UserDeletedDataset, "emit")
+        mock_resource_added = mocker.patch.object(UserAddedResourceToDataset, "emit")
+        mock_resouce_updated = mocker.patch.object(UserUpdatedResource, "emit")
+        mock_resouce_removed = mocker.patch.object(UserRemovedResourceFromDataset, "emit")
+
+        with app.test_request_context():
+            login_user(user)
+
+            with assert_emit(Dataset.on_create):
+                dataset = DatasetFactory(owner=user)
+                mock_created.assert_called()
+
+            with assert_emit(Dataset.on_update):
+                dataset.title = "new title"
+                dataset.save()
+                mock_updated.assert_called()
+
+            with assert_emit(Dataset.on_resource_added):
+                dataset.add_resource(ResourceFactory())
+                mock_resource_added.assert_called()
+
+            dataset.reload()
+
+            with assert_emit(Dataset.on_resource_updated):
+                resource = dataset.resources[0]
+                resource.description = "New description"
+                dataset.update_resource(resource)
+                mock_resouce_updated.assert_called()
+
+            with assert_emit(Dataset.on_resource_removed):
+                dataset.remove_resource(dataset.resources[-1])
+                mock_resouce_removed.assert_called()
+
+            with assert_emit(Dataset.on_delete):
+                dataset.deleted = datetime.utcnow()
+                dataset.save()
+                mock_deleted.assert_called()
+
+    def test_dataset_metrics(self):
+        # We need to init metrics module
+        metrics.init_app(current_app)
+
+        dataset = DatasetFactory()
+
+        # Add related elements
+        with assert_emit(Reuse.on_create):
+            reuse = VisibleReuseFactory(datasets=[dataset])
+            ReuseFactory()
+        with assert_emit(Dataservice.on_create):
+            dataservice = DataserviceFactory(datasets=[dataset])
+        with assert_emit(on_follow):
+            follow = Follow.objects.create(
+                following=dataset, follower=UserFactory(), since=datetime.utcnow()
+            )
+
+        dataset.reload()
+        assert dataset.get_metrics()["reuses"] == 1
+        assert dataset.get_metrics()["dataservices"] == 1
+        assert dataset.get_metrics()["followers"] == 1
+
+        # Delete related elements
+        with assert_emit(Reuse.on_delete):
+            reuse.deleted = datetime.utcnow()
+            reuse.save()
+        with assert_emit(Dataservice.on_delete):
+            dataservice.deleted_at = datetime.utcnow()
+            dataservice.save()
+        with assert_emit(on_unfollow):
+            follow.until = datetime.utcnow()
+            follow.save()
+
+        dataset.reload()
+        assert dataset.get_metrics()["reuses"] == 0
+        assert dataset.get_metrics()["dataservices"] == 0
+        assert dataset.get_metrics()["followers"] == 0
+
+        # Attach and then detach related elements
+        reuse = VisibleReuseFactory(datasets=[dataset])
+        dataservice = DataserviceFactory(datasets=[dataset])
+
+        dataset.reload()
+        assert dataset.get_metrics()["reuses"] == 1
+        assert dataset.get_metrics()["dataservices"] == 1
+
+        with assert_emit(Reuse.on_update):
+            reuse.datasets = []
+            reuse.save()
+        with assert_emit(Dataservice.on_update):
+            dataservice.datasets = []
+            dataservice.save()
+
+        dataset.reload()
+        assert dataset.get_metrics()["reuses"] == 0
+        assert dataset.get_metrics()["dataservices"] == 0
+
+
+class ResourceModelTest(PytestOnlyDBTestCase):
+    def test_url_is_required(self):
+        with pytest.raises(db.ValidationError):
+            DatasetFactory(resources=[ResourceFactory(url=None)])
+
+    def test_bad_url(self):
+        with pytest.raises(db.ValidationError):
+            DatasetFactory(resources=[ResourceFactory(url="not-an-url")])
+
+    def test_url_is_stripped(self):
+        url = "http://www.somewhere.com/with/spaces/   "
+        dataset = DatasetFactory(resources=[ResourceFactory(url=url)])
+        assert dataset.resources[0].url == url.strip()
+
+    def test_ignore_post_save_signal(self):
+        resource = ResourceFactory()
+        # assigning to a variable to avoid garbage collection issue
+        _ = DatasetFactory(resources=[resource])
+        unexpected_signals = Dataset.after_save, Dataset.on_update
+
+        with assert_not_emit(*unexpected_signals), assert_emit(post_save):
+            resource.title = "New title"
+            resource.save(signal_kwargs={"ignores": ["post_save"]})
+
+
+class LicenseModelTest(PytestOnlyDBTestCase):
+    @pytest.fixture(autouse=True)
+    def setUp(self):
+        # Feed the DB with random data to ensure true matching
+        LicenseFactory.create_batch(3)
+
+    def test_not_found(self):
+        found = License.guess("should not be found")
+        assert found is None
+
+    def test_not_found_with_default(self):
+        license = LicenseFactory()
+        found = License.guess("should not be found", default=license)
+        assert found.id == license.id
+
+    def test_none(self):
+        found = License.guess(None)
+        assert found is None
+
+    def test_empty_string(self):
+        found = License.guess("")
+        assert found is None
+
+    def test_exact_match_by_id(self):
+        license = LicenseFactory()
+        found = License.guess(license.id)
+        assert isinstance(found, License)
+        assert license.id == found.id
+
+    def test_imatch_by_id(self):
+        license = LicenseFactory(id="CAPS-ID")
+        found = License.guess(license.id)
+        assert isinstance(found, License)
+        assert license.id == found.id
+
+    def test_exact_match_by_id_with_spaces(self):
+        license = LicenseFactory()
+        found = License.guess(" {0} ".format(license.id))
+        assert isinstance(found, License)
+        assert license.id == found.id
+
+    def test_exact_match_by_url(self):
+        license = LicenseFactory()
+        found = License.guess(license.url)
+        assert isinstance(found, License)
+        assert license.id == found.id
+
+    def test_exact_match_by_url_in_string(self):
+        license = LicenseFactory()
+        found = License.guess(f"Here is my license: {license.url}")
+        assert isinstance(found, License)
+        assert license.id == found.id
+
+    def test_exact_match_by_url_in_string_real_world(self):
+        license = LicenseFactory(url="http://www.data.gouv.fr/Licence-Ouverte-Open-Licence")
+        found = License.guess(
+            "Licence Ouverte 1.0 http://www.data.gouv.fr/Licence-Ouverte-Open-Licence."
+        )
+        assert isinstance(found, License)
+        assert license.id == found.id
+
+    def test_exact_match_by_url_in_string_two_urls(self):
+        license = LicenseFactory()
+        found = License.guess(
+            f"Here is my license: {license.url} and another link: https://example.com/example"
+        )
+        assert isinstance(found, License)
+        assert license.id == found.id
+
+    def test_match_by_url_with_final_slash(self):
+        license = LicenseFactory(url="https://example.com/license")
+        found = License.guess("https://example.com/license/")
+        assert isinstance(found, License)
+        assert license.id == found.id
+
+    def test_match_by_url_without_final_slash(self):
+        license = LicenseFactory(url="https://example.com/license/")
+        found = License.guess("https://example.com/license")
+        assert isinstance(found, License)
+        assert license.id == found.id
+
+    def test_match_by_url_not_too_fuzzy(self):
+        LicenseFactory(url="https://example.com/licensea")
+        found = License.guess("https://example.com/licenseb")
+        assert found is None
+
+    def test_match_by_url_scheme_mismatch(self):
+        license = LicenseFactory(url="https://example.com/license")
+        found = License.guess("http://example.com/license")
+        assert isinstance(found, License)
+        assert license.id == found.id
+
+    def test_imatch_by_url(self):
+        url = "%s/CAPS.php" % faker.uri()
+        license = LicenseFactory(url=url)
+        found = License.guess(license.url)
+        assert isinstance(found, License)
+        assert license.id == found.id
+
+    def test_exact_match_by_alternate_url(self):
+        alternate_url = faker.uri()
+        license = LicenseFactory(alternate_urls=[alternate_url])
+        found = License.guess(alternate_url)
+        assert isinstance(found, License)
+        assert license.id == found.id
+
+    def test_imatch_by_alternate_url(self):
+        alternate_url = "%s/CAPS.php" % faker.uri()
+        license = LicenseFactory(alternate_urls=[alternate_url])
+        found = License.guess(alternate_url)
+        assert isinstance(found, License)
+        assert license.id == found.id
+
+    def test_match_by_alternate_url_scheme_slash_mismatch(self):
+        alternate_url = "https://example.com/license"
+        license = LicenseFactory(alternate_urls=[alternate_url])
+        found = License.guess("http://example.com/license/")
+        assert isinstance(found, License)
+        assert license.id == found.id
+
+    def test_exact_match_by_title(self):
+        license = LicenseFactory()
+        found = License.guess(license.title)
+        assert isinstance(found, License)
+        assert license.id == found.id
+
+    def test_exact_match_by_title_with_mismatch_slug(self):
+        license = LicenseFactory(title="Licence Ouverte v2", slug="licence-2")
+        found = License.guess(license.title)
+        assert isinstance(found, License)
+        assert license.id == found.id
+
+    def test_exact_match_by_title_with_spaces(self):
+        license = LicenseFactory()
+        found = License.guess(" {0} ".format(license.title))
+        assert isinstance(found, License)
+        assert license.id == found.id
+
+    def test_match_by_title_with_low_edit_distance(self):
+        license = LicenseFactory(title="License")
+        found = License.guess("Licence")
+        assert isinstance(found, License)
+        assert license.id == found.id
+
+    def test_match_by_title_with_extra_inner_space(self):
+        license = LicenseFactory(title="License ODBl")
+        found = License.guess("License  ODBl")  # 2 spaces instead of 1
+        assert isinstance(found, License)
+        assert license.id == found.id
+
+    def test_match_by_title_with_mismatching_case(self):
+        license = LicenseFactory(title="License ODBl")
+        found = License.guess("License ODBL")
+        assert isinstance(found, License)
+        assert license.id == found.id
+
+    def test_exact_match_by_alternate_title(self):
+        alternate_title = faker.sentence()
+        license = LicenseFactory(alternate_titles=[alternate_title])
+        found = License.guess(alternate_title)
+        assert isinstance(found, License)
+        assert license.id == found.id
+
+    def test_exact_match_by_alternate_title_with_spaces(self):
+        alternate_title = faker.sentence()
+        license = LicenseFactory(alternate_titles=[alternate_title])
+        found = License.guess(" {0} ".format(alternate_title))
+        assert isinstance(found, License)
+        assert license.id == found.id
+
+    def test_match_by_alternate_title_with_low_edit_distance(self):
+        license = LicenseFactory(alternate_titles=["License"])
+        found = License.guess("Licence")
+        assert isinstance(found, License)
+        assert license.id == found.id
+
+    def test_match_by_alternate_title_with_extra_inner_space(self):
+        license = LicenseFactory(alternate_titles=["License ODBl"])
+        found = License.guess("License  ODBl")  # 2 spaces instead of 1
+        assert isinstance(found, License)
+        assert license.id == found.id
+
+    def test_match_by_alternate_title_with_mismatching_case(self):
+        license = LicenseFactory(alternate_titles=["License ODBl"])
+        found = License.guess("License ODBL")
+        assert isinstance(found, License)
+        assert license.id == found.id
+
+    def test_match_by_alternate_title_with_multiple_candidates_from_one_licence(self):
+        license = LicenseFactory(alternate_titles=["Licence Ouverte v2", "Licence Ouverte v2.0"])
+        found = License.guess("Licence Ouverte v2.0")
+        assert isinstance(found, License)
+        assert license.id == found.id
+
+    def test_no_with_multiple_alternate_titles_from_different_licences(self):
+        LicenseFactory(alternate_titles=["Licence Ouverte v2"])
+        LicenseFactory(alternate_titles=["Licence Ouverte v2.0"])
+        found = License.guess("Licence Ouverte v2.0")
+        assert found is None
+
+    def test_prioritize_title_over_alternate_title(self):
+        title = faker.sentence()
+        license = LicenseFactory(title=title)
+        LicenseFactory(alternate_titles=[title])
+        found = License.guess(title)
+        assert isinstance(found, License)
+        assert license.id == found.id
+
+    def test_multiple_strings(self):
+        license = LicenseFactory()
+        found = License.guess("should not match", license.id)
+        assert isinstance(found, License)
+        assert license.id == found.id
+
+    def test_multiple_strings_reverse(self):
+        license = LicenseFactory()
+        found = License.guess(license.id, "should not match")
+        assert isinstance(found, License)
+        assert license.id == found.id
+
+
+class ResourceSchemaTest(PytestOnlyDBTestCase):
+    @pytest.mark.options(SCHEMA_CATALOG_URL="https://example.com/notfound")
+    def test_resource_schema_objects_404_endpoint(self, rmock):
+        rmock.get("https://example.com/notfound", status_code=404)
+        with pytest.raises(SchemasCatalogNotFoundException):
+            ResourceSchema.all()
+
+    @pytest.mark.options(SCHEMA_CATALOG_URL="https://example.com/schemas")
+    def test_resource_schema_objects_timeout_no_cache(self, client, rmock):
+        rmock.get("https://example.com/schemas", exc=requests.exceptions.ConnectTimeout)
+        with pytest.raises(SchemasCacheUnavailableException):
+            ResourceSchema.all()
+
+    @pytest.mark.options(SCHEMA_CATALOG_URL="https://example.com/schemas")
+    def test_resource_schema_objects(self, app, rmock):
+        rmock.get(
+            "https://example.com/schemas",
+            json={
+                "schemas": [
+                    {
+                        "name": "etalab/schema-irve",
+                        "title": "Schéma IRVE",
+                        "versions": [
+                            {"version_name": "1.0.0"},
+                            {"version_name": "1.0.1"},
+                            {"version_name": "1.0.2"},
+                        ],
+                    }
+                ]
+            },
+        )
+
+        assert ResourceSchema.all() == [
+            {
+                "name": "etalab/schema-irve",
+                "title": "Schéma IRVE",
+                "versions": [
+                    {"version_name": "1.0.0"},
+                    {"version_name": "1.0.1"},
+                    {"version_name": "1.0.2"},
+                ],
+            }
+        ]
+
+    @pytest.mark.options(SCHEMA_CATALOG_URL=None)
+    def test_resource_schema_objects_no_catalog_url(self):
+        assert ResourceSchema.all() == []
+
+    @pytest.mark.options(SCHEMA_CATALOG_URL="https://example.com/schemas")
+    def test_resource_schema_objects_w_cache(self, rmock, mocker):
+        cache_mock_set = mocker.patch.object(cache, "set")
+
+        # fill cache
+        rmock.get("https://example.com/schemas", json=ResourceSchemaMockData.get_mock_data())
+        ResourceSchema.all()
+        assert cache_mock_set.called
+
+        mocker.patch.object(
+            cache, "get", return_value=ResourceSchemaMockData.get_mock_data()["schemas"]
+        )
+        rmock.get("https://example.com/schemas", status_code=500)
+        assert (
+            ResourceSchemaMockData.get_all_schemas_from_mock_data(with_datapackage_info=False)
+            == ResourceSchema.all()
+        )
+        assert rmock.call_count == 2
+
+    @pytest.mark.options(SCHEMA_CATALOG_URL="https://example.com/schemas")
+    def test_resource_schema_validation(self, rmock):
+        rmock.get("https://example.com/schemas", json=ResourceSchemaMockData.get_mock_data())
+
+        resource = ResourceFactory()
+
+        resource.schema = Schema(name="etalab/schema-irve-statique")
+        resource.validate()
+
+        resource.schema = Schema(url="https://example.com")
+        resource.validate()
+
+        resource.schema = Schema(name="some-name", url="https://example.com")
+        resource.validate()
+
+        resource.schema = Schema(name="etalab/schema-irve-statique")
+        resource.schema.clean(check_schema_in_catalog=True)
+
+        resource.schema = Schema(url="https://example.com")
+        resource.schema.clean(check_schema_in_catalog=True)
+
+        resource.schema = Schema(name="some-name", url="https://example.com")
+        resource.schema.clean(check_schema_in_catalog=True)
+
+        # Check that no exception is raised when we do not ask for schema check for schema errors
+        resource.schema = Schema(name="some-name")
+        resource.validate()
+
+        resource.schema = Schema(name="etalab/schema-irve-statique", version="1337.42.0")
+        resource.validate()
+
+        with pytest.raises(db.ValidationError):
+            resource.schema = Schema(version="2.0.0")
+            resource.validate()
+
+        with pytest.raises(db.ValidationError):
+            resource.schema = Schema(name="some-name")
+            resource.schema.clean(check_schema_in_catalog=True)
+
+        with pytest.raises(db.ValidationError):
+            resource.schema = Schema(name="etalab/schema-irve-statique", version="1337.42.0")
+            resource.schema.clean(check_schema_in_catalog=True)
+
+        with pytest.raises(db.ValidationError):
+            resource.schema = Schema(version="2.0.0")
+            resource.schema.clean(check_schema_in_catalog=True)
+
+
+class HarvestMetadataTest(PytestOnlyDBTestCase):
+    def test_harvest_dataset_metadata_validate_success(self):
+        dataset = DatasetFactory()
+
+        harvest_metadata = HarvestDatasetMetadata(
+            backend="DCAT",
+            created_at=datetime.utcnow(),
+            modified_at=datetime.utcnow(),
+            source_id="source_id",
+            remote_id="remote_id",
+            domain="domain.gouv.fr",
+            last_update=datetime.utcnow(),
+            remote_url="http://domain.gouv.fr/dataset/remote_url",
+            uri="http://domain.gouv.fr/dataset/uri",
+            dct_identifier="http://domain.gouv.fr/dataset/identifier",
+            archived_at=datetime.utcnow(),
+            archived="not-on-remote",
+        )
+        dataset.harvest = harvest_metadata
+        dataset.save()
+
+    def test_harvest_dataset_metadata_validation_error(self):
+        harvest_metadata = HarvestDatasetMetadata(created_at="maintenant")
+        dataset = DatasetFactory()
+        dataset.harvest = harvest_metadata
+        with pytest.raises(db.ValidationError):
+            dataset.save()
+
+    def test_harvest_dataset_metadata_past_modifed_at(self):
+        dataset = DatasetFactory()
+
+        harvest_metadata = HarvestDatasetMetadata(
+            created_at=datetime.utcnow(),
+            modified_at=datetime.utcnow(),
+        )
+        dataset.harvest = harvest_metadata
+        dataset.save()
+        assert dataset.last_modified == harvest_metadata.modified_at
+
+    def test_harvest_resource_metadata_validate_success(self):
+        resource = ResourceFactory()
+
+        harvest_metadata = HarvestResourceMetadata(
+            issued_at=datetime.utcnow(),
+            modified_at=datetime.utcnow(),
+            uri="http://domain.gouv.fr/dataset/uri",
+        )
+        resource.harvest = harvest_metadata
+        resource.validate()
+
+    def test_harvest_resource_metadata_validation_error(self):
+        harvest_metadata = HarvestResourceMetadata(issued_at="maintenant")
+        resource = ResourceFactory()
+        resource.harvest = harvest_metadata
+        with pytest.raises(db.ValidationError):
+            resource.validate()
+
+    def test_harvest_resource_metadata_future_modifed_at(self):
+        resource = ResourceFactory()
+        harvest_metadata = HarvestResourceMetadata(
+            modified_at=datetime.utcnow() + timedelta(days=1)
+        )
+        resource.harvest = harvest_metadata
+        resource.validate()
+
+        assert resource.last_modified == resource.last_modified_internal
+
+    def test_harvest_resource_metadata_past_modifed_at(self):
+        resource = ResourceFactory()
+        harvest_metadata = HarvestResourceMetadata(modified_at=datetime.utcnow())
+        resource.harvest = harvest_metadata
+        resource.validate()
+
+        assert resource.last_modified == harvest_metadata.modified_at
+
+    def test_resource_metadata_extra_modifed_at(self):
+        resource = ResourceFactory(filetype="remote")
+        resource.extras.update({"analysis:last-modified-at": datetime(2023, 1, 1)})
+        resource.validate()
+
+        assert resource.last_modified == resource.extras["analysis:last-modified-at"]
+
+    def test_quality_cached_next_update_with_date_last_update(self):
+        """Test that quality_cached with date (not datetime) last_update can be saved to MongoDB.
+
+        This reproduces a production bug where last_update could be a datetime.date instead
+        of datetime.datetime, causing next_update to also be a datetime.date, which BSON
+        cannot encode (it only supports datetime.datetime).
+
+        See error: bson.errors.InvalidDocument: cannot encode object: datetime.date(...), of type: <class 'datetime.date'>
+        """
+        dataset: Dataset = DatasetFactory(
+            frequency=UpdateFrequency.QUARTERLY,
+        )
+        # Set harvest metadata with modified_at as a date instead of datetime
+        # This simulates data coming from harvesting where dates might not be properly typed
+        dataset.harvest = HarvestDatasetMetadata(
+            created_at=datetime(2019, 1, 1),
+            modified_at=date(2019, 6, 7),  # Using date instead of datetime
+        )
+        # Also set last_update as date to fully simulate the production scenario
+        dataset.last_update = date(2019, 6, 7)
+
+        dataset.save()

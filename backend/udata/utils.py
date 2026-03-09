@@ -1,0 +1,474 @@
+import hashlib
+import itertools
+import logging
+import math
+import re
+from collections import Counter
+from datetime import date, datetime, timedelta
+from importlib.metadata import version
+from math import ceil
+from typing import Any, Hashable
+from uuid import UUID, uuid4
+from xml.sax.saxutils import escape
+
+import factory
+from bson import ObjectId
+from bson.errors import InvalidId
+from dateutil.parser import ParserError
+from dateutil.parser import parse as parse_dt
+from dateutil.relativedelta import relativedelta
+from faker import Faker
+from faker.config import PROVIDERS
+from faker.providers import BaseProvider
+from faker.providers.lorem.la import Provider as LoremProvider
+from flask import abort, current_app, request
+from mongoengine.fields import BaseQuerySet
+
+from udata import tags
+
+
+def get_udata_version() -> str:
+    return version("udata")
+
+
+def get_by(lst, field, value):
+    """Find an object in a list given a field value"""
+    for row in lst:
+        if (isinstance(row, dict) and row.get(field) == value) or (
+            getattr(row, field, None) == value
+        ):
+            return row
+
+
+def multi_to_dict(multi):
+    """Transform a Werkzeug multidictionnary into a flat dictionnary"""
+    return dict(
+        (key, value[0] if len(value) == 1 else value) for key, value in multi.to_dict(False).items()
+    )
+
+
+def get_field_value_from_path(document, field_path: str):
+    # The field_path is a pattern of dot-separated nested field as returned
+    # by mongoengine.base.document._get_changed_fields
+    # Inspired from mongoengine.base.document._clear_changed_fields iteration
+    doc_field = document
+    for part in field_path.split("."):
+        if isinstance(doc_field, list) and part.isdigit():
+            doc_field = doc_field[int(part)]
+        elif isinstance(doc_field, dict):
+            doc_field = doc_field.get(part, None)
+        else:
+            field_name = doc_field._reverse_db_field_map.get(part, part)
+            doc_field = getattr(doc_field, field_name, None)
+    return doc_field
+
+
+def filter_changed_fields(document, previous, changed_fields: list[str]):
+    # Make sure that changed fields have actually changed.
+    # We compare the document values once it has been reloaded.
+    # It may have been cleaned or normalized when saved to mongo.
+    # We compare the field values one by one with the previous value stored in _previous_changed_fields.
+    # We also ignore reordering in the case of list, ex tags or contact points.
+    # See https://github.com/opendatateam/udata/pull/3412 for more context.
+    document.reload()
+    filtered_changed_fields = []
+    for field in changed_fields:
+        # Sometimes, we nullify a field in the clean method (for exemple the `license` when we change
+        # the `access_type` of a dataset). This field is then not present in `previous`. Returning `None`
+        # is a little bit wrong because we should return the previous value of the `license`. Right now
+        # we don't notice license change because `None (not present) == None (removed)` is equal.
+        if field not in previous:
+            continue
+
+        previous_value = previous.get(field, None)
+        current_value = get_field_value_from_path(document, field)
+        # Filter out special case of list reordering, does not support unhashable types
+        if (
+            isinstance(previous_value, list)
+            and isinstance(current_value, list)
+            and all(
+                isinstance(value, Hashable)
+                for value in itertools.chain(previous_value, current_value)
+            )
+        ):
+            if Counter(previous_value) != Counter(current_value):
+                filtered_changed_fields.append(field)
+        # Direct comparison for the rest of the fields
+        elif previous_value != current_value:
+            filtered_changed_fields.append(field)
+    return filtered_changed_fields
+
+
+FIRST_CAP_RE = re.compile("(.)([A-Z][a-z]+)")
+ALL_CAP_RE = re.compile("([a-z0-9])([A-Z])")
+UUID_LENGTH = 36
+
+
+def camel_to_lodash(name):
+    s1 = FIRST_CAP_RE.sub(r"\1_\2", name)
+    return ALL_CAP_RE.sub(r"\1_\2", s1).lower()
+
+
+class Paginable(object):
+    """
+    A simple helper mixin for pagination
+    """
+
+    @property
+    def pages(self):
+        if self.page_size:
+            return int(ceil(self.total / float(self.page_size)))
+        else:
+            return 1
+
+    @property
+    def has_prev(self):
+        return self.page > 1
+
+    @property
+    def has_next(self):
+        return self.page < self.pages
+
+    @property
+    def page_start(self):
+        if self.page_size is not None:
+            return (self.page - 1) * self.page_size + 1
+        else:
+            return 1
+
+    @property
+    def page_end(self):
+        return min(self.total, self.page_size * self.page)
+
+    def iter_pages(self, left_edge=2, left_current=2, right_current=5, right_edge=2):
+        last = 0
+        for num in range(1, self.pages + 1):
+            if (
+                num <= left_edge
+                or (num > self.page - left_current - 1 and num < self.page + right_current)
+                or num > self.pages - right_edge
+            ):
+                if last + 1 != num:
+                    yield None
+                yield num
+                last = num
+
+
+class Paginator(Paginable):
+    """A simple paginable implementation"""
+
+    def __init__(self, page, page_size, total):
+        self.page = page
+        self.page_size = page_size
+        self.total = total
+
+
+def daterange_start(value):
+    """Parse a date range start boundary"""
+    if not value:
+        return None
+    elif isinstance(value, datetime):
+        return value.date()
+    elif isinstance(value, date):
+        return value
+
+    result = parse_dt(value).date()
+    dashes = value.count("-")
+
+    if dashes >= 2:
+        return result
+    elif dashes == 1:
+        # Year/Month only
+        return result.replace(day=1)
+    else:
+        # Year only
+        return result.replace(day=1, month=1)
+
+
+def daterange_end(value: date | datetime | str | None) -> date | None:
+    """Parse a date range end boundary"""
+    if not value:
+        return None
+    elif isinstance(value, datetime):
+        return value.date()
+    elif isinstance(value, date):
+        return value
+
+    result = parse_dt(value).date()
+    dashes = value.count("-")
+
+    if dashes >= 2:
+        # Full date
+        return result
+    elif dashes == 1:
+        # Year/Month
+        return result + relativedelta(months=+1, days=-1, day=1)
+    else:
+        # Year only
+        return result.replace(month=12, day=31)
+
+
+def to_naive_datetime(given_date: Any) -> datetime:
+    if isinstance(given_date, str):
+        given_date = parse_dt(given_date)
+    if isinstance(given_date, date) and not isinstance(given_date, datetime):
+        return datetime(given_date.year, given_date.month, given_date.day)
+    elif isinstance(given_date, datetime):
+        return given_date.replace(tzinfo=None)
+    return given_date
+
+
+log = logging.getLogger(__name__)
+
+
+def safe_harvest_datetime(value: Any, field: str, refuse_future: bool = False) -> datetime | None:
+    """
+    Safely parse a date/datetime value from harvested data.
+    Returns None and logs a warning if the value cannot be parsed or is in the future.
+    """
+    if value is None:
+        return None
+    try:
+        parsed = to_naive_datetime(value)
+    except ParserError:
+        log.warning(f"Unparseable {field} value: '{value}'")
+        return None
+    if refuse_future and parsed and parsed > datetime.utcnow():
+        log.warning(f"Future {field} value: '{value}'")
+        return None
+    return parsed
+
+
+def to_iso(dt: date | datetime) -> str | None:
+    """
+    Format a date or datetime into an ISO-8601 string
+
+    Support dates before 1900.
+    """
+    if isinstance(dt, datetime):
+        return to_iso_datetime(dt)
+    elif isinstance(dt, date):
+        return to_iso_date(dt)
+
+
+def to_iso_date(dt: date | datetime) -> str | None:
+    """
+    Format a date or datetime into an ISO-8601 date string.
+
+    Support dates before 1900.
+    """
+    if dt:
+        return "{dt.year:04d}-{dt.month:02d}-{dt.day:02d}".format(dt=dt)
+
+
+def to_iso_datetime(dt: date | datetime) -> str | None:
+    """
+    Format a date or datetime into an ISO-8601 datetime string.
+
+    Time is set to 00:00:00 for dates.
+
+    Support dates before 1900.
+    """
+    if dt:
+        date_str = to_iso_date(dt)
+        time_str = (
+            "{dt.hour:02d}:{dt.minute:02d}:{dt.second:02d}".format(dt=dt)
+            if isinstance(dt, datetime)
+            else "00:00:00"
+        )
+        return "T".join((date_str, time_str))
+
+
+def to_bool(value: bool | str | int) -> bool:
+    """
+    Transform a value into a boolean with the following rules:
+
+    - a boolean is returned untouched
+    - a string value should match any casinf of 'true' to be True
+    - an integer should be superior to zero to be True
+    - all other values are False
+    """
+    if isinstance(value, bool):
+        return value
+    elif isinstance(value, str):
+        return value.lower() == "true" or value.lower() == "t"
+    elif isinstance(value, int):
+        return value > 0
+    else:
+        return False
+
+
+def clean_string(value: str):
+    """
+    Clean an user input string (Prevent it from containing XSS)
+    """
+    return escape(value)
+
+
+def not_none_dict(d: dict) -> dict:
+    """Filter out None values from a dict"""
+    return {k: v for k, v in d.items() if v is not None}
+
+
+def hash_url(url: str) -> str | None:
+    """Hash an URL to make it indexable"""
+    return hashlib.sha1(url.encode("utf-8")).hexdigest() if url else None
+
+
+def recursive_get(obj: Any, key: Any):
+    """
+    Get an attribute or a key recursively.
+
+    :param obj: The object to fetch attribute or key on
+    :type obj: object|dict
+    :param key: Either a string in dotted-notation ar an array of string
+    :type key: string|list|tuple
+    """
+    if not obj or not key:
+        return
+    parts = key.split(".") if isinstance(key, str) else key
+    key = parts.pop(0)
+    if isinstance(obj, dict):
+        value = obj.get(key, None)
+    else:
+        value = getattr(obj, key, None)
+    return recursive_get(value, parts) if parts else value
+
+
+def unique_string(length: int = UUID_LENGTH) -> str:
+    """Generate a unique string"""
+    # We need a string at least as long as length
+    string = str(uuid4()) * int(math.ceil(length / float(UUID_LENGTH)))
+    return string[:length] if length else string
+
+
+def is_uuid(uuid_string: str, version: int = 4) -> bool:
+    try:
+        # If uuid_string is a valid hex code but not a valid uuid,
+        # UUID() will still make a valide uuid out of it.
+        # to prevent this, we check the genuine version (without dashes)
+        # with the generated hex code. They should be similar.
+        uid = UUID(uuid_string, version=version)
+        return uid.hex == uuid_string.replace("-", "")
+    except ValueError:
+        return False
+
+
+# This is the default providers list
+# We remove the lorum one to replace it
+# with a unicode enabled one below
+PROVIDERS.remove("faker.providers.lorem")
+
+faker = Faker("fr_FR")  # Use a unicode/utf-8 based locale
+
+
+def generate_tags(nb=3) -> [str]:
+    return [generate_tag() for _ in range(nb)]
+
+
+def generate_tag() -> str:
+    fake_tag: str = faker.word()
+    while len(fake_tag) < tags.TAG_MIN_LENGTH:
+        fake_tag = faker.word()
+    return fake_tag
+
+
+faker.tag = generate_tag
+faker.tags = generate_tags
+
+
+def faker_provider(provider):
+    faker.add_provider(provider)
+    factory.Faker.add_provider(provider)
+    return provider
+
+
+@faker_provider
+class UDataProvider(BaseProvider):
+    """
+    A Faker provider for udata missing requirements.
+
+    Might be conributed to upstream Faker project
+    """
+
+    def unique_string(self, length: int = UUID_LENGTH) -> str:
+        """Generate a unique string"""
+        return unique_string(length)
+
+
+@faker_provider  # Replace the default lorem provider with a unicode one
+class UnicodeLoremProvider(LoremProvider):
+    """A Lorem provider that forces unicode in words"""
+
+    word_list = [w + "é" for w in LoremProvider.word_list]
+
+
+def safe_unicode(string: bytes) -> str | None:
+    """Safely transform any object into utf8 decoded str"""
+    if string is None:
+        return None
+    return string.decode("utf8") if isinstance(string, bytes) else str(string)
+
+
+def id_or_404(object_id):
+    try:
+        ObjectId(object_id)
+        return object_id
+    except InvalidId:
+        abort(404)
+
+
+def get_rss_feed_list(queryset: BaseQuerySet, created_at_field: str) -> list[Any]:
+    """
+    Return a list of recent elements for a RSS field.
+
+    We add a delay before a new element appears in feed in order to allow for post-publication moderation.
+    The delay is not taken into account if the element is published by a certified organization.
+    """
+    from udata.core.organization.constants import CERTIFIED
+    from udata.core.site.models import current_site
+    from udata.models import Organization
+
+    certifed_orgs = Organization.objects(badges__kind=CERTIFIED).only("id")
+
+    created_delay = datetime.utcnow() - timedelta(
+        hours=current_app.config["DELAY_BEFORE_APPEARING_IN_RSS_FEED"]
+    )
+    elements_with_delay = list(
+        queryset.filter(
+            **{
+                f"{created_at_field}__lte": created_delay,
+                "organization__nin": certifed_orgs,
+            }
+        )
+        .order_by(f"-{created_at_field}")
+        .limit(current_site.feed_size)
+    )
+    elements_without_delay = list(
+        queryset.filter(organization__in=certifed_orgs)
+        .order_by(f"-{created_at_field}")
+        .limit(current_site.feed_size)
+    )
+
+    # We need to merge the two lists manually, compensating for the delay, else elements with delay may not show
+    # if new elements have been published by certified organization in the meantime
+    def get_sort_key(element):
+        has_delay = not element.organization or not element.organization.certified
+        if has_delay:
+            return getattr(element, created_at_field) + timedelta(
+                hours=current_app.config["DELAY_BEFORE_APPEARING_IN_RSS_FEED"]
+            )
+        return getattr(element, created_at_field)
+
+    elements = sorted(
+        [*elements_with_delay, *elements_without_delay], reverse=True, key=get_sort_key
+    )[: current_site.feed_size]
+
+    return elements
+
+
+def wants_json() -> bool:
+    if request.is_json:
+        return True
+
+    return request.accept_mimetypes.best == "application/json"

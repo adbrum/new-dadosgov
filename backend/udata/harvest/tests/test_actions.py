@@ -1,0 +1,791 @@
+import csv
+import logging
+from datetime import datetime, timedelta
+from tempfile import NamedTemporaryFile
+
+import pytest
+from flask import current_app
+from mock import patch
+
+from udata.core.activity.models import new_activity
+from udata.core.dataservices.factories import DataserviceFactory
+from udata.core.dataservices.models import HarvestMetadata as HarvestDataserviceMetadata
+from udata.core.dataset.activities import UserCreatedDataset
+from udata.core.dataset.factories import DatasetFactory, ResourceFactory
+from udata.core.dataset.models import HarvestDatasetMetadata, HarvestResourceMetadata
+from udata.core.organization.factories import OrganizationFactory
+from udata.core.user.factories import UserFactory
+from udata.harvest.backends import get_enabled_backends
+from udata.harvest.backends.base import BaseBackend
+from udata.models import Dataset, PeriodicTask
+from udata.tests.api import PytestOnlyDBTestCase
+from udata.tests.helpers import assert_emit, assert_equal_dates, assert_not_emit
+from udata.utils import faker
+
+from .. import actions, signals
+from ..models import (
+    VALIDATION_ACCEPTED,
+    VALIDATION_PENDING,
+    VALIDATION_REFUSED,
+    HarvestError,
+    HarvestJob,
+    HarvestSource,
+)
+from .factories import DEFAULT_COUNT as COUNT
+from .factories import (
+    HarvestJobFactory,
+    HarvestSourceFactory,
+    MockBackendsMixin,
+    mock_initialize,
+    mock_process,
+)
+
+log = logging.getLogger(__name__)
+
+
+class HarvestActionsTest(MockBackendsMixin, PytestOnlyDBTestCase):
+    def test_list_backends(self):
+        assert len(get_enabled_backends()) > 0
+        for backend in get_enabled_backends().values():
+            assert issubclass(backend, BaseBackend)
+
+    def test_list_sources(self):
+        assert actions.list_sources() == []
+
+        sources = HarvestSourceFactory.create_batch(3)
+
+        result = actions.list_sources()
+        assert len(result) == len(sources)
+
+        for source in sources:
+            assert source in result
+
+    def test_list_sources_exclude_deleted(self):
+        assert actions.list_sources() == []
+
+        now = datetime.utcnow()
+        sources = HarvestSourceFactory.create_batch(3)
+        deleted_sources = HarvestSourceFactory.create_batch(2, deleted=now)
+
+        result = actions.list_sources()
+        assert len(result) == len(sources)
+
+        for source in sources:
+            assert source in result
+
+        for source in deleted_sources:
+            assert source not in result
+
+    def test_list_sources_include_deleted(self):
+        assert actions.list_sources() == []
+
+        now = datetime.utcnow()
+        sources = HarvestSourceFactory.create_batch(3)
+        sources.extend(HarvestSourceFactory.create_batch(2, deleted=now))
+
+        result = actions.list_sources(deleted=True)
+        assert len(result) == len(sources)
+
+        for source in sources:
+            assert source in result
+
+    def test_list_sources_for_owner(self):
+        owner = UserFactory()
+        assert actions.list_sources(owner) == []
+
+        sources = HarvestSourceFactory.create_batch(3, owner=owner)
+        HarvestSourceFactory()
+
+        result = actions.list_sources(owner)
+        assert len(result) == len(sources)
+
+        for source in sources:
+            assert source in result
+
+    def test_list_sources_for_org(self):
+        org = OrganizationFactory()
+        assert actions.list_sources(org) == []
+
+        sources = HarvestSourceFactory.create_batch(3, organization=org)
+        HarvestSourceFactory()
+
+        result = actions.list_sources(org)
+        assert len(result) == len(sources)
+
+        for source in sources:
+            assert source in result
+
+    def test_create_source(self):
+        source_url = faker.url()
+
+        with assert_emit(signals.harvest_source_created):
+            source = actions.create_source("Test source", source_url, "factory")
+
+        assert source.name == "Test source"
+        assert source.slug == "test-source"
+        assert source.url == source_url
+        assert source.backend == "factory"
+        assert source.frequency == "manual"
+        assert source.active
+        assert source.owner is None
+        assert source.organization is None
+
+        assert source.validation.state == VALIDATION_PENDING
+        assert source.validation.on is None
+        assert source.validation.by is None
+        assert source.validation.comment is None
+
+    def test_create_source_with_config(self):
+        source_url = faker.url()
+        config = {
+            "filters": [{"key": "test", "value": 42}],
+            "features": {"key": True},
+        }
+
+        with assert_emit(signals.harvest_source_created):
+            source = actions.create_source("Test source", source_url, "factory", config=config)
+
+        assert source.config == config
+
+    def test_update_source(self):
+        source = HarvestSourceFactory()
+        data = source.to_dict()
+        new_url = faker.url()
+        data["url"] = new_url
+
+        with assert_emit(signals.harvest_source_updated):
+            source = actions.update_source(source, data)
+
+        assert source.url == new_url
+        source.reload()
+        assert source.url == new_url
+
+    @patch("udata.harvest.actions.launch")
+    def test_validate_source(self, mock):
+        source = HarvestSourceFactory()
+
+        actions.validate_source(source)
+
+        source.reload()
+        assert source.validation.state == VALIDATION_ACCEPTED
+        assert source.validation.on is not None
+        assert source.validation.by is None
+        assert source.validation.comment is None
+        mock.assert_called_once_with(source)
+
+        assert source.periodic_task is not None
+
+    @patch("udata.harvest.actions.launch")
+    def test_validate_source_with_comment(self, mock):
+        source = HarvestSourceFactory()
+
+        actions.validate_source(source, "comment")
+
+        source.reload()
+
+        assert source.validation.state == VALIDATION_ACCEPTED
+        assert source.validation.on is not None
+        assert source.validation.by is None
+        assert source.validation.comment == "comment"
+        mock.assert_called_once_with(source)
+
+    def test_reject_source(self):
+        source = HarvestSourceFactory()
+
+        actions.reject_source(source, "comment")
+
+        source.reload()
+        assert source.validation.state == VALIDATION_REFUSED
+        assert source.validation.on is not None
+        assert source.validation.by is None
+        assert source.validation.comment == "comment"
+
+    def test_get_source_by_slug(self):
+        source = HarvestSourceFactory()
+        assert HarvestSource.get(source.slug) == source
+
+    def test_get_source_by_id(self):
+        source = HarvestSourceFactory()
+        assert HarvestSource.get(str(source.id)) == source
+
+    def test_delete_source_by_slug(self):
+        source = HarvestSourceFactory()
+        with assert_emit(signals.harvest_source_deleted):
+            deleted_source = actions.delete_source(source)
+
+        assert deleted_source.deleted is not None
+        assert deleted_source.id == source.id
+        deleted_sources = HarvestSource.objects(deleted__exists=True)
+        assert len(deleted_sources) == 1
+
+    def test_delete_source_by_id(self):
+        source = HarvestSourceFactory()
+        with assert_emit(signals.harvest_source_deleted):
+            deleted_source = actions.delete_source(source)
+
+        assert deleted_source.deleted is not None
+        assert deleted_source.id == source.id
+        deleted_sources = HarvestSource.objects(deleted__exists=True)
+        assert len(deleted_sources) == 1
+
+    def test_delete_source_by_objectid(self):
+        source = HarvestSourceFactory()
+        with assert_emit(signals.harvest_source_deleted):
+            deleted_source = actions.delete_source(source)
+
+        assert deleted_source.deleted is not None
+        assert deleted_source.id == source.id
+        deleted_sources = HarvestSource.objects(deleted__exists=True)
+        assert len(deleted_sources) == 1
+
+    def test_clean_source(self):
+        source = HarvestSourceFactory()
+        for _ in range(5):
+            DatasetFactory(harvest=HarvestDatasetMetadata(source_id=str(source.id)))
+        actions.clean_source(source)
+        datasets = Dataset.objects.filter(harvest__source_id=str(source.id))
+        assert len(datasets) == 5
+        for dataset in datasets:
+            assert dataset.deleted is not None
+
+    def test_get_job_by_id(self):
+        job = HarvestJobFactory()
+        assert actions.get_job(str(job.id)) == job
+
+    def test_get_job_by_objectid(self):
+        job = HarvestJobFactory()
+        assert actions.get_job(job.id) == job
+
+    def test_schedule(self):
+        source = HarvestSourceFactory()
+        with assert_emit(signals.harvest_source_scheduled):
+            source = actions.schedule(source, hour=0)
+
+        assert len(PeriodicTask.objects) == 1
+        periodic_task = source.periodic_task
+        assert periodic_task == PeriodicTask.objects.first()
+        assert periodic_task.args == [str(source.id)]
+        assert periodic_task.crontab.hour == "0"
+        assert periodic_task.crontab.minute == "*"
+        assert periodic_task.crontab.day_of_week == "*"
+        assert periodic_task.crontab.day_of_month == "*"
+        assert periodic_task.crontab.month_of_year == "*"
+        assert periodic_task.enabled
+        assert periodic_task.name == f"Harvest {source.name} ({source.id})"
+
+    def test_double_schedule_with_same_name(self):
+        source_1 = HarvestSourceFactory(name="A")
+        source_2 = HarvestSourceFactory(name="A")
+
+        actions.schedule(source_1, hour=0)
+        actions.schedule(source_2, hour=0)
+
+        assert len(PeriodicTask.objects) == 2
+
+    def test_schedule_from_cron(self):
+        source = HarvestSourceFactory()
+        with assert_emit(signals.harvest_source_scheduled):
+            source = actions.schedule(source, "0 1 2 3 sunday")
+
+        assert len(PeriodicTask.objects) == 1
+        periodic_task = source.periodic_task
+        assert periodic_task == PeriodicTask.objects.first()
+        assert periodic_task.args == [str(source.id)]
+        assert periodic_task.crontab.minute == "0"
+        assert periodic_task.crontab.hour == "1"
+        assert periodic_task.crontab.day_of_month == "2"
+        assert periodic_task.crontab.month_of_year == "3"
+        assert periodic_task.crontab.day_of_week == "sunday"
+        assert periodic_task.enabled
+        assert periodic_task.name == f"Harvest {source.name} ({source.id})"
+
+    def test_reschedule(self):
+        source = HarvestSourceFactory()
+        with assert_emit(signals.harvest_source_scheduled):
+            source = actions.schedule(source, hour=0)
+
+        with assert_emit(signals.harvest_source_scheduled):
+            source = actions.schedule(source, minute=0)
+
+        assert len(PeriodicTask.objects) == 1
+        periodic_task = source.periodic_task
+        assert periodic_task == PeriodicTask.objects.first()
+        assert periodic_task.args == [str(source.id)]
+        assert periodic_task.crontab.hour == "*"
+        assert periodic_task.crontab.minute == "0"
+        assert periodic_task.crontab.day_of_week == "*"
+        assert periodic_task.crontab.day_of_month == "*"
+        assert periodic_task.crontab.month_of_year == "*"
+        assert periodic_task.enabled
+        assert periodic_task.name == f"Harvest {source.name} ({source.id})"
+
+    def test_unschedule(self):
+        periodic_task = PeriodicTask.objects.create(
+            task="harvest",
+            name=faker.name(),
+            description=faker.sentence(),
+            enabled=True,
+            crontab=PeriodicTask.Crontab(),
+        )
+        source = HarvestSourceFactory(periodic_task=periodic_task)
+        with assert_emit(signals.harvest_source_unscheduled):
+            actions.unschedule(source)
+
+        source.reload()
+        assert len(PeriodicTask.objects) == 0
+        assert source.periodic_task is None
+
+    def test_purge_sources(self):
+        periodic_task = PeriodicTask.objects.create(
+            task="harvest",
+            name=faker.name(),
+            description=faker.sentence(),
+            enabled=True,
+            crontab=PeriodicTask.Crontab(),
+        )
+        now = datetime.utcnow()
+        to_delete = HarvestSourceFactory.create_batch(2, deleted=now)
+        to_delete.append(HarvestSourceFactory(periodic_task=periodic_task, deleted=now))
+        to_keep = HarvestSourceFactory.create_batch(2)
+        harvest_job = HarvestJobFactory(source=to_delete[0])
+        dataset_to_archive = DatasetFactory(
+            harvest=HarvestDatasetMetadata(source_id=str(to_delete[0].id))
+        )
+        dataservice_to_archive = DataserviceFactory(
+            harvest=HarvestDataserviceMetadata(source_id=str(to_delete[0].id))
+        )
+
+        result = actions.purge_sources()
+        dataset_to_archive.reload()
+        dataservice_to_archive.reload()
+
+        assert result == len(to_delete)
+        assert len(HarvestSource.objects) == len(to_keep)
+        assert PeriodicTask.objects.filter(id=periodic_task.id).count() == 0
+        assert HarvestJob.objects(id=harvest_job.id).count() == 0
+
+        assert dataset_to_archive.harvest.archived == "harvester-deleted"
+        assert_equal_dates(dataset_to_archive.harvest.archived_at, now)
+        assert_equal_dates(dataset_to_archive.archived, now)
+
+        assert dataservice_to_archive.harvest.archived_reason == "harvester-deleted"
+        assert_equal_dates(dataservice_to_archive.harvest.archived_at, now)
+        assert_equal_dates(dataservice_to_archive.archived_at, now)
+
+    @pytest.mark.options(HARVEST_JOBS_RETENTION_DAYS=2)
+    def test_purge_jobs(self):
+        now = datetime.utcnow()
+        retention = now - timedelta(days=2)
+        too_old = retention - timedelta(days=1)
+        to_delete = HarvestJobFactory.create_batch(3, created=too_old)
+        to_keep = [
+            HarvestJobFactory(created=now),
+            HarvestJobFactory(created=retention + timedelta(minutes=1)),
+        ]
+
+        result = actions.purge_jobs()
+
+        assert result == len(to_delete)
+        assert len(HarvestJob.objects) == len(to_keep)
+
+    def test_attach(self):
+        datasets = DatasetFactory.create_batch(3)
+
+        with NamedTemporaryFile(mode="w") as csvfile:
+            writer = csv.DictWriter(
+                csvfile, fieldnames=["local", "remote"], delimiter=";", quotechar='"'
+            )
+
+            writer.writeheader()
+            for index, dataset in enumerate(datasets):
+                writer.writerow({"local": str(dataset.id), "remote": str(index)})
+            csvfile.flush()
+
+            result = actions.attach("test.org", csvfile.name)
+
+        assert result.success == len(datasets)
+        assert result.errors == 0
+        for index, dataset in enumerate(datasets):
+            dataset.reload()
+            assert dataset.harvest.domain == "test.org"
+            assert dataset.harvest.remote_id == str(index)
+
+    def test_attach_does_not_duplicate(self):
+        attached_datasets = []
+        for i in range(2):
+            dataset = DatasetFactory.build()
+            dataset.harvest = HarvestDatasetMetadata(domain="test.org", remote_id=str(i))
+            dataset.last_modified_internal = datetime.utcnow()
+            dataset.save()
+            attached_datasets.append(dataset)
+
+        datasets = DatasetFactory.create_batch(3)
+
+        with NamedTemporaryFile(mode="w") as csvfile:
+            writer = csv.DictWriter(
+                csvfile, fieldnames=["local", "remote"], delimiter=";", quotechar='"'
+            )
+
+            writer.writeheader()
+            for index, dataset in enumerate(datasets):
+                writer.writerow({"local": str(dataset.id), "remote": str(index)})
+            csvfile.flush()
+
+            result = actions.attach("test.org", csvfile.name)
+
+        dbcount = Dataset.objects(**{"harvest__remote_id__exists": True}).count()
+        assert result.success == len(datasets)
+        assert dbcount == result.success
+        for index, dataset in enumerate(datasets):
+            dataset.reload()
+            assert dataset.harvest.domain == "test.org"
+            assert dataset.harvest.remote_id == str(index)
+
+    def test_attach_skip_not_found(self):
+        datasets = DatasetFactory.create_batch(3)
+
+        with NamedTemporaryFile(mode="w") as csvfile:
+            writer = csv.DictWriter(
+                csvfile, fieldnames=["local", "remote"], delimiter=";", quotechar='"'
+            )
+
+            writer.writeheader()
+            writer.writerow({"local": "not-found", "remote": "42"})
+            for index, dataset in enumerate(datasets):
+                writer.writerow({"local": str(dataset.id), "remote": str(index)})
+            csvfile.flush()
+
+            result = actions.attach("test.org", csvfile.name)
+
+        assert result.success == len(datasets)
+        assert result.errors == 1
+
+    def test_detach(self):
+        dataset = DatasetFactory(
+            harvest=HarvestDatasetMetadata(
+                source_id="source id", domain="test.org", remote_id="id"
+            ),
+            resources=[
+                ResourceFactory(
+                    harvest=HarvestResourceMetadata(issued_at=datetime.now(), uri="test.org")
+                )
+            ],
+        )
+
+        actions.detach(dataset)
+
+        dataset.reload()
+        assert dataset.harvest is None
+        for resource in dataset.resources:
+            assert resource.harvest is None
+
+    def test_detach_all(self):
+        source = HarvestSourceFactory()
+        datasets = [
+            DatasetFactory(
+                harvest=HarvestDatasetMetadata(
+                    source_id=str(source.id), domain="test.org", remote_id=str(i)
+                ),
+                resources=[
+                    ResourceFactory(
+                        harvest=HarvestResourceMetadata(issued_at=datetime.now(), uri="test.org")
+                    )
+                ],
+            )
+            for i in range(3)
+        ]
+
+        result = actions.detach_all_from_source(source)
+
+        assert result == len(datasets)
+        for dataset in datasets:
+            dataset.reload()
+            assert dataset.harvest is None
+            for resource in dataset.resources:
+                assert resource.harvest is None
+
+
+class ExecutionTestMixin(MockBackendsMixin, PytestOnlyDBTestCase):
+    def action(self, *args, **kwargs):
+        raise NotImplementedError
+
+    def test_default(self):
+        org = OrganizationFactory()
+        source = HarvestSourceFactory(backend="factory", organization=org)
+        with assert_emit(signals.before_harvest_job, signals.after_harvest_job):
+            self.action(source)
+
+        source.reload()
+        assert len(HarvestJob.objects(source=source)) == 1
+
+        job = source.get_last_job()
+
+        assert job.status == "done"
+        assert job.errors == []
+        assert job.started is not None
+        assert job.ended is not None
+        assert len(job.items) == COUNT
+
+        for item in job.items:
+            assert item.status == "done"
+            assert item.errors == []
+            assert item.started is not None
+            assert item.ended is not None
+            assert item.dataset is not None
+
+            dataset = item.dataset
+            assert Dataset.objects(id=dataset.id).first() is not None
+            assert dataset.organization == org
+            assert "remote_id" in dataset.harvest
+            assert "last_update" in dataset.harvest
+            assert "source_id" in dataset.harvest
+
+        assert len(HarvestJob.objects) == 1
+        assert len(Dataset.objects) == COUNT
+
+    def test_error_on_initialize(self):
+        def init(self):
+            raise ValueError("test")
+
+        source = HarvestSourceFactory(backend="factory")
+        with assert_emit(signals.before_harvest_job), mock_initialize.connected_to(init):
+            self.action(source)
+
+        source.reload()
+        assert len(HarvestJob.objects(source=source)) == 1
+
+        job = source.get_last_job()
+        assert job.status == "failed"
+        assert len(job.errors) == 1
+        error = job.errors[0]
+        assert isinstance(error, HarvestError)
+        assert job.started is not None
+        assert job.ended is not None
+        assert len(job.items) == 0
+
+        assert len(HarvestJob.objects) == 1
+        assert len(Dataset.objects) == 0
+
+    def test_error_on_item(self):
+        def process(self, item):
+            if item == "1":
+                raise ValueError("test")
+
+        source = HarvestSourceFactory(backend="factory")
+        with (
+            assert_emit(signals.before_harvest_job, signals.after_harvest_job),
+            mock_process.connected_to(process),
+        ):
+            self.action(source)
+
+        source.reload()
+        assert len(HarvestJob.objects(source=source)) == 1
+
+        job = source.get_last_job()
+        assert job.status == "done-errors"
+        assert job.started is not None
+        assert job.ended is not None
+        assert len(job.errors) == 0
+        assert len(job.items) == COUNT
+
+        items_ok = [i for i in job.items if not i.errors]
+        assert len(items_ok) == COUNT - 1
+
+        for item in items_ok:
+            assert item.started is not None
+            assert item.ended is not None
+            assert item.status == "done"
+            assert item.errors == []
+
+        item_ko = next(i for i in job.items if i.errors)
+        assert item_ko.started is not None
+        assert item_ko.ended is not None
+        assert item_ko.status == "failed"
+        assert len(item_ko.errors) == 1
+
+        error = item_ko.errors[0]
+        assert isinstance(error, HarvestError)
+
+        assert len(HarvestJob.objects) == 1
+        assert len(Dataset.objects) == COUNT - 1
+
+    def test_empty(self):
+        source = HarvestSourceFactory(backend="factory", config={"count": 0})
+        with assert_emit(signals.before_harvest_job, signals.after_harvest_job):
+            self.action(source)
+
+        source.reload()
+        assert len(HarvestJob.objects(source=source)) == 1
+
+        job = source.get_last_job()
+
+        assert job.status == "done"
+        assert job.errors == []
+        assert job.started is not None
+        assert job.ended is not None
+        assert job.items == []
+
+        assert len(HarvestJob.objects) == 1
+        assert len(Dataset.objects) == 0
+
+    @pytest.mark.options(HARVEST_MAX_ITEMS=5)
+    def test_harvest_max_items(self):
+        org = OrganizationFactory()
+        source = HarvestSourceFactory(backend="factory", organization=org, config={"count": 10})
+
+        self.action(source)
+        assert len(Dataset.objects) == 5
+
+    @pytest.mark.options(HARVEST_ACTIVITY_USER_ID="68b860182728e27218dd7c72")
+    def test_harvest_emit_activity(self):
+        # We need to init dataset activities module
+        import udata.core.dataset.activities  # noqa
+
+        user = UserFactory(id=current_app.config["HARVEST_ACTIVITY_USER_ID"])
+        source = HarvestSourceFactory(backend="factory")
+        with assert_emit(Dataset.on_create, new_activity):
+            self.action(source)
+
+        # We have an activity for each dataset created by the source action
+        activities = UserCreatedDataset.objects(actor=user)
+        assert activities.count() == Dataset.objects().count()
+
+        # On a second run, we don't expect any signal sent (no creation, update or deletion)
+        with assert_not_emit(Dataset.on_create, Dataset.on_update, new_activity):
+            self.action(source)
+
+
+class HarvestLaunchTest(ExecutionTestMixin):
+    def action(self, *args, **kwargs):
+        return actions.launch(*args, **kwargs)
+
+
+class HarvestRunTest(ExecutionTestMixin):
+    def action(self, *args, **kwargs):
+        return actions.run(*args, **kwargs)
+
+
+class HarvestPreviewTest(MockBackendsMixin, PytestOnlyDBTestCase):
+    def test_preview(self):
+        org = OrganizationFactory()
+        source = HarvestSourceFactory(backend="factory", organization=org)
+
+        job = actions.preview(source)
+
+        assert job.status == "done"
+        assert job.errors == []
+        assert job.started is not None
+        assert job.ended is not None
+        assert len(job.items) == COUNT
+
+        for item in job.items:
+            assert item.status == "done"
+            assert item.errors == []
+            assert item.started is not None
+            assert item.ended is not None
+            assert item.dataset is not None
+
+            dataset = item.dataset
+            assert dataset.organization == org
+            assert "remote_id" in dataset.harvest
+            assert "last_update" in dataset.harvest
+            assert "source_id" in dataset.harvest
+
+        assert len(HarvestJob.objects) == 0
+        assert len(Dataset.objects) == 0
+
+    @pytest.mark.options(HARVEST_PREVIEW_MAX_ITEMS=5)
+    def test_preview_max_items(self):
+        org = OrganizationFactory()
+        source = HarvestSourceFactory(backend="factory", organization=org, config={"count": 10})
+
+        job = actions.preview(source)
+
+        assert len(job.items) == 5
+
+    def test_preview_with_error_on_initialize(self):
+        def init(self):
+            raise ValueError("test")
+
+        source = HarvestSourceFactory(backend="factory")
+
+        with mock_initialize.connected_to(init):
+            job = actions.preview(source)
+
+        assert job.status == "failed"
+        assert len(job.errors) == 1
+        error = job.errors[0]
+        assert isinstance(error, HarvestError)
+        assert job.started is not None
+        assert job.ended is not None
+        assert len(job.items) == 0
+
+        assert len(HarvestJob.objects) == 0
+        assert len(Dataset.objects) == 0
+
+    def test_preview_with_error_on_item(self):
+        def process(self, item):
+            if item == "1":
+                raise ValueError("test")
+
+        source = HarvestSourceFactory(backend="factory")
+
+        with mock_process.connected_to(process):
+            job = actions.preview(source)
+
+        assert job.status == "done-errors"
+        assert job.started is not None
+        assert job.ended is not None
+        assert len(job.errors) == 0
+        assert len(job.items) == COUNT
+
+        items_ok = [i for i in job.items if not i.errors]
+        assert len(items_ok) == COUNT - 1
+
+        for item in items_ok:
+            assert item.started is not None
+            assert item.ended is not None
+            assert item.status == "done"
+            assert item.errors == []
+
+        item_ko = next(i for i in job.items if i.errors)
+        assert item_ko.started is not None
+        assert item_ko.ended is not None
+        assert item_ko.status == "failed"
+        assert len(item_ko.errors) == 1
+
+        error = item_ko.errors[0]
+        assert isinstance(error, HarvestError)
+
+        assert len(HarvestJob.objects) == 0
+        assert len(Dataset.objects) == 0
+
+    def test_preview_from_config(self):
+        org = OrganizationFactory()
+        source_url = faker.url()
+        count = 10
+        job = actions.preview_from_config(
+            "Test source", source_url, "factory", organization=org, config={"count": count}
+        )
+
+        assert job.status == "done"
+        assert job.errors == []
+        assert job.started is not None
+        assert job.ended is not None
+        assert len(job.items) == count
+
+        for item in job.items:
+            assert item.status == "done"
+            assert item.errors == []
+            assert item.started is not None
+            assert item.ended is not None
+            assert item.dataset is not None
+
+            dataset = item.dataset
+            assert dataset.organization == org
+            assert "remote_id" in dataset.harvest
+            assert "last_update" in dataset.harvest
+            assert "source_id" in dataset.harvest
+
+        assert len(HarvestJob.objects) == 0
+        assert len(Dataset.objects) == 0

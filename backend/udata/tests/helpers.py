@@ -1,0 +1,241 @@
+import os
+from contextlib import contextmanager
+from datetime import timedelta
+from io import BytesIO
+from urllib.parse import parse_qs, urlparse
+
+import pytest
+from flask import current_app, json
+from flask_security.babel import FsDomain
+from PIL import Image
+
+from udata.core.spatial.factories import GeoZoneFactory
+from udata.mail import mail_sent
+
+requires_search_service = pytest.mark.skipif(
+    not os.environ.get("UDATA_TEST_SEARCH_INTEGRATION"),
+    reason="Set UDATA_TEST_SEARCH_INTEGRATION=1 to run search integration tests",
+)
+
+
+def assert_equal_dates(datetime1, datetime2, limit=1):  # Seconds.
+    """Lax date comparison, avoid comparing milliseconds and seconds."""
+    __tracebackhide__ = True
+    delta = datetime1 - datetime2
+    assert timedelta(seconds=-limit) <= delta <= timedelta(seconds=limit)
+
+
+def assert_starts_with(haystack, needle):
+    __tracebackhide__ = True
+    msg = "{haystack} does not start with {needle}".format(haystack=haystack, needle=needle)
+    assert haystack.startswith(needle), msg
+
+
+def assert_json_equal(first, second):
+    """Ensure two dict produce the same JSON"""
+    __tracebackhide__ = True
+    json1 = json.loads(json.dumps(first))
+    json2 = json.loads(json.dumps(second))
+    assert json1 == json2
+
+
+@contextmanager
+def mock_signals(*signals):
+    __tracebackhide__ = True
+
+    callbacks_by_signal = {}
+    calls_kwargs_by_signal = {}
+
+    for requestSignal in signals:
+        # We capture requestSignal with a default argument
+        def callback(*args, requestSignal=requestSignal, **kwargs):
+            calls_kwargs_by_signal.setdefault(requestSignal, [])
+            calls_kwargs_by_signal[requestSignal].append(kwargs)
+
+        callbacks_by_signal[requestSignal] = callback
+        requestSignal.connect(callback, weak=False)
+
+    yield calls_kwargs_by_signal
+
+    for sig in signals:
+        sig.disconnect(callbacks_by_signal[sig])
+
+
+@contextmanager
+def assert_emit(*signals, assertions_callback=None):
+    __tracebackhide__ = True
+
+    with mock_signals(*signals) as calls_kwargs_by_signal:
+        yield
+
+    for signal in signals:
+        assert signal in calls_kwargs_by_signal, f'Signal "{signal}" should have been emitted'
+        if assertions_callback is not None:
+            for kwargs in calls_kwargs_by_signal[signal]:
+                assertions_callback(kwargs)
+
+
+@contextmanager
+def assert_not_emit(*signals):
+    __tracebackhide__ = True
+    with mock_signals(*signals) as calls_args_by_signal:
+        yield
+
+    for signal in signals:
+        assert signal not in calls_args_by_signal, f'Signal "{signal}" should not have been emitted'
+
+
+@contextmanager
+def capture_mails():
+    mails = []
+
+    def on_mail_sent(mail):
+        mails.append(mail)
+
+    mail_sent.connect(on_mail_sent)
+
+    yield mails
+
+    mail_sent.disconnect(on_mail_sent)
+
+
+REDIRECT_CODES = (301, 302, 303, 305, 307, 308)
+REDIRECT_MSG = "HTTP Status {} expected but got {{}}".format(
+    ", ".join(str(code) for code in REDIRECT_CODES)
+)
+
+
+def assert_redirects(response, location, message=None):
+    """
+    Checks if response is an HTTP redirect to the
+    given location.
+    :param response: Flask response
+    :param location: relative URL path to SERVER_NAME or an absolute URL
+    :param message: an optional failure message
+    """
+    __tracebackhide__ = True
+
+    not_redirect = REDIRECT_MSG.format(response.status_code)
+    assert response.status_code in REDIRECT_CODES, message or not_redirect
+    assert response.location == location, message
+
+
+def assert_status(response, status_code, message=None):
+    """
+    Helper method to check matching response status.
+
+    Extracted from parent class to improve output in case of JSON.
+
+    :param response: Flask response
+    :param status_code: response status code (e.g. 200)
+    :param message: Message to display on test failure
+    """
+    __tracebackhide__ = True
+
+    message = message or "HTTP Status %s expected but got %s" % (status_code, response.status_code)
+    if response.mimetype == "application/json":
+        try:
+            second_line = "Response content is {0}".format(response.json)
+            message = "\n".join((message, second_line))
+        except Exception:
+            pass
+    assert response.status_code == status_code, message
+
+
+def assert200(response):
+    __tracebackhide__ = True
+    assert_status(response, 200)
+
+
+def assert201(response):
+    __tracebackhide__ = True
+    assert_status(response, 201)
+
+
+def assert204(response):
+    __tracebackhide__ = True
+    assert_status(response, 204)
+
+
+def assert400(response):
+    __tracebackhide__ = True
+    assert_status(response, 400)
+
+
+def assert401(response):
+    __tracebackhide__ = True
+    assert_status(response, 401)
+
+
+def assert403(response):
+    __tracebackhide__ = True
+    assert_status(response, 403)
+
+
+def assert404(response):
+    __tracebackhide__ = True
+    assert_status(response, 404)
+
+
+def assert410(response):
+    __tracebackhide__ = True
+    assert_status(response, 410)
+
+
+def assert500(response):
+    __tracebackhide__ = True
+    assert_status(response, 500)
+
+
+def data_path(filename):
+    """Get a test data path"""
+    return os.path.join(os.path.dirname(__file__), "data", filename)
+
+
+def assert_command_ok(result):
+    __tracebackhide__ = True
+    msg = "Command failed with exit code {0.exit_code} and output:\n{0.output}"
+    assert result.exit_code == 0, msg.format(result)
+
+
+def assert_urls_equal(url1, url2):
+    __tracebackhide__ = True
+    p1 = urlparse(url1)
+    p2 = urlparse(url2)
+    assert p1.scheme == p2.scheme, "Scheme does not match"
+    assert p1.netloc == p2.netloc, "Network location does not match"
+    assert p1.path == p2.path, "Path does not match"
+    q1 = parse_qs(p1.query)
+    q2 = parse_qs(p2.query)
+    assert q1 == q2, "Query does not match"
+    assert p1.fragment == p2.fragment, "Fragment does not match"
+
+
+def assert_cors(response):
+    """CORS headers presence assertion"""
+    __tracebackhide__ = True
+    assert "Access-Control-Allow-Origin" in response.headers
+
+
+def create_test_image():
+    file = BytesIO()
+    image = Image.new("RGBA", size=(50, 50), color=(155, 0, 0))
+    image.save(file, "png")
+    file.name = "test.png"
+    file.seek(0)
+    return file
+
+
+def create_geozones_fixtures():
+    paca = GeoZoneFactory(
+        id="fr:region:93", level="fr:region", name="Provence Alpes Côtes dAzur", code="93"
+    )
+    bdr = GeoZoneFactory(
+        id="fr:departement:13", level="fr:departement", name="Bouches-du-Rhône", code="13"
+    )
+    arles = GeoZoneFactory(id="fr:commune:13004", level="fr:commune", name="Arles", code="13004")
+    return paca, bdr, arles
+
+
+def security_gettext(string):
+    return FsDomain(current_app).gettext(string)

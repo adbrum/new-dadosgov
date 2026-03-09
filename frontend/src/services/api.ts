@@ -1,6 +1,6 @@
 import { APIResponse, Dataset, Organization, Reuse } from '@/types/api';
 
-const API_BASE_URL = 'https://dados.gov.pt/api/1';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'https://dados.gov.pt/api/1';
 
 export async function fetchDatasets(
   page: number = 1,
@@ -8,7 +8,6 @@ export async function fetchDatasets(
   organization?: string | string[],
 ): Promise<APIResponse<Dataset>> {
   try {
-    console.log('fetchDatasets called with org:', organization);
     let url = `${API_BASE_URL}/datasets/?page=${page}&page_size=${pageSize}`;
     if (organization) {
       if (Array.isArray(organization)) {
@@ -19,8 +18,6 @@ export async function fetchDatasets(
         url += `&organization=${organization}`;
       }
     }
-
-    console.log('API Fetch URL:', url);
 
     const res = await fetch(url, {
       cache: 'no-store', // Ensure fresh data

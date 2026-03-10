@@ -157,7 +157,7 @@ export async function fetchSiteInfo(): Promise<SiteInfo> {
     return {
       id: "",
       title: "",
-      metrics: { nb_datasets: 0, nb_organizations: 0, nb_reuses: 0, nb_users: 0 },
+      metrics: { datasets: 0, organizations: 0, reuses: 0, users: 0 },
     };
   }
 }
@@ -205,6 +205,60 @@ export async function fetchFeaturedReuses(
     return await res.json();
   } catch (error) {
     console.error("Error fetching featured reuses:", error);
+    return {
+      data: [],
+      page: 1,
+      page_size: pageSize,
+      total: 0,
+      next_page: null,
+      previous_page: null,
+    };
+  }
+}
+
+export async function fetchLatestDatasets(
+  pageSize: number = 3,
+): Promise<APIResponse<Dataset>> {
+  try {
+    const res = await fetch(
+      `${API_BASE_URL}/datasets/?sort=-created&page_size=${pageSize}`,
+      { cache: "no-store" },
+    );
+
+    if (!res.ok) {
+      throw new Error(`Failed to fetch latest datasets: ${res.statusText}`);
+    }
+
+    return await res.json();
+  } catch (error) {
+    console.error("Error fetching latest datasets:", error);
+    return {
+      data: [],
+      page: 1,
+      page_size: pageSize,
+      total: 0,
+      next_page: null,
+      previous_page: null,
+    };
+  }
+}
+
+export async function fetchLatestReuses(
+  pageSize: number = 3,
+): Promise<APIResponse<Reuse>> {
+  try {
+    const res = await fetch(
+      `${API_BASE_URL}/reuses/?sort=-created&page_size=${pageSize}`,
+      { cache: "no-store" },
+    );
+
+    if (!res.ok) {
+      throw new Error(`Failed to fetch latest reuses: ${res.statusText}`);
+    }
+
+    return await res.json();
+  } catch (error) {
+    console.error("Error fetching latest reuses:", error);
     return {
       data: [],
       page: 1,

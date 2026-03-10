@@ -59,12 +59,12 @@ export interface Reuse {
 
 export interface SiteInfo {
   id: string;
-  title: string;
+  title?: string;
   metrics: {
-    nb_datasets: number;
-    nb_organizations: number;
-    nb_reuses: number;
-    nb_users: number;
+    datasets: number;
+    organizations: number;
+    reuses: number;
+    users: number;
   };
 }
 

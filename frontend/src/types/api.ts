@@ -4,6 +4,13 @@ export interface Organization {
   slug: string;
   logo: string | null;
   description: string | null;
+  metrics?: {
+    datasets?: number;
+    followers?: number;
+    views?: number;
+    reuses?: number;
+  };
+  uri?: string;
 }
 
 export interface Metric {

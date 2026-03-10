@@ -45,7 +45,7 @@ export default function OrganizationsClient({
           ]}
         >
           <InputSearchBar
-            label="O que procura no Portal?"
+            label="O que procura nas organizações?"
             placeholder="Pesquisar datasets, organizações, temas..."
             id="datasets-search"
             hasVoiceActionButton={true}
@@ -110,33 +110,66 @@ export default function OrganizationsClient({
                           category="Organização"
                           title={<div className="underline text-xl-bold">{org.name}</div>}
                           description={
-                            <div className="flex flex-col gap-12">
-                              {org.description && (
-                                <p className="text-sm line-clamp-3 leading-relaxed text-neutral-900 mt-[8px] max-w-[592px]">
-                                  {org.description}
-                                </p>
-                              )}
-                              <div className="flex items-center flex-wrap gap-[32px] text-xs mt-[32px] text-[#034AD8] mb-[32px]">
-                                <div className="flex items-center gap-8" title="Visualizações">
-                                  <Icon name="agora-line-eye" className="" aria-hidden="true" />
-                                  <span>2 M</span>
-                                </div>
-                                <div className="flex items-center gap-8" title="Datasets">
-                                  <Icon name="agora-line-calendar" className="" aria-hidden="true" />
-                                  <span>{Math.floor(Math.random() * 1000)} mil</span>
-                                </div>
-                                <div className="flex items-center gap-8" title="Reutilizações">
-                                  <img src="/Icons/bar_chart.svg" className="" alt="" aria-hidden="true" />
-                                  <span>{Math.floor(Math.random() * 200)}</span>
-                                </div>
-                                <div className="flex items-center gap-8" title="Favoritos">
-                                  <img src="/Icons/favorite.svg" className="" alt="" aria-hidden="true" />
-                                  <span>412</span>
-                                </div>
-                              </div>
-                            </div>
+                            org.description ? (
+                              <p className="text-sm line-clamp-3 leading-relaxed text-neutral-900 mt-[8px] max-w-[592px]">
+                                {org.description}
+                              </p>
+                            ) : undefined
                           }
                           date={<span className="font-[300]">Atualizado há 3 dias</span>}
+                          links={[
+                            {
+                              href: '#',
+                              hasIcon: true,
+                              leadingIcon: 'agora-line-eye',
+                              leadingIconHover: 'agora-solid-eye',
+                              trailingIcon: '',
+                              trailingIconHover: '',
+                              trailingIconActive: '',
+                              children: '2 M',
+                              title: 'Visualizações',
+                              onClick: (e: React.MouseEvent) => e.preventDefault(),
+                              className: 'text-[#034AD8]',
+                            },
+                            {
+                              href: '#',
+                              hasIcon: true,
+                              leadingIcon: 'agora-line-calendar',
+                              leadingIconHover: 'agora-solid-calendar',
+                              trailingIcon: '',
+                              trailingIconHover: '',
+                              trailingIconActive: '',
+                              children: `${Math.floor(Math.random() * 1000)} mil`,
+                              title: 'Datasets',
+                              onClick: (e: React.MouseEvent) => e.preventDefault(),
+                              className: 'text-[#034AD8]',
+                            },
+                            {
+                              href: '#',
+                              hasIcon: false,
+                              children: (
+                                <span className="flex items-center gap-8">
+                                  <img src="/Icons/bar_chart.svg" alt="" aria-hidden="true" />
+                                  <span>{Math.floor(Math.random() * 200)}</span>
+                                </span>
+                              ),
+                              title: 'Reutilizações',
+                              onClick: (e: React.MouseEvent) => e.preventDefault(),
+                            },
+                            {
+                              href: '#',
+                              hasIcon: true,
+                              leadingIcon: 'agora-line-star',
+                              leadingIconHover: 'agora-solid-star',
+                              trailingIcon: '',
+                              trailingIconHover: '',
+                              trailingIconActive: '',
+                              children: '412',
+                              title: 'Favoritos',
+                              onClick: (e: React.MouseEvent) => e.preventDefault(),
+                              className: 'text-[#034AD8]',
+                            },
+                          ]}
                           mainLink={
                             <Link href={`/pages/organizations/${org.slug}`}>
                               <span className="underline">{org.name}</span>

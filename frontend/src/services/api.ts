@@ -37,6 +37,24 @@ export async function login(formData: FormData): Promise<{ message: string; redi
 }
 
 /**
+ * Perform registration using the frontend route handler proxy
+ */
+export async function register(
+  formData: FormData
+): Promise<{ status: string; error?: string; redirect?: string; requireEmailConfirmation?: boolean }> {
+  const res = await fetch("/register", {
+    method: "POST",
+    body: new URLSearchParams(formData as any),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || "Registration failed");
+  }
+  return data;
+}
+
+/**
  * Perform logout
  */
 export async function logout(): Promise<void> {

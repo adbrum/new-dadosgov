@@ -563,36 +563,70 @@ Implementar tipo e função para consumir notificações do utilizador autentica
 ## TICKET-19: Global Search — Suggest Multi-Entidade (Conexões API)
 
 **Descrição**
-Implementar funções de suggest/search para pesquisa global multi-entidade (datasets, organizations, reuses).
+Implementar uma pesquisa global inspirada no projeto francês cdata (data.gouv.fr): dropdown de seleção de tipo ao digitar + página de resultados com sidebar de tipos/contagens e lista paginada.
 
 **Contexto Arquitetural**
 
-- Homepage tem search bar que não faz nada.
-- Backend suggest endpoints (retornam resultados leves para autocomplete):
-  - `GET /api/1/datasets/suggest/?q=<query>&size=<n>`
-  - `GET /api/1/organizations/suggest/?q=<query>&size=<n>`
-  - `GET /api/1/reuses/suggest/?q=<query>&size=<n>`
-- Backend search v2 (resultados completos):
-  - `GET /api/2/datasets/search/?q=<query>&page=<n>&page_size=<n>`
-  - `GET /api/2/reuses/search/?q=<query>&page=<n>&page_size=<n>`
+- Implementado como parte do TICKET-04 (Ponto 4), mas merece ticket próprio pela complexidade e por ser uma feature distinta da homepage.
+- Inspiração direta no projeto [cdata](https://github.com/datagouv/cdata) — componentes `MenuSearch.vue` (dropdown) e `GlobalSearch` (página de resultados com sidebar).
+- Backend endpoints utilizados:
+  - `GET /api/1/datasets/?q=<query>&page=<n>&page_size=<n>` → pesquisa full-text de datasets.
+  - `GET /api/1/organizations/?q=<query>&page=<n>&page_size=<n>` → pesquisa full-text de organizações.
+  - `GET /api/1/reuses/?q=<query>&page=<n>&page_size=<n>` → pesquisa full-text de reutilizações.
+- Frontend usa `'use client'` com `useSearchParams` (requer `Suspense` wrapper).
+- Navegação por URL: `/pages/search?q=<query>&type=<datasets|reuses|organizations>&page=<n>`.
 
-**O que deve ser feito**
+**O que foi feito**
 
-1. **Tipos TS** em `types/api.ts`:
-   - `SearchSuggestion`: title, slug, score, type (`'dataset' | 'organization' | 'reuse'`).
-   - (Ou reutilizar os tipos de suggestion de cada entidade.)
-2. **Funções em `services/api.ts`**:
-   - `globalSuggest(query, size?)` → chama `suggestDatasets()`, `suggestOrganizations()`, `suggestReuses()` em paralelo (`Promise.all`) e agrega os resultados.
-   - `searchDatasets(query, page?, pageSize?)` → `GET /api/2/datasets/search/?q=<query>` (v2).
-   - `searchReuses(query, page?, pageSize?)` → `GET /api/2/reuses/search/?q=<query>` (v2).
-3. **Nota**: As funções individuais de suggest já podem existir dos TICKET-05, TICKET-10, TICKET-11. Aqui o foco é a agregação.
+1. **Funções em `services/api.ts`**:
+   - `searchDatasets(query, page?, pageSize?)` → `GET /api/1/datasets/?q=<query>&page=<n>&page_size=<n>` — retorna `APIResponse<Dataset>`.
+   - `searchOrganizations(query, page?, pageSize?)` → `GET /api/1/organizations/?q=<query>&page=<n>&page_size=<n>` — retorna `APIResponse<Organization>`.
+   - `searchReuses(query, page?, pageSize?)` → `GET /api/1/reuses/?q=<query>&page=<n>&page_size=<n>` — retorna `APIResponse<Reuse>`.
+2. **Componente `SearchDropdown`** (`src/components/search/SearchDropdown.tsx`):
+   - Input de pesquisa reutilizável com dropdown de 3 opções ao digitar: "Pesquisar «X» nos/nas conjuntos de dados / reutilizações / organizações".
+   - Navegação por teclado (ArrowUp/ArrowDown, Enter, Escape) e click-outside para fechar.
+   - Navega para `/pages/search?q=<query>&type=<type>` ao selecionar uma opção.
+   - Props: `id`, `darkMode`, `placeholder`, `label`, `hasVoiceActionButton`.
+   - Usa `InputSearchBar` do agora-design-system internamente.
+   - Integrado no hero da homepage (modo escuro) e no Header (modo claro).
+3. **Componente `SearchClient`** (`src/components/search/SearchClient.tsx`):
+   - Página de resultados com layout sidebar (inspirado no cdata GlobalSearch).
+   - Sidebar esquerda: navegação por tipo (Conjuntos de Dados, Reutilizações, Organizações) com contagens totais.
+   - Conteúdo direito: lista de resultados com paginação (PAGE_SIZE = 10).
+   - Breadcrumb: Início > Pesquisa.
+   - Título dinâmico por tipo ("Pesquisa avançada de conjuntos de dados", etc.).
+   - Usa `SearchDropdown` para permitir nova pesquisa na própria página.
+   - Fetch de totais em paralelo (`Promise.all`) + fetch de resultados do tab ativo.
+   - Estado controlado por URL: `?q=<query>&type=<type>&page=<page>`.
+4. **Página de rota** (`src/app/pages/search/page.tsx`):
+   - Server component que renderiza `SearchClient` dentro de `Suspense` (necessário para `useSearchParams`).
+5. **Integração na homepage** (`src/app/page.tsx`):
+   - Substituído `InputSearchBar` + `useRouter` + estado `searchQuery` pelo componente `SearchDropdown`.
+6. **Integração no Header** (`src/components/Header.tsx`):
+   - Substituído `InputSearchBar` do header pelo `SearchDropdown` na `GeneralBar`.
+
+**Ficheiros criados/alterados**
+
+| Ficheiro | Ação |
+|---|---|
+| `src/components/search/SearchDropdown.tsx` | Criado |
+| `src/components/search/SearchClient.tsx` | Criado |
+| `src/app/pages/search/page.tsx` | Criado |
+| `src/services/api.ts` | Alterado — adicionadas 3 funções de pesquisa |
+| `src/app/page.tsx` | Alterado — hero usa SearchDropdown |
+| `src/components/Header.tsx` | Alterado — header usa SearchDropdown |
 
 **Critérios de Aceitação**
 
-- [ ] `globalSuggest()` retorna resultados agregados de 3 entidades.
-- [ ] Chamadas são feitas em paralelo.
-- [ ] `searchDatasets()` e `searchReuses()` usam API v2.
-- [ ] Resultados incluem o tipo de entidade para distinção.
+- [x] `searchDatasets()`, `searchOrganizations()`, `searchReuses()` retornam resultados paginados do backend.
+- [x] Dropdown aparece ao digitar no campo de pesquisa com 3 opções de tipo.
+- [x] Navegação por teclado funciona no dropdown (ArrowUp/Down, Enter, Escape).
+- [x] Seleção de opção navega para `/pages/search?q=<query>&type=<type>`.
+- [x] Página de resultados mostra sidebar com tipos e contagens.
+- [x] Resultados são paginados (10 por página).
+- [x] Pesquisa funciona a partir do hero da homepage e do header.
+- [x] URL reflete o estado da pesquisa (query, tipo, página).
+- [x] Click-outside fecha o dropdown.
 
 ---
 
@@ -1508,6 +1542,78 @@ Sincronizar as branches divergentes de login (`login_tabs` da Ines e `login_fina
 - [ ] Arquivos `.env.example`, `env.ts`, `site.ts` e `route.ts` restaurados e versionados.
 - [ ] Formulário de login funcional (autentica via API e trata erros).
 - [ ] Branches secundárias obsoletas removidas.
+
+---
+
+## TICKET-39: Global Search — Página de Pesquisa com Dropdown e Resultados (Frontend)
+
+**Descrição**
+Implementar uma pesquisa global inspirada no projeto francês cdata (data.gouv.fr): dropdown de seleção de tipo ao digitar + página de resultados com sidebar de tipos/contagens e lista paginada.
+
+**Contexto Arquitetural**
+
+- Implementado como parte do TICKET-04 (Ponto 4), mas merece ticket próprio pela complexidade e por ser uma feature distinta da homepage.
+- Inspiração direta no projeto [cdata](https://github.com/datagouv/cdata) — componentes `MenuSearch.vue` (dropdown) e `GlobalSearch` (página de resultados com sidebar).
+- Backend endpoints utilizados:
+  - `GET /api/1/datasets/?q=<query>&page=<n>&page_size=<n>` → pesquisa full-text de datasets.
+  - `GET /api/1/organizations/?q=<query>&page=<n>&page_size=<n>` → pesquisa full-text de organizações.
+  - `GET /api/1/reuses/?q=<query>&page=<n>&page_size=<n>` → pesquisa full-text de reutilizações.
+- Frontend usa `'use client'` com `useSearchParams` (requer `Suspense` wrapper).
+- Navegação por URL: `/pages/search?q=<query>&type=<datasets|reuses|organizations>&page=<n>`.
+
+**O que foi feito**
+
+1. **Funções em `services/api.ts`**:
+   - `searchDatasets(query, page?, pageSize?)` → `GET /api/1/datasets/?q=<query>&page=<n>&page_size=<n>` — retorna `APIResponse<Dataset>`.
+   - `searchOrganizations(query, page?, pageSize?)` → `GET /api/1/organizations/?q=<query>&page=<n>&page_size=<n>` — retorna `APIResponse<Organization>`.
+   - `searchReuses(query, page?, pageSize?)` → `GET /api/1/reuses/?q=<query>&page=<n>&page_size=<n>` — retorna `APIResponse<Reuse>`.
+2. **Componente `SearchDropdown`** (`src/components/search/SearchDropdown.tsx`):
+   - Input de pesquisa reutilizável com dropdown de 3 opções ao digitar: "Pesquisar «X» nos/nas conjuntos de dados / reutilizações / organizações".
+   - Navegação por teclado (ArrowUp/ArrowDown, Enter, Escape) e click-outside para fechar.
+   - Navega para `/pages/search?q=<query>&type=<type>` ao selecionar uma opção.
+   - Props: `id`, `darkMode`, `placeholder`, `label`, `hasVoiceActionButton`.
+   - Usa `InputSearchBar` do agora-design-system internamente.
+   - Integrado no hero da homepage (modo escuro) e no Header (modo claro).
+3. **Componente `SearchClient`** (`src/components/search/SearchClient.tsx`):
+   - Página de resultados com layout sidebar (inspirado no cdata GlobalSearch).
+   - Sidebar esquerda: navegação por tipo (Conjuntos de Dados, Reutilizações, Organizações) com contagens totais.
+   - Conteúdo direito: lista de resultados com paginação (PAGE_SIZE = 10).
+   - Breadcrumb: Início > Pesquisa.
+   - Título dinâmico por tipo ("Pesquisa avançada de conjuntos de dados", etc.).
+   - Usa `SearchDropdown` para permitir nova pesquisa na própria página.
+   - Fetch de totais em paralelo (`Promise.all`) + fetch de resultados do tab ativo.
+   - Estado controlado por URL: `?q=<query>&type=<type>&page=<page>`.
+4. **Página de rota** (`src/app/pages/search/page.tsx`):
+   - Server component que renderiza `SearchClient` dentro de `Suspense` (necessário para `useSearchParams`).
+5. **Integração na homepage** (`src/app/page.tsx`):
+   - Substituído `InputSearchBar` + `useRouter` + estado `searchQuery` pelo componente `SearchDropdown`.
+6. **Integração no Header** (`src/components/Header.tsx`):
+   - Substituído `InputSearchBar` do header pelo `SearchDropdown` na `GeneralBar`.
+
+**Ficheiros criados/alterados**
+
+| Ficheiro | Ação |
+|---|---|
+| `src/components/search/SearchDropdown.tsx` | Criado |
+| `src/components/search/SearchClient.tsx` | Criado |
+| `src/app/pages/search/page.tsx` | Criado |
+| `src/services/api.ts` | Alterado — adicionadas 3 funções de pesquisa |
+| `src/app/page.tsx` | Alterado — hero usa SearchDropdown |
+| `src/components/Header.tsx` | Alterado — header usa SearchDropdown |
+
+**Critérios de Aceitação**
+
+- [x] `searchDatasets()`, `searchOrganizations()`, `searchReuses()` retornam resultados paginados do backend.
+- [x] Dropdown aparece ao digitar no campo de pesquisa com 3 opções de tipo.
+- [x] Navegação por teclado funciona no dropdown (ArrowUp/Down, Enter, Escape).
+- [x] Seleção de opção navega para `/pages/search?q=<query>&type=<type>`.
+- [x] Página de resultados mostra sidebar com tipos e contagens.
+- [x] Resultados são paginados (10 por página).
+- [x] Pesquisa funciona a partir do hero da homepage e do header.
+- [x] URL reflete o estado da pesquisa (query, tipo, página).
+- [x] Click-outside fecha o dropdown.
+
+**Status**: ✅ Concluído (branch `fix-homepage`, commit `c4e17fb`)
 
 ---
 

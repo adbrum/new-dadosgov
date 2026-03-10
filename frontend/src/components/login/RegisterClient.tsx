@@ -28,7 +28,7 @@ export default function RegisterClient() {
         const passwordConfirm = formData.get('confirm-password') as string;
         const firstName = formData.get('first-name') as string;
         const lastName = formData.get('last-name') as string;
-        const terms = formData.get('terms');
+        const acceptConditions = formData.get('accept_conditions');
 
         if (!email || !password || !passwordConfirm || !firstName || !lastName) {
             setError('Por favor, preencha todos os campos obrigatórios.');
@@ -42,7 +42,7 @@ export default function RegisterClient() {
             return;
         }
 
-        if (!terms) {
+        if (!acceptConditions) {
             setError('Deve aceitar os termos e condições.');
             setIsLoading(false);
             return;
@@ -59,6 +59,7 @@ export default function RegisterClient() {
             payload.append('password_confirm', passwordConfirm);
             payload.append('first_name', firstName);
             payload.append('last_name', lastName);
+            payload.append('accept_conditions', 'y');
             payload.append('csrf_token', csrfToken);
 
             // 3. Register
@@ -155,8 +156,8 @@ export default function RegisterClient() {
                         <div className="flex items-center">
                             <Checkbox
                                 label="Li e concordo com os termos e condições de uso do serviço."
-                                id="terms"
-                                name="terms"
+                                id="accept_conditions"
+                                name="accept_conditions"
                                 disabled={isLoading}
                             />
                         </div>

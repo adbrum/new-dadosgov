@@ -58,6 +58,6 @@ export async function POST(request: NextRequest) {
   responseHeaders.set("Content-Type", "application/json");
   return NextResponse.json(
     { status: "error", error: errorMessage },
-    { status: backendResponse.status, headers: responseHeaders }
+    { status: 400, headers: responseHeaders }
   );
 }

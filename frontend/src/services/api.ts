@@ -1,4 +1,12 @@
-import { APIResponse, Dataset, Organization, Reuse } from '@/types/api';
+import {
+  APIResponse,
+  Dataset,
+  GlobalSearchSuggestion,
+  Organization,
+  Post,
+  Reuse,
+  SiteInfo,
+} from "@/types/api";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'https://dados.gov.pt/api/1';
 
@@ -130,5 +138,129 @@ export async function fetchReuse(rid: string): Promise<Reuse> {
   } catch (error) {
     console.error('Error fetching reuse:', error);
     throw error;
+  }
+}
+
+export async function fetchSiteInfo(): Promise<SiteInfo> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/site/`, {
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      throw new Error(`Failed to fetch site info: ${res.statusText}`);
+    }
+
+    return await res.json();
+  } catch (error) {
+    console.error("Error fetching site info:", error);
+    return {
+      id: "",
+      title: "",
+      metrics: { nb_datasets: 0, nb_organizations: 0, nb_reuses: 0, nb_users: 0 },
+    };
+  }
+}
+
+export async function fetchFeaturedDatasets(
+  pageSize: number = 3,
+): Promise<APIResponse<Dataset>> {
+  try {
+    const res = await fetch(
+      `${API_BASE_URL}/datasets/?featured=true&page_size=${pageSize}`,
+      { cache: "no-store" },
+    );
+
+    if (!res.ok) {
+      throw new Error(`Failed to fetch featured datasets: ${res.statusText}`);
+    }
+
+    return await res.json();
+  } catch (error) {
+    console.error("Error fetching featured datasets:", error);
+    return {
+      data: [],
+      page: 1,
+      page_size: pageSize,
+      total: 0,
+      next_page: null,
+      previous_page: null,
+    };
+  }
+}
+
+export async function fetchFeaturedReuses(
+  pageSize: number = 3,
+): Promise<APIResponse<Reuse>> {
+  try {
+    const res = await fetch(
+      `${API_BASE_URL}/reuses/?featured=true&page_size=${pageSize}`,
+      { cache: "no-store" },
+    );
+
+    if (!res.ok) {
+      throw new Error(`Failed to fetch featured reuses: ${res.statusText}`);
+    }
+
+    return await res.json();
+  } catch (error) {
+    console.error("Error fetching featured reuses:", error);
+    return {
+      data: [],
+      page: 1,
+      page_size: pageSize,
+      total: 0,
+      next_page: null,
+      previous_page: null,
+    };
+  }
+}
+
+export async function fetchPosts(
+  page: number = 1,
+  pageSize: number = 3,
+): Promise<APIResponse<Post>> {
+  try {
+    const res = await fetch(
+      `${API_BASE_URL}/posts/?page=${page}&page_size=${pageSize}`,
+      { cache: "no-store" },
+    );
+
+    if (!res.ok) {
+      throw new Error(`Failed to fetch posts: ${res.statusText}`);
+    }
+
+    return await res.json();
+  } catch (error) {
+    console.error("Error fetching posts:", error);
+    return {
+      data: [],
+      page: 1,
+      page_size: pageSize,
+      total: 0,
+      next_page: null,
+      previous_page: null,
+    };
+  }
+}
+
+export async function suggestGlobalSearch(
+  query: string,
+  size: number = 5,
+): Promise<GlobalSearchSuggestion[]> {
+  try {
+    const res = await fetch(
+      `${API_BASE_URL}/datasets/suggest/?q=${encodeURIComponent(query)}&size=${size}`,
+      { cache: "no-store" },
+    );
+
+    if (!res.ok) {
+      throw new Error(`Failed to fetch search suggestions: ${res.statusText}`);
+    }
+
+    return await res.json();
+  } catch (error) {
+    console.error("Error fetching search suggestions:", error);
+    return [];
   }
 }

@@ -298,6 +298,90 @@ export async function fetchPosts(
   }
 }
 
+
+export async function searchDatasets(
+  query: string,
+  page: number = 1,
+  pageSize: number = 10,
+): Promise<APIResponse<Dataset>> {
+  try {
+    const res = await fetch(
+      `${API_BASE_URL}/datasets/?q=${encodeURIComponent(query)}&page=${page}&page_size=${pageSize}`,
+      { cache: "no-store" },
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to search datasets: ${res.statusText}`);
+    }
+    return await res.json();
+  } catch (error) {
+    console.error("Error searching datasets:", error);
+    return {
+      data: [],
+      page: 1,
+      page_size: pageSize,
+      total: 0,
+      next_page: null,
+      previous_page: null,
+    };
+  }
+}
+
+export async function searchOrganizations(
+  query: string,
+  page: number = 1,
+  pageSize: number = 10,
+): Promise<APIResponse<Organization>> {
+  try {
+    const res = await fetch(
+      `${API_BASE_URL}/organizations/?q=${encodeURIComponent(query)}&page=${page}&page_size=${pageSize}`,
+      { cache: "no-store" },
+    );
+    if (!res.ok) {
+      throw new Error(
+        `Failed to search organizations: ${res.statusText}`,
+      );
+    }
+    return await res.json();
+  } catch (error) {
+    console.error("Error searching organizations:", error);
+    return {
+      data: [],
+      page: 1,
+      page_size: pageSize,
+      total: 0,
+      next_page: null,
+      previous_page: null,
+    };
+  }
+}
+
+export async function searchReuses(
+  query: string,
+  page: number = 1,
+  pageSize: number = 10,
+): Promise<APIResponse<Reuse>> {
+  try {
+    const res = await fetch(
+      `${API_BASE_URL}/reuses/?q=${encodeURIComponent(query)}&page=${page}&page_size=${pageSize}`,
+      { cache: "no-store" },
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to search reuses: ${res.statusText}`);
+    }
+    return await res.json();
+  } catch (error) {
+    console.error("Error searching reuses:", error);
+    return {
+      data: [],
+      page: 1,
+      page_size: pageSize,
+      total: 0,
+      next_page: null,
+      previous_page: null,
+    };
+  }
+}
+
 export async function suggestGlobalSearch(
   query: string,
   size: number = 5,

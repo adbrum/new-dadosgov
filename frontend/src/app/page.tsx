@@ -3,12 +3,12 @@
 import { useEffect, useState } from "react";
 import {
   Button,
-  InputSearchBar,
   Icon,
   CardArticle,
   CardGeneral,
 } from "@ama-pt/agora-design-system";
 import Link from "next/link";
+import SearchDropdown from "@/components/search/SearchDropdown";
 import {
   fetchLatestDatasets,
   fetchLatestReuses,
@@ -102,14 +102,12 @@ export default function Home() {
               <div className="email-bar">
                 <div className="container mx-auto grid xs:grid-cols-4 md:grid-cols-8 xl:grid-cols-12 gap-32 ">
                   <div className="xs:col-span-4 md:col-span-7 xl:col-span-7">
-                    <InputSearchBar
+                    <SearchDropdown
+                      id="portal-search"
+                      darkMode={true}
+                      hasVoiceActionButton={true}
                       label="O que procura no Portal?"
                       placeholder="Pesquisar datasets, organizações, temas..."
-                      id="portal-search"
-                      hasVoiceActionButton={true}
-                      voiceActionAltText="Pesquisar por voz"
-                      searchActionAltText="Pesquisar"
-                      darkMode={true}
                     />
                     <div className="mt-8 text-s-regular text-neutral-200">
                       Exemplos: &quot;educação&quot;, &quot;saúde

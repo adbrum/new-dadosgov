@@ -245,6 +245,28 @@ body {
   min-height: 64px;
 }
 
+.dataset-card-home > * {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.dataset-card-home a {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+
+.dataset-card-home .container-body {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
 .homepage .agora-card-article.indented .container-body {
   background: transparent;
   border: 2px solid var(--color-white);

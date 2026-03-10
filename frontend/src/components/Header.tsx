@@ -19,6 +19,7 @@ import {
   NavigationLink,
   NavigationRoot,
 } from '@ama-pt/agora-design-system';
+import SearchDropdown from '@/components/search/SearchDropdown';
 
 export const Header = () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -30,7 +31,6 @@ export const Header = () => {
   const [selectedArea, setSelectedArea] = useState(
     pathname === '/pages/login' || pathname === '/pages/register' ? '2' : '1'
   );
-
   React.useEffect(() => {
     if (pathname === '/pages/login' || pathname === '/pages/register') {
       setSelectedArea('2');
@@ -170,6 +170,14 @@ export const Header = () => {
               checked={selectedLanguage === 'fr'}
             />
           </Languages>
+
+          <div className="header-search-wrapper flex items-center">
+            <SearchDropdown
+              id="header-search"
+              placeholder="Pesquisar"
+              label="Pesquisar"
+            />
+          </div>
 
           <Unauthenticated label="Inscrever-se" aria-label="Registar">
             <UnauthenticatedLink

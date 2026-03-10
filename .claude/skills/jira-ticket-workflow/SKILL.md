@@ -114,7 +114,16 @@ git checkout -b adbrum/<ticket-id>-<description>
 
 ---
 
-### Phase 4: Incremental Implementation
+### Phase 4: Commit Strategy Selection
+
+**Ask the user:** "Do you want to commit automatically after each point, or do you want to manually review and approve each commit?"
+
+- **Automatic**: The agent will `git add` and `git commit` automatically after implementing and testing each point.
+- **Manual**: The agent will pause, show the `git status` or `git diff`, and **wait for your approval** before making the commit.
+
+---
+
+### Phase 5: Incremental Implementation
 
 Go to the **"O que deve ser feito"** section of the ticket. Number each point.
 For **each point**, follow this cycle:
@@ -125,8 +134,9 @@ For each implementation point:
   2. Explore the relevant codebase area (read existing files first)
   3. Implement the change
   4. Run the relevant test (if applicable)
-  5. Commit with a clear English message
-  6. Inform the user: "✅ Point N done. Starting point N+1..."
+  5. If **Manual** strategy: show `git status`/diff and STOP for user approval.
+  6. Commit with a clear English message
+  7. Inform the user: "✅ Point N done. Starting point N+1..."
 ```
 
 **Commit message format (ENGLISH ONLY):**
@@ -166,7 +176,7 @@ Refs: TICKET-01"
 
 ---
 
-### Phase 5: Final Verification & Summary
+### Phase 6: Final Verification & Summary
 
 After all points are complete:
 
@@ -204,6 +214,7 @@ After all points are complete:
 
 ## Important Rules
 
+- **Respect the Commit Strategy.** If the user chose manual, you MUST wait for their approval before running `git commit`.
 - **Never batch multiple ticket points into one commit.** One point = one commit.
   (Exception: if two points are genuinely inseparable, explain why they're combined.)
 - **Always read before writing.** Read relevant existing code before making changes.

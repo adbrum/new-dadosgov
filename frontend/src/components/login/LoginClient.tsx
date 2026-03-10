@@ -50,7 +50,7 @@ export default function LoginClient() {
             <TabBody>
               <div className="rounded-8">
                 <div className="flex flex-col gap-40">
-                  <div className="grid mt-32 gap-32 xs:grid-cols-4 md:grid-cols-8 xl:grid-cols-12">
+                  <div className="grid gap-32 xs:grid-cols-4 md:grid-cols-8 xl:grid-cols-12">
                     <div className="xs:col-span-4 md:col-span-5 xl:col-span-7">
                       <div className="bg-[#E9EBFF] rounded-8 w-fit p-16 mb-32">
                         <Icon name="agora-line-user" className="w-24 h-24 text-brand-blue-primary" />
@@ -63,7 +63,7 @@ export default function LoginClient() {
                       </div>
                     </div>
                     <div className="xs:col-span-4 md:col-span-3 xl:col-span-5 flex items-center justify-start md:justify-end">
-                      <div className="w-[278px] md:flex md:justify-end xl:flex xl:justify-end mt-32">
+                      <div className="w-[278px] md:flex md:justify-end xl:flex xl:justify-end mt-64">
                         <NextImage
                           src="/Logos/autenticacao_gov.svg"
                           alt="Autenticação.gov"
@@ -106,7 +106,7 @@ export default function LoginClient() {
                   <div className="mt-16">
                     <Button
                       variant="primary"
-                      className="px-48 h-56 rounded-8 text-lg font-bold shadow-md hover:shadow-lg transition-all"
+                      className="px-48 h-56 text-lg font-bold shadow-md hover:shadow-lg transition-all"
                       hasIcon={true}
                       trailingIcon={isHovered ? "agora-solid-arrow-right-circle" : "agora-line-arrow-right-circle"}
                       onMouseEnter={() => setIsHovered(true)}
@@ -124,7 +124,7 @@ export default function LoginClient() {
             <TabBody>
               <div className="rounded-8">
                 <div className="flex flex-col gap-40">
-                  <div className="grid mt-32 gap-32 xs:grid-cols-4 md:grid-cols-8 xl:grid-cols-12">
+                  <div className="grid gap-32 xs:grid-cols-4 md:grid-cols-8 xl:grid-cols-12">
                     <div className="xs:col-span-4 md:col-span-5 xl:col-span-7">
                       <div className="bg-[#E9EBFF] rounded-8 w-fit p-16 mb-32">
                         <Icon name="agora-line-globe" className="w-24 h-24 text-brand-blue-primary" />
@@ -137,7 +137,7 @@ export default function LoginClient() {
                       </div>
                     </div>
                     <div className="xs:col-span-4 md:col-span-3 xl:col-span-5 flex items-center justify-start md:justify-end">
-                      <div className="w-[278px] md:flex md:justify-end xl:flex xl:justify-end mt-32">
+                      <div className="w-[278px] md:flex md:justify-end xl:flex xl:justify-end mt-64">
                         <NextImage
                           src="/eidas.svg"
                           alt="eIDAS"
@@ -164,7 +164,7 @@ export default function LoginClient() {
                   <div className="mt-16">
                     <Button
                       variant="primary"
-                      className="px-48 h-56 rounded-8 text-lg font-bold shadow-md hover:shadow-lg transition-all"
+                      className="px-48 h-56 text-lg font-bold shadow-md hover:shadow-lg transition-all"
                       hasIcon={true}
                       trailingIcon={isHoveredEidas ? "agora-solid-arrow-right-circle" : "agora-line-arrow-right-circle"}
                       onMouseEnter={() => setIsHoveredEidas(true)}
@@ -181,18 +181,21 @@ export default function LoginClient() {
             <TabHeader>Iniciar sessão</TabHeader>
             <TabBody>
               <div className="rounded-8">
-                <div className="flex flex-col gap-32 max-w-[560px] mt-32">
+                <div className="flex flex-col gap-32 max-w-[560px]">
+                  <div className="bg-[#E9EBFF] rounded-8 w-fit p-16">
+                    <Icon name="agora-line-user" className="w-24 h-24 text-brand-blue-primary" />
+                  </div>
                   <div>
-                    <h2 className="text-24 font-bold text-brand-blue-dark mb-8">Utilize as suas credenciais</h2>
-                    <p className="text-neutral-700">
-                      Introduza o seu email e senha para aceder ao portal.
+                    <h2 className="text-xl-bold  text-brand-blue-dark mb-8">Iniciar sessão</h2>
+                    <p className="text-neutral-900">
+                      Os campos marcados com um asterisco ( * ) são obrigatórios.
                     </p>
                   </div>
 
                   <form className="flex flex-col gap-24" onSubmit={(e) => e.preventDefault()}>
                     <InputText
                       label="Endereço de email *"
-                      placeholder="seu@email.pt"
+                      placeholder="Introduza aqui o texto"
                       id="login-email"
                       name="email"
                       type="email"
@@ -201,22 +204,17 @@ export default function LoginClient() {
 
                     <div className="flex flex-col gap-8">
                       <InputPassword
-                        label="Senha *"
-                        placeholder="Introduza a sua senha"
+                        label="Palavra-passe *"
+                        placeholder="Introduza aqui a palavra-passe"
                         id="login-password"
                         name="password"
                         className="w-full"
                       />
-                      <div className="flex justify-end">
-                        <a href="#" className="text-sm text-brand-blue-primary hover:underline font-medium">
-                          Esqueceu-se da sua senha?
-                        </a>
-                      </div>
                     </div>
 
-                    <div className="flex items-center">
+                    <div className="flex items-center text-neutral-900">
                       <Checkbox
-                        label="Lembrar-me neste dispositivo"
+                        label="Recordar palavra-passe"
                         id="remember-me"
                         name="remember-me"
                       />
@@ -226,9 +224,18 @@ export default function LoginClient() {
                       <Button
                         variant="primary"
                         type="submit"
-                        className="px-48 h-56 rounded-8 text-lg font-bold shadow-md hover:shadow-lg transition-all"
+                        className="px-48 h-56 text-lg font-bold shadow-md hover:shadow-lg transition-all"
                       >
                         Iniciar sessão
+                      </Button>
+                    </div>
+
+                    <div className="flex items-center justify-center mt-24 gap-4">
+                      <span className="text-sm text-neutral-900">
+                        Esqueceu-se da palavra-passe?
+                      </span>
+                      <Button variant="primary" appearance="link" className="p-0 h-auto font-bold text-sm">
+                        Recuperar palavra-passe
                       </Button>
                     </div>
                   </form>

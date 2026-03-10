@@ -52,6 +52,19 @@ npm run lint
 - All requests use `cache: 'no-store'` for fresh data
 - Error handling: graceful fallbacks returning empty states
 
+### Dynamic Data Fetching Pattern (Client Components)
+
+When fetching dynamic data in a client component, enforce the following pattern using `useEffect` and `useState` with functions from `src/services/api.ts`:
+
+1. Define state for the data array/object and a loading boolean (`isLoading`).
+2. Inside `useEffect()`, wrap the API call in an `async function`.
+3. Use a `try/catch/finally` block:
+   - `try`: `const response = await fetchDatasets(...)` and `setData(response.data)`.
+   - `catch`: Log the error `console.error(...)`.
+   - `finally`: `setIsLoading(false)`.
+4. Render conditionally based on `isLoading` (show loading state vs mapped data). 
+5. Provide a fallback empty state if no data is returned.
+
 ## Key Paths
 
 - `src/app/page.tsx` - Homepage

@@ -57,6 +57,37 @@ export interface Reuse {
   datasets?: Dataset[];
 }
 
+export interface SiteInfo {
+  id: string;
+  title: string;
+  metrics: {
+    nb_datasets: number;
+    nb_organizations: number;
+    nb_reuses: number;
+    nb_users: number;
+  };
+}
+
+export interface Post {
+  id: string;
+  name: string;
+  slug: string;
+  headline: string;
+  content: string;
+  body_type: string;
+  image: string | null;
+  image_thumbnail: string | null;
+  created_at: string;
+  last_modified: string;
+  tags: string[];
+}
+
+export interface GlobalSearchSuggestion {
+  title: string;
+  slug: string;
+  score: number;
+}
+
 export interface APIResponse<T> {
   data: T[];
   page: number;

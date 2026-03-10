@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import { usePathname } from 'next/navigation';
 import { Icon } from '@ama-pt/agora-design-system';
 
 const linkColumns = [
@@ -153,11 +152,8 @@ const FooterInstitutional = () => {
 };
 
 export const Footer = () => {
-  const pathname = usePathname();
-  const isAdmin = pathname?.startsWith('/pages/admin');
-
   return (
-    <footer className={`bg-primary-900 text-white ${isAdmin ? 'ml-[114px]' : ''}`}>
+    <footer className="bg-primary-900 text-white">
       <FooterNavigation />
       <FooterInstitutional />
     </footer>

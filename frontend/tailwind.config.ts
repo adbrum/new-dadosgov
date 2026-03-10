@@ -29,9 +29,6 @@ const config = {
         '24': '24px',
         '40': '40px',
       },
-      borderRadius: {
-        '8': '8px',
-      },
       fontFamily: {
         sans: ['var(--font-noto-sans)', 'sans-serif'],
       },

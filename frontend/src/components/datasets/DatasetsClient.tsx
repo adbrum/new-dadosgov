@@ -181,30 +181,18 @@ export default function DatasetsClient({
                       </div>
                     ))
                   ) : (
-                    <div className="col-span-2">
+                    <div>
                       <CardNoResults
-                        icon={<Icon name="agora-line-search" className="justify-center icon-xl" />}
+                        icon={<Icon name="agora-line-search" className="w-12 h-12 text-primary-500" />}
                         title="Não encontrou o que procurava?"
-                        className="font-bold"
                         subtitle={<span className="font-bold">Tente redefinir os filtros para ampliar sua busca.</span>}
                         description="Você também pode visualizar as solicitações atuais e enviar as suas próprias em nosso fórum dedicado à pesquisa de dados e ao acesso aberto."
                         position="center"
-                        hasAnchor={false}
-                        extraDescription={
-                          <div className="mt-32">
-                            <Button
-                              variant="primary"
-                              appearance="solid"
-                              hasIcon={true}
-                              trailingIcon="agora-line-arrow-right-circle"
-                              trailingIconHover="agora-solid-arrow-right-circle"
-                              className="h-auto mt-32"
-                              onClick={() => router.push('/pages/datasets')}
-                            >
-                              Redefinir filtros
-                            </Button>
-                          </div>
-                        }
+                        hasAnchor={true}
+                        valueAnchor="Redefir filtros"
+                        anchorHref="/pages/datasets"
+                        anchorTrailingIcon="agora-line-arrow-right-circle"
+                        anchorTrailingIconHover="agora-solid-arrow-right-circle"
                       />
                     </div>
                   )}

@@ -283,7 +283,7 @@ export default function Home() {
             <p className="mt-16 mb-32 max-w-3xl text-white">
               Precisa de uma descrição uma vez que é um titulo estrangeiro e novidade no dados.gov
             </p>
-            <div className="grid xs:grid-cols-1 sm:grid-cols-2 md:grid-cols-2 xl:grid-cols-3 gap-32 storytellings">
+            <div className="grid xs:grid-cols-1 sm:grid-cols-2 md:grid-cols-2 xl:grid-cols-3 gap-32">
               {[
                 {
                   img: 'Storytellings/storytelling1.svg',

@@ -34,13 +34,12 @@
   --------------------------------------------------------------------------- */
 :root {
   /* Brand Colors */
+  --color-brand-blue-dark: var(--color-primary-900);
   --color-brand-blue-dark-rgb: 2, 28, 81;
   --color-brand-blue-primary: #0C02CB;
   --color-brand-blue-primary-rgb: 12, 2, 203;
   --color-brand-blue-secondary: #050157;
   --color-brand-blue-secondary-rgb: 5, 1, 87;
-  --color-brand-blue-dark: var(--color-primary-900);
-  --color-brand-blue-dark-rgb: 2, 28, 81;
 
   /* Accent/Neutral Colors */
   --color-accent-light: #F7F7FF;
@@ -50,10 +49,6 @@
   /* Sizes & Spacing */
   --size-32: 32px;
   --size-64: 64px;
-}
-
-@theme {
-  --radius-8: 8px;
 }
 
 /*
@@ -133,40 +128,6 @@ body {
 .tab-panel-content>* {
   position: relative;
   z-index: 1;
-}
-
-.agora-tabs.desktop.vertically .tab-panel.current-neutral {
-  background-color: var(--color-primary-100);
-}
-
-@media (min-width: 1280px) {
-  .agora-tabs.desktop .tab-panel .tab-panel-content {
-    max-width: 1280px;
-    padding-left: 6rem;
-    padding-right: 6rem;
-  }
-
-}
-
-/*Login*/
-
-.login-page .agora-tabs.desktop.vertically .tab-panel.current-neutral,
-.login-page .agora-tabs.desktop.vertically .tab-list.desktop .tab-list-item.active.current-neutral {
-  background-color: var(--color-secondary-50);
-}
-
-.login-page .agora-tabs.desktop.vertically .tab-panel-content:before {
-  display: none;
-}
-
-.login-page .agora-tabs.desktop .tab-panel-content::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 100%;
-  width: calc(40vw - 50%);
-  background: var(--color-secondary-50);
 }
 
 /* 3.4 Cards (General) */
@@ -263,18 +224,6 @@ body {
   margin-top: auto;
 }
 
-.agora-btn .children-wrapper {
-  display: flex;
-}
-
-button.flex.items-center.justify-center.content-center.agora-btn.agora-btn-solid-primary.bg-primary-600.p-16.rounded-8.h-auto.gap-8 {
-  margin-top: 32px;
-}
-
-.agora-btn .children-wrapper svg {
-  margin: 3px 8px;
-}
-
 .homepage .latest-news-section .container-body {
   background: var(--color-primary-100);
   padding-top: 32px;
@@ -298,39 +247,9 @@ button.flex.items-center.justify-center.content-center.agora-btn.agora-btn-solid
   padding: 16px;
 }
 
-.agora-card-article .container-body {
-  padding-left: 0;
-  padding-right: 0;
-}
-
-.agora-card-no-results .main-content {
-  margin: inherit;
-}
-
-.agora-card-no-results .title {
-  font-weight: 600;
-}
-
-.agora-card-no-results .subtitle {
-  font-size: 16px !important;
-  font-weight: 700;
-  color: #2B363C;
-}
-
-.agora-card-no-results .description {
-  font-weight: 400;
-  margin-bottom: 0;
-  max-width: 65ch;
-}
-
 
 .card-article-3_2 .agora-card-article .card-article-3_2-img img {
   max-height: 48px;
-}
-
-.storytellings .agora-card-article .container-body {
-  padding-left: 32px;
-  padding-right: 32px;
 }
 
 /*Cards Links - Datasets*/
@@ -405,10 +324,6 @@ footer img {
   border-color: var(--color-primary-600);
 }
 
-:has(.agora-card-no-results) .pagination-filters:before {
-  display: none;
-}
-
 /* 6.3 Toggle Overrides for Organizations Filters */
 .organizations-filters .agora-toggle {
   width: 100%;
@@ -431,15 +346,6 @@ footer img {
   --------------------------------------------------------------------------- */
 .pl-0 {
   padding-left: 0;
-}
-
-.agora-card-no-results {
-  padding: 64px 128px;
-}
-
-.agora-card-no-results .icon-container {
-  margin: 0 auto 16px;
-  border-width: inherit;
 }
 
 p.max-w-ch,

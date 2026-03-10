@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Icon, Accordion, AccordionGroup, CardLinks, ButtonGroup, Button, InputSearchBar } from '@ama-pt/agora-design-system';
+import { Icon, Accordion, AccordionGroup, CardLinks, ButtonGroup, Button } from '@ama-pt/agora-design-system';
 import PageBanner from '@/components/PageBanner';
 
 const FAQ_DATA = [
@@ -109,52 +109,40 @@ const SupportPage = () => {
   return (
     <main className="flex-grow bg-white pb-64">
       <PageBanner
-        title={
-          <>
-            <span className="xs:text-xl-light md:text-2xl-light xl:text-2xl-light text-white">
-              Bem-vindo à página de suporte da
-            </span>
-            <span className="xs:text-xl-light md:text-2xl-light xl:text-2xl-light text-white">
-              plataforma data.gov
-            </span>
-          </>
-        }
+        title="Bem-vindo à página de suporte da plataforma data.gov"
         breadcrumbItems={[
           { label: 'Home', url: '/' },
           { label: 'Apoiar', url: '#' }
         ]}
-        backgroundImageUrl="/Banner/hero-bg.png"
-        backgroundPosition="center right"
-        subtitle={
-          <>
-            <label className="block text-[20px] font-bold text-white mt-[48px]">Antes de nos contactar, consulte o fórum e os nossos guias:<br />poderá já encontrar a resposta à sua pergunta lá!</label>
-
-            <div className="absolute w-full mb-64 bg-white text-neutral-900 shadow-lg dropdown"></div>
-
-            <div className="mt-[16px] flex flex-wrap gap-[32px]">
-              <a href="#" target="_blank" rel="noopener noreferrer" className="flex items-center gap-8 text-white cursor-pointer hover:underline">
-                Consulte a documentação em data.gov.pt
-                <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" className="icon icon-m fill-white w-32 h-32" aria-hidden="true" role="img"><path d="M11.2929 8.70711C10.9024 8.31658 10.9024 7.68342 11.2929 7.29289C11.6834 6.90237 12.3166 6.90237 12.7071 7.29289L16.7071 11.2929C17.0976 11.6834 17.0976 12.3166 16.7071 12.7071L12.7071 16.7071C12.3166 17.0976 11.6834 17.0976 11.2929 16.7071C10.9024 16.3166 10.9024 15.6834 11.2929 15.2929L13.5858 13H8C7.44772 13 7 12.5523 7 12C7 11.4477 7.44772 11 8 11H13.5858L11.2929 8.70711Z"></path><path fillRule="evenodd" clip-rule="evenodd" d="M12 1C5.92487 1 1 5.92487 1 12C1 18.0751 5.92487 23 12 23C18.0751 23 23 18.0751 23 12C23 5.92487 18.0751 1 12 1ZM3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12Z"></path></svg>
-              </a>
-
-              <a href="#" target="_blank" rel="noopener noreferrer" className="flex items-center gap-8 text-white cursor-pointer hover:underline">
-                Consulte os guias sobre dados abertos
-                <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" className="icon icon-m fill-white w-32 h-32" aria-hidden="true" role="img"><path d="M11.2929 8.70711C10.9024 8.31658 10.9024 7.68342 11.2929 7.29289C11.6834 6.90237 12.3166 6.90237 12.7071 7.29289L16.7071 11.2929C17.0976 11.6834 17.0976 12.3166 16.7071 12.7071L12.7071 16.7071C12.3166 17.0976 11.6834 17.0976 11.2929 16.7071C10.9024 16.3166 10.9024 15.6834 11.2929 15.2929L13.5858 13H8C7.44772 13 7 12.5523 7 12C7 11.4477 7.44772 11 8 11H13.5858L11.2929 8.70711Z"></path><path fillRule="evenodd" clip-rule="evenodd" d="M12 1C5.92487 1 1 5.92487 1 12C1 18.0751 5.92487 23 12 23C18.0751 23 23 18.0751 23 12C23 5.92487 18.0751 1 12 1ZM3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12Z"></path></svg>
-              </a>
-
-              <a href="#" target="_blank" rel="noopener noreferrer" className="flex items-center gap-8 text-white cursor-pointer hover:underline">
-                Consulte os guias sobre como usar os dados
-                <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" className="icon icon-m fill-white w-32 h-32" aria-hidden="true" role="img"><path d="M11.2929 8.70711C10.9024 8.31658 10.9024 7.68342 11.2929 7.29289C11.6834 6.90237 12.3166 6.90237 12.7071 7.29289L16.7071 11.2929C17.0976 11.6834 17.0976 12.3166 16.7071 12.7071L12.7071 16.7071C12.3166 17.0976 11.6834 17.0976 11.2929 16.7071C10.9024 16.3166 10.9024 15.6834 11.2929 15.2929L13.5858 13H8C7.44772 13 7 12.5523 7 12C7 11.4477 7.44772 11 8 11H13.5858L11.2929 8.70711Z"></path><path fillRule="evenodd" clip-rule="evenodd" d="M12 1C5.92487 1 1 5.92487 1 12C1 18.0751 5.92487 23 12 23C18.0751 23 23 18.0751 23 12C23 5.92487 18.0751 1 12 1ZM3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12Z"></path></svg>
-              </a>
-            </div>
-          </>
-        }
+        subtitle="Antes de nos contactar, consulte o fórum e os nossos guias: poderá já encontrar a resposta à sua pergunta lá!"
       />
-
-
 
       <div className="container mx-auto px-4 py-64">
         <div className="grid md:grid-cols-2 gap-32 mb-64">
+          <CardLinks
+            category="Guias"
+            title="Os guias irão orientá-lo no processo de publicação, exploração e reutilização de dados abertos de forma fácil."
+            image={{ src: "/womanlibrary.png", alt: "Guias" }}
+
+            links={[
+              { children: "Consulte a documentação em data.gov.pt", href: "#", trailingIcon: "agora-line-arrow-right-circle" },
+              { children: "Consulte os guias sobre dados abertos", href: "#", trailingIcon: "agora-line-arrow-right-circle" },
+              { children: "Consulte os guias sobre como usar os dados", href: "#", trailingIcon: "agora-line-arrow-right-circle" }
+            ]}
+            blockedLink={true}
+          />
+
+          <CardLinks
+            category="Fórum"
+            title="Interaja com a comunidade, compartilhe sua opinião sobre a plataforma e solicite dados abertos."
+            image={{ src: "/laptop.png", alt: "Fórum" }}
+            links={[
+              { children: "Consulte a documentação em data.gov.pt", href: "#", trailingIcon: "agora-line-arrow-right-circle" },
+              { children: "Consulte os guias sobre dados abertos", href: "#", trailingIcon: "agora-line-arrow-right-circle" },
+              { children: "Consulte os guias sobre como usar os dados", href: "#", trailingIcon: "agora-line-arrow-right-circle" }
+            ]}
+            blockedLink={true}
+          />
         </div>
 
         {/* FAQ Section */}
@@ -186,8 +174,8 @@ const SupportPage = () => {
 
         {/* Bottom Support Options */}
         <div className="mt-80 pt-64 border-t border-neutral-200">
-          <h2 className="text-2xl-bold mb-16">Ajuda</h2>
-          <h3 className="text-xl-bold mb-48">Não encontrou o que procurava??</h3>
+          <h2 className="text-2xl-bold mb-16">Não encontrou o que procurava?</h2>
+          <h3 className="text-xl-bold mb-48">Como podemos ajudar?</h3>
 
           <ButtonGroup fullWidth={true}>
             <Button

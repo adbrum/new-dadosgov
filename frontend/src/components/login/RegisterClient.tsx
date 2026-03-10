@@ -18,7 +18,7 @@ export default function RegisterClient() {
                     <h1 className="text-3xl-bold text-[#002D72] mb-32 text-left" id="register-title">
                         Registe-se
                     </h1>
-                    <p className="text-sm text-neutral-700 mb-32">
+                    <p className="text-sm mb-32">
                         Os campos marcados com um asterisco ( * ) são obrigatórios.
                     </p>
 

@@ -110,38 +110,47 @@ Implementar o tipo `User`, a função `fetchCurrentUser()`, e o contexto de aute
 ## TICKET-04: Homepage — Dados Dinâmicos (Conexões API)
 
 **Descrição**
-Implementar as funções de fetch e tipos necessários para a homepage consumir dados reais do backend.
+Implementar as funções de fetch e tipos necessários para a homepage consumir dados reais do backend, substituindo todo o conteúdo hardcoded (stats, datasets em destaque, storytelling/reuses, notícias) e ativando a pesquisa global do hero.
 
 **Contexto Arquitetural**
-- Homepage (`src/app/page.tsx`) tem tudo hardcoded: stats, datasets em destaque, notícias.
+- Homepage (`src/app/page.tsx`) tem tudo hardcoded: stats, datasets em destaque, storytelling (reuses), notícias.
+- A barra de pesquisa global no hero (`InputSearchBar`) existe na UI mas não está ligada a nenhum endpoint.
+- A secção "Utilizado diariamente por" usa logos estáticos — não requer API.
 - Backend endpoints necessários:
   - `GET /api/1/site/` → stats do site (nb_datasets, nb_organizations, nb_reuses, nb_users).
   - `GET /api/1/datasets/?featured=true&page_size=3` → datasets em destaque.
-  - `GET /api/1/reuses/?featured=true&page_size=3` → reuses em destaque.
-  - `GET /api/1/posts/?page_size=4` → últimas notícias.
-  - `GET /api/1/organizations/?page_size=12` → organizações para o carrossel.
+  - `GET /api/1/reuses/?featured=true&page_size=3` → reuses em destaque (secção Storytelling).
+  - `GET /api/1/posts/?page_size=3` → últimas notícias.
+  - `GET /api/1/datasets/suggest/?q=<query>&size=<n>` → autocomplete para pesquisa global.
+  - `GET /api/1/datasets/?q=<query>` → pesquisa full-text (resultado da pesquisa global).
 
 **O que deve ser feito**
 1. **Tipos TS** em `types/api.ts`:
    - `SiteInfo`: id, title, metrics `{ nb_datasets, nb_organizations, nb_reuses, nb_users }`.
    - `Post`: id, name, slug, headline, content, body_type, image, image_thumbnail, created_at, last_modified, tags[].
+   - `GlobalSearchSuggestion`: title, slug, score (para autocomplete da pesquisa global).
 2. **Funções em `services/api.ts`**:
    - `fetchSiteInfo()` → `GET /api/1/site/`
    - `fetchFeaturedDatasets(pageSize?)` → `GET /api/1/datasets/?featured=true&page_size=<n>`
    - `fetchFeaturedReuses(pageSize?)` → `GET /api/1/reuses/?featured=true&page_size=<n>`
    - `fetchPosts(page?, pageSize?)` → `GET /api/1/posts/?page=<n>&page_size=<n>`
+   - `suggestGlobalSearch(query, size?)` → `GET /api/1/datasets/suggest/?q=<query>&size=<n>` (autocomplete para a barra de pesquisa do hero)
 3. **Fluxo de dados**:
-   - Homepage (server component) chama estas funções em paralelo.
-   - Stats section: usa `SiteInfo.metrics`.
-   - Datasets em destaque: usa `fetchFeaturedDatasets(3)`.
-   - Notícias: usa `fetchPosts(1, 4)`.
-   - Organizações: usa `fetchOrganizations(1, 12)` (já existe).
+   - Homepage (`'use client'`) chama as funções de dados em `useEffect` (paralelo via `Promise.all`).
+   - Stats section (Comunidade): usa `SiteInfo.metrics` para popular os 4 contadores (Conjuntos de Dados, Reutilizações, Organizações, Utilizadores).
+   - Datasets em destaque: usa `fetchFeaturedDatasets(3)` para os 3 cards.
+   - Storytelling (Reuses): usa `fetchFeaturedReuses(3)` para os 3 cards.
+   - Últimas novidades: usa `fetchPosts(1, 3)` para os 3 cards de notícias.
+   - Pesquisa global (hero): `InputSearchBar` chama `suggestGlobalSearch()` no `onChange` (debounced) para mostrar sugestões; no submit, redireciona para `/pages/datasets?q=<query>`.
 
 **Critérios de Aceitação**
-- [ ] Tipos `SiteInfo` e `Post` definidos.
+- [ ] Tipos `SiteInfo`, `Post` e `GlobalSearchSuggestion` definidos.
 - [ ] `fetchSiteInfo()` retorna métricas do site.
 - [ ] `fetchFeaturedDatasets()` retorna datasets com featured=true.
+- [ ] `fetchFeaturedReuses()` retorna reuses com featured=true.
 - [ ] `fetchPosts()` retorna posts paginados.
+- [ ] `suggestGlobalSearch()` retorna sugestões de autocomplete.
+- [ ] Pesquisa global redireciona para a página de datasets com o parâmetro `q`.
 - [ ] Todas as funções tratam erros graciosamente (retornam dados vazios, não crasham).
 
 ---

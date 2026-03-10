@@ -97,6 +97,10 @@ export const Header = () => {
     }
   };
 
+  if (pathname?.startsWith('/pages/admin')) {
+    return null;
+  }
+
   return (
     <header className="sticky top-0 z-sticky">
       <AgoraHeader ref={headerRef}>
@@ -273,7 +277,13 @@ export const Header = () => {
 
           <NavigationRoot label="Conhecimento">
             <NavigationLink appearance="link">
-              <a href="#" onClick={(e) => handleLinkClick(e, '#')}>
+              <a
+                href="/pages/about-open-data"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleLinkClick(e, '/pages/about-open-data');
+                }}
+              >
                 Sobre dados abertos
               </a>
             </NavigationLink>

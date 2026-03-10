@@ -303,7 +303,13 @@ export const Header = () => {
               </a>
             </NavigationLink>
             <NavigationLink appearance="link">
-              <a href="#" onClick={(e) => handleLinkClick(e, '#')}>
+              <a
+                href="/pages/article"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleLinkClick(e, '/pages/article');
+                }}
+              >
                 Notícias
               </a>
             </NavigationLink>

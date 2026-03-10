@@ -226,8 +226,7 @@ body {
 
 .homepage .latest-news-section .container-body {
   background: var(--color-primary-100);
-  padding-top: 32px;
-  padding-bottom: 32px;
+  padding: 32px;
 }
 
 .homepage .latest-news-section .agora-card-article.default {
@@ -281,6 +280,48 @@ body {
 
 .divider-neutral-200 {
   border-bottom: 2px solid var(--color-neutral-200);
+}
+
+/* Override Agora Design System icon fill and link color for reuses, article and organization page */
+.reuse .agora-card-links.transparent .topic-item .icon,
+.article .agora-card-links.transparent .topic-item .icon,
+.organization .agora-card-links.transparent .topic-item .icon,
+.reuse .agora-card-links .bottom-container .icon,
+.article .agora-card-links .bottom-container .icon,
+.organization .agora-card-links .bottom-container .icon,
+.reuse .agora-card-links .bottom-container svg,
+.article .agora-card-links .bottom-container svg,
+.organization .agora-card-links .bottom-container svg {
+  fill: #034AD8;
+}
+
+.reuse .agora-card-links .bottom-container .agora-anchor,
+.reuse .agora-card-links .bottom-container .agora-anchor:hover,
+.article .agora-card-links .bottom-container .agora-anchor,
+.article .agora-card-links .bottom-container .agora-anchor:hover,
+.organization .agora-card-links .bottom-container .agora-anchor,
+.organization .agora-card-links .bottom-container .agora-anchor:hover {
+  color: #034AD8;
+}
+
+/* Hide default trailing icon from links (all states including empty boxes and hover) */
+.reuse .agora-card-links .bottom-container .agora-anchor .trailing-icon-default,
+.reuse .agora-card-links .bottom-container .agora-anchor .trailing-icon-hover,
+.reuse .agora-card-links .bottom-container .agora-anchor .trailing-icon-active,
+.article .agora-card-links .bottom-container .agora-anchor .trailing-icon-default,
+.article .agora-card-links .bottom-container .agora-anchor .trailing-icon-hover,
+.article .agora-card-links .bottom-container .agora-anchor .trailing-icon-active,
+.organization .agora-card-links .bottom-container .agora-anchor .trailing-icon-default,
+.organization .agora-card-links .bottom-container .agora-anchor .trailing-icon-hover,
+.organization .agora-card-links .bottom-container .agora-anchor .trailing-icon-active {
+  display: none;
+}
+
+/* Hide arrow-right-circle icon from link-container */
+.reuse .agora-card-links .link-container .icon,
+.article .agora-card-links .link-container .icon,
+.organization .agora-card-links .link-container .icon {
+  display: none;
 }
 
 /*

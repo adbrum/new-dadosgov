@@ -45,7 +45,7 @@ export default function DatasetsClient({
           }
         >
           <InputSearchBar
-            label="O que procura no Portal?"
+            label="O que procura nos conjuntos de dados?"
             placeholder="Pesquisar datasets, organizações, temas..."
             id="datasets-search"
             hasVoiceActionButton={true}

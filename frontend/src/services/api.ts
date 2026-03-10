@@ -1,14 +1,48 @@
-import { APIResponse, Dataset, Organization, Reuse } from '@/types/api';
+import { APIResponse, Dataset, Organization, Reuse } from "@/types/api";
 
-const API_BASE_URL = 'https://dados.gov.pt/api/1';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || "https://dados.gov.pt/api/1";
+
+/**
+ * Fetch CSRF token from backend
+ */
+export async function fetchCsrfToken(): Promise<string> {
+  const res = await fetch("/get-csrf", { cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to fetch CSRF token");
+  const data = await res.json();
+  return data.response.csrf_token;
+}
+
+/**
+ * Perform login using the frontend route handler proxy
+ */
+export async function login(formData: FormData): Promise<{ message: string; redirect?: string }> {
+  const res = await fetch("/login", {
+    method: "POST",
+    body: new URLSearchParams(formData as any),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || "Login failed");
+  }
+  return data;
+}
+
+/**
+ * Perform logout
+ */
+export async function logout(): Promise<void> {
+  const res = await fetch("/logout/", { method: "GET" });
+  if (!res.ok) throw new Error("Logout failed");
+}
 
 export async function fetchDatasets(
   page: number = 1,
   pageSize: number = 20,
-  organization?: string | string[],
+  organization?: string | string[]
 ): Promise<APIResponse<Dataset>> {
   try {
-    console.log('fetchDatasets called with org:', organization);
+    console.log("fetchDatasets called with org:", organization);
     let url = `${API_BASE_URL}/datasets/?page=${page}&page_size=${pageSize}`;
     if (organization) {
       if (Array.isArray(organization)) {
@@ -20,12 +54,11 @@ export async function fetchDatasets(
       }
     }
 
-    console.log('API Fetch URL:', url);
+    console.log("API Fetch URL:", url);
 
     const res = await fetch(url, {
-      cache: 'no-store', // Ensure fresh data
-    },
-    );
+      cache: "no-store", // Ensure fresh data
+    });
 
     if (!res.ok) {
       throw new Error(`Failed to fetch datasets: ${res.statusText}`);
@@ -33,7 +66,7 @@ export async function fetchDatasets(
 
     return await res.json();
   } catch (error) {
-    console.error('Error fetching datasets:', error);
+    console.error("Error fetching datasets:", error);
     // Return empty state or rethrow depending on desired error handling
     return {
       data: [],
@@ -49,7 +82,7 @@ export async function fetchDatasets(
 export async function fetchDataset(slug: string): Promise<Dataset> {
   try {
     const res = await fetch(`${API_BASE_URL}/datasets/${slug}/`, {
-      cache: 'no-store',
+      cache: "no-store",
     });
 
     if (!res.ok) {
@@ -58,22 +91,19 @@ export async function fetchDataset(slug: string): Promise<Dataset> {
 
     return await res.json();
   } catch (error) {
-    console.error('Error fetching dataset:', error);
+    console.error("Error fetching dataset:", error);
     throw error;
   }
 }
 
 export async function fetchOrganizations(
   page: number = 1,
-  pageSize: number = 20,
+  pageSize: number = 20
 ): Promise<APIResponse<Organization>> {
   try {
-    const res = await fetch(
-      `${API_BASE_URL}/organizations/?page=${page}&page_size=${pageSize}`,
-      {
-        cache: 'no-store',
-      },
-    );
+    const res = await fetch(`${API_BASE_URL}/organizations/?page=${page}&page_size=${pageSize}`, {
+      cache: "no-store",
+    });
 
     if (!res.ok) {
       throw new Error(`Failed to fetch organizations: ${res.statusText}`);
@@ -81,7 +111,7 @@ export async function fetchOrganizations(
 
     return await res.json();
   } catch (error) {
-    console.error('Error fetching organizations:', error);
+    console.error("Error fetching organizations:", error);
     return {
       data: [],
       page: 1,
@@ -95,7 +125,7 @@ export async function fetchOrganizations(
 export async function fetchOrganization(slug: string): Promise<Organization> {
   try {
     const res = await fetch(`${API_BASE_URL}/organizations/${slug}/`, {
-      cache: 'no-store',
+      cache: "no-store",
     });
 
     if (!res.ok) {
@@ -104,18 +134,18 @@ export async function fetchOrganization(slug: string): Promise<Organization> {
 
     return await res.json();
   } catch (error) {
-    console.error('Error fetching organization:', error);
+    console.error("Error fetching organization:", error);
     throw error;
   }
 }
 export async function fetchReuses(
   page: number = 1,
-  pageSize: number = 20,
+  pageSize: number = 20
 ): Promise<APIResponse<Reuse>> {
   try {
     const url = `${API_BASE_URL}/reuses/?page=${page}&page_size=${pageSize}`;
     const res = await fetch(url, {
-      cache: 'no-store',
+      cache: "no-store",
     });
 
     if (!res.ok) {
@@ -124,7 +154,7 @@ export async function fetchReuses(
 
     return await res.json();
   } catch (error) {
-    console.error('Error fetching reuses:', error);
+    console.error("Error fetching reuses:", error);
     return {
       data: [],
       page: 1,
@@ -138,7 +168,7 @@ export async function fetchReuses(
 export async function fetchReuse(rid: string): Promise<Reuse> {
   try {
     const res = await fetch(`${API_BASE_URL}/reuses/${rid}/`, {
-      cache: 'no-store',
+      cache: "no-store",
     });
 
     if (!res.ok) {
@@ -147,7 +177,7 @@ export async function fetchReuse(rid: string): Promise<Reuse> {
 
     return await res.json();
   } catch (error) {
-    console.error('Error fetching reuse:', error);
+    console.error("Error fetching reuse:", error);
     throw error;
   }
 }

@@ -1,3 +1,0 @@
-"""
-CKAN integration for udata
-"""

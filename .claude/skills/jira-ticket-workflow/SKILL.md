@@ -23,20 +23,20 @@ gets its own commit before moving on.
 ## Project Structure
 
 ```
-/home/adbrum/workspace/babel/new-dadosgov/
-├── frontend/     ← Next.js app (separate git repo)
+<PROJECT_ROOT>/
+├── frontend/     ← Next.js app (git submodule)
 │   remotes:
 │     origin    → git@github.com:adbrum/udata_agora.git
 │     newdadosgov → git@github.com:adbrum/new-dadosgov.git
 │
-└── backend/      ← udata/Flask app (separate git repo)
+└── backend/      ← udata/Flask app (git submodule)
     remotes:
       origin    → git@github.com:amagovpt/udata-pt.git
       newdadosgov → git@github.com:adbrum/new-dadosgov.git
 ```
 
-Each is an **independent git repository** with its own branches and remotes. Always `cd`
-into the correct directory before running any git commands.
+Each is a **git submodule** (which operates as an independent git repository) with its own branches and remotes. Always `cd`
+into the correct submodule directory before running any git commands.
 
 ---
 
@@ -50,7 +50,7 @@ Do not proceed until provided. Then:
 
 1. **Search the ticket** in the project's local backlog:
    ```
-   /home/adbrum/workspace/babel/new-dadosgov/docs/jira-tickets-frontend-backend.md
+   <PROJECT_ROOT>/docs/jira-tickets-frontend-backend.md
    ```
    Use `grep` or `Read` to find the ticket section by its ID (e.g. `## TICKET-05`).
 
@@ -71,12 +71,12 @@ Do not proceed until provided. Then:
 
 **Ask the user:** "Is this ticket for the **frontend** or **backend**?"
 
-- **Frontend** → work in `/home/adbrum/workspace/babel/new-dadosgov/frontend/`
+- **Frontend** → work in `<PROJECT_ROOT>/frontend/`
   - Stack: Next.js, TypeScript
   - Tests: Playwright (`npm run test:e2e`)
   - Main files: `src/services/api.ts`, `src/types/api.ts`, `src/components/`, `src/app/`
 
-- **Backend** → work in `/home/adbrum/workspace/babel/new-dadosgov/backend/`
+- **Backend** → work in `<PROJECT_ROOT>/backend/`
   - Stack: udata / Flask / Python
   - Tests: pytest (`uv run pytest <path>`)
   - Follow existing udata module conventions
@@ -94,13 +94,13 @@ cd <REPO_DIR>
 git checkout main
 git pull origin main
 git checkout -b <branch-name>
+git push -u origin <branch-name>
 ```
 
 **Branch naming rules:**
 - **ALWAYS use English**, lowercase, with hyphens — even if the ticket title is in Portuguese
-- Format: `<username>/<ticket-id>-<short-description>`
-- Username to use: `adbrum`
-- Example: `adbrum/ticket-05-dataset-search-api`
+- Format: `<ticket-id>-<short-description>`
+- Example: `ticket-05-dataset-search-api`
 - **Translate** Portuguese ticket titles to English — never use non-English words in branch names
 - Keep it concise but descriptive (max 5 words after the ticket ID)
 
@@ -109,7 +109,8 @@ git checkout -b <branch-name>
 After confirmation:
 ```bash
 cd <REPO_DIR>
-git checkout -b adbrum/<ticket-id>-<description>
+git checkout -b <ticket-id>-<description>
+git push -u origin <ticket-id>-<description>
 ```
 
 ---
@@ -192,7 +193,7 @@ After all points are complete:
    ```
    ## ✅ Ticket <TICKET-ID> — Implementation Summary
 
-   **Branch:** adbrum/<ticket-id>-<description>
+   **Branch:** <ticket-id>-<description>
    **Repository:** frontend | backend
 
    ### Commits Made:
@@ -206,8 +207,9 @@ After all points are complete:
    - [ ] Criterion 3 — NOT satisfied: <reason>
 
    ### Next Steps:
-   - Create a Pull Request to `main` on `origin`
+   - Create a Pull Request to `main` on `origin` (for the submodule)
    - Review and merge
+   - Commit the updated submodule reference in the parent repository (`<PROJECT_ROOT>`)
    ```
 
 ---
@@ -232,18 +234,20 @@ After all points are complete:
 
 ```bash
 # Frontend
-cd /home/adbrum/workspace/babel/new-dadosgov/frontend
+cd <PROJECT_ROOT>/frontend
 git checkout main && git pull origin main
-git checkout -b adbrum/ticket-XX-description
+git checkout -b ticket-XX-description
+git push -u origin ticket-XX-description
 # ... implement & commit ...
-git push origin adbrum/ticket-XX-description
+git push origin ticket-XX-description
 
 # Backend
-cd /home/adbrum/workspace/babel/new-dadosgov/backend
+cd <PROJECT_ROOT>/backend
 git checkout main && git pull origin main
-git checkout -b adbrum/ticket-XX-description
+git checkout -b ticket-XX-description
+git push -u origin ticket-XX-description
 # ... implement & commit ...
-git push origin adbrum/ticket-XX-description
+git push origin ticket-XX-description
 ```
 
 ---
@@ -252,7 +256,7 @@ git push origin adbrum/ticket-XX-description
 
 All tickets are documented in:
 ```
-/home/adbrum/workspace/babel/new-dadosgov/docs/jira-tickets-frontend-backend.md
+<PROJECT_ROOT>/docs/jira-tickets-frontend-backend.md
 ```
 
 Search using the ticket header format: `## TICKET-XX: <Title>`

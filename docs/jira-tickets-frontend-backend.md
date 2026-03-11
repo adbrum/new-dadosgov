@@ -607,14 +607,14 @@ Implementar uma pesquisa global inspirada no projeto francês cdata (data.gouv.f
 
 **Ficheiros criados/alterados**
 
-| Ficheiro | Ação |
-|---|---|
-| `src/components/search/SearchDropdown.tsx` | Criado |
-| `src/components/search/SearchClient.tsx` | Criado |
-| `src/app/pages/search/page.tsx` | Criado |
-| `src/services/api.ts` | Alterado — adicionadas 3 funções de pesquisa |
-| `src/app/page.tsx` | Alterado — hero usa SearchDropdown |
-| `src/components/Header.tsx` | Alterado — header usa SearchDropdown |
+| Ficheiro                                   | Ação                                         |
+| ------------------------------------------ | -------------------------------------------- |
+| `src/components/search/SearchDropdown.tsx` | Criado                                       |
+| `src/components/search/SearchClient.tsx`   | Criado                                       |
+| `src/app/pages/search/page.tsx`            | Criado                                       |
+| `src/services/api.ts`                      | Alterado — adicionadas 3 funções de pesquisa |
+| `src/app/page.tsx`                         | Alterado — hero usa SearchDropdown           |
+| `src/components/Header.tsx`                | Alterado — header usa SearchDropdown         |
 
 **Critérios de Aceitação**
 
@@ -1451,6 +1451,8 @@ Implementar o fluxo completo de autenticação via Autenticação.gov (Cartão d
 
 ### Frontend
 
+#### A página e os componentes para o login via Autenticação.gov e pelo eIDAS, já estão criadas no projeto em `frontend/saml`.
+
 6. **Botão "Autenticação.gov"** em `LoginClient.tsx`:
    - Adicionar botão/link que redireciona para `/saml/login` (full page redirect, não AJAX).
    - Estilizar conforme design system (ícone Cartão de Cidadão).
@@ -1592,14 +1594,14 @@ Implementar uma pesquisa global inspirada no projeto francês cdata (data.gouv.f
 
 **Ficheiros criados/alterados**
 
-| Ficheiro | Ação |
-|---|---|
-| `src/components/search/SearchDropdown.tsx` | Criado |
-| `src/components/search/SearchClient.tsx` | Criado |
-| `src/app/pages/search/page.tsx` | Criado |
-| `src/services/api.ts` | Alterado — adicionadas 3 funções de pesquisa |
-| `src/app/page.tsx` | Alterado — hero usa SearchDropdown |
-| `src/components/Header.tsx` | Alterado — header usa SearchDropdown |
+| Ficheiro                                   | Ação                                         |
+| ------------------------------------------ | -------------------------------------------- |
+| `src/components/search/SearchDropdown.tsx` | Criado                                       |
+| `src/components/search/SearchClient.tsx`   | Criado                                       |
+| `src/app/pages/search/page.tsx`            | Criado                                       |
+| `src/services/api.ts`                      | Alterado — adicionadas 3 funções de pesquisa |
+| `src/app/page.tsx`                         | Alterado — hero usa SearchDropdown           |
+| `src/components/Header.tsx`                | Alterado — header usa SearchDropdown         |
 
 **Critérios de Aceitação**
 

@@ -31,14 +31,16 @@ def stop_normal_processes():
                 ["lsof", "-t", f"-i:{port}"],
                 capture_output=True,
                 text=True,
-                stderr=subprocess.DEVNULL
+                stderr=subprocess.DEVNULL,
             )
 
             if result.stdout.strip():
-                pids = result.stdout.strip().split('\n')
+                pids = result.stdout.strip().split("\n")
                 for pid in pids:
                     try:
-                        subprocess.run(["kill", "-9", pid], check=True, stderr=subprocess.DEVNULL)
+                        subprocess.run(
+                            ["kill", "-9", pid], check=True, stderr=subprocess.DEVNULL
+                        )
                         freed_ports.append(port)
                     except:
                         pass
@@ -48,7 +50,7 @@ def stop_normal_processes():
                 subprocess.run(
                     ["fuser", "-k", f"{port}/tcp"],
                     capture_output=True,
-                    stderr=subprocess.DEVNULL
+                    stderr=subprocess.DEVNULL,
                 )
         except FileNotFoundError:
             # Se lsof não estiver disponível, tenta com fuser
@@ -56,7 +58,7 @@ def stop_normal_processes():
                 result = subprocess.run(
                     ["fuser", "-k", f"{port}/tcp"],
                     capture_output=True,
-                    stderr=subprocess.DEVNULL
+                    stderr=subprocess.DEVNULL,
                 )
                 if result.returncode == 0:
                     freed_ports.append(port)
@@ -94,7 +96,7 @@ def run_servers_normal():
         ["npm", "run", "dev", "--", "--port", "3000"],
         cwd="frontend",
         stdout=sys.stdout,
-        stderr=sys.stderr
+        stderr=sys.stderr,
     )
 
     try:
@@ -146,7 +148,7 @@ def run_servers_pm2():
         [
             "pm2",
             "start",
-            "uv run inv serve",
+            "uv run udata serve",
             "--name",
             "backend",
         ],
@@ -163,7 +165,20 @@ def run_servers_pm2():
 
     print("Iniciando o servidor frontend com pm2...")
     frontend_result = subprocess.run(
-        ["pm2", "start", "npm", "--name", "frontend", "--", "run", "dev", "--", "--", "-H", "0.0.0.0", "--port", "3000"],
+        [
+            "pm2",
+            "start",
+            "npx",
+            "--name",
+            "frontend",
+            "--",
+            "next",
+            "dev",
+            "-H",
+            "0.0.0.0",
+            "-p",
+            "3000",
+        ],
         cwd="frontend",
         capture_output=True,
         text=True,

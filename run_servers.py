@@ -80,7 +80,7 @@ def run_servers_normal():
 
     print("Iniciando o servidor backend...")
     backend_process = subprocess.Popen(
-        ["uv", "run", "inv", "serve"],
+        ["uv", "run", "udata", "serve"],
         cwd="backend",
         stdout=sys.stdout,
         stderr=sys.stderr,

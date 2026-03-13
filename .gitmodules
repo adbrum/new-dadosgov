@@ -3,4 +3,4 @@
 	url = https://github.com/adbrum/udata_agora.git
 [submodule "backend"]
 	path = backend
-	url = https://github.com/amagovpt/udata-front-pt.git
+	url = https://github.com/amagovpt/udata-pt.git

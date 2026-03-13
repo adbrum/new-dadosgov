@@ -120,7 +120,7 @@ git push -u origin <ticket-id>-<description>
 **Ask the user:** "Do you want to commit automatically after each point, or do you want to manually review and approve each commit?"
 
 - **Automatic**: The agent will `git add` and `git commit` automatically after implementing and testing each point.
-- **Manual**: The agent will pause, show the `git status` or `git diff`, and **wait for your approval** before making the commit.
+- **Manual**: The agent will pause, show the `git status` or `git diff`, **propose the commit message**, and **wait for the user's approval** before making the commit. The user must validate both the changes and the commit message text. Only run `git commit` after explicit user confirmation of the message.
 
 ---
 

@@ -310,7 +310,7 @@ Implementar as funções de follow/unfollow genéricas para datasets, organizati
 
 ---
 
-## TICKET-09: Organization Detail (Conexões API)
+## TICKET-09: Organization Detail (Conexões API) ✅
 
 **Descrição**
 Implementar a função de fetch e tipos para a página de detalhe de organização (que não existe ainda).
@@ -318,7 +318,7 @@ Implementar a função de fetch e tipos para a página de detalhe de organizaç�
 **Contexto Arquitetural**
 
 - Listagem de organizações existe e usa `fetchOrganizations()`.
-- Não existe `fetchOrganization(slug)` para detalhe individual.
+- ~~Não existe `fetchOrganization(slug)` para detalhe individual.~~ Implementado.
 - Backend endpoints:
   - `GET /api/1/organizations/<org>/` → detalhes completos.
   - `GET /api/1/organizations/<org>/datasets/?page=<n>` → datasets da organização.
@@ -336,12 +336,20 @@ Implementar a função de fetch e tipos para a página de detalhe de organizaç�
    - `fetchOrgReuses(org, page?, pageSize?)` → `GET /api/1/organizations/<org>/reuses/`
    - `fetchOrgDiscussions(org, page?, pageSize?)` → `GET /api/1/organizations/<org>/discussions/`
 
+**Implementação realizada (branch: `ticket-09-organization-detail-api`)**
+
+- Tipos criados em `src/types/api.ts`: `UserRef`, `OrganizationMember`, `Badge`, `OrganizationMetrics`, `DiscussionMessage`, `Discussion`. Tipo `Organization` estendido com todos os campos.
+- Funções criadas em `src/services/api.ts`: `fetchOrganization()` (com 404→null), `fetchOrgDatasets()`, `fetchOrgReuses()`, `fetchOrgDiscussions()`.
+- Página de detalhe (`src/app/pages/organizations/[slug]/page.tsx`) atualizada com `notFound()` para 404.
+- `OrganizationTabs` refatorizado para client component com `useEffect`/`useState`, consumindo as 3 fetch functions e exibindo dados reais nas tabs (Ficheiros, Reutilizações, Discussões).
+- `OrganizationDetailClient` corrigido para usar `organization.last_modified` em vez de `new Date()`.
+
 **Critérios de Aceitação**
 
-- [ ] Tipo `Organization` estendido com todos os campos do backend.
-- [ ] `fetchOrganization()` retorna organização completa.
-- [ ] `fetchOrgDatasets()` e `fetchOrgReuses()` retornam listas paginadas.
-- [ ] 404 é tratado quando organização não existe.
+- [x] Tipo `Organization` estendido com todos os campos do backend.
+- [x] `fetchOrganization()` retorna organização completa.
+- [x] `fetchOrgDatasets()` e `fetchOrgReuses()` retornam listas paginadas.
+- [x] 404 é tratado quando organização não existe.
 
 ---
 

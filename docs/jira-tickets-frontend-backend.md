@@ -156,14 +156,14 @@ Implementar as funções de fetch e tipos necessários para a homepage consumir 
 
 **Critérios de Aceitação**
 
-- [ ] Tipos `SiteInfo`, `Post` e `GlobalSearchSuggestion` definidos.
-- [ ] `fetchSiteInfo()` retorna métricas do site.
-- [ ] `fetchFeaturedDatasets()` retorna datasets com featured=true.
-- [ ] `fetchFeaturedReuses()` retorna reuses com featured=true.
-- [ ] `fetchPosts()` retorna posts paginados.
-- [ ] `suggestGlobalSearch()` retorna sugestões de autocomplete.
-- [ ] Pesquisa global redireciona para a página de datasets com o parâmetro `q`.
-- [ ] Todas as funções tratam erros graciosamente (retornam dados vazios, não crasham).
+- [x] Tipos `SiteInfo`, `Post` e `GlobalSearchSuggestion` definidos.
+- [x] `fetchSiteInfo()` retorna métricas do site.
+- [x] `fetchFeaturedDatasets()` retorna datasets com featured=true.
+- [x] `fetchFeaturedReuses()` retorna reuses com featured=true.
+- [x] `fetchPosts()` retorna posts paginados.
+- [x] `suggestGlobalSearch()` retorna sugestões de autocomplete.
+- [x] Pesquisa global redireciona para a página de datasets com o parâmetro `q`.
+- [x] Todas as funções tratam erros graciosamente (retornam dados vazios, não crasham).
 
 ---
 

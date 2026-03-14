@@ -10,7 +10,7 @@
 
 ---
 
-## TICKET-01: Authentication — Login (Conexão API)
+## TICKET-01: Authentication — Login (Conexão API) ✅
 
 **Descrição**
 Implementar a lógica de conexão do login: fluxo CSRF → POST login → session cookie, usando o route handler existente.
@@ -38,15 +38,15 @@ Implementar a lógica de conexão do login: fluxo CSRF → POST login → sessio
 
 **Critérios de Aceitação**
 
-- [ ] `fetchCsrfToken()` obtém o token do cookie.
-- [ ] `login()` envia os campos corretos e retorna resposta JSON.
-- [ ] Em sucesso, session cookie é definido pelo backend.
-- [ ] Em erro, a mensagem é retornada em formato utilizável.
-- [ ] `logout()` limpa a sessão.
+- [x] `fetchCsrfToken()` obtém o token do cookie.
+- [x] `login()` envia os campos corretos e retorna resposta JSON.
+- [x] Em sucesso, session cookie é definido pelo backend.
+- [x] Em erro, a mensagem é retornada em formato utilizável.
+- [x] `logout()` limpa a sessão.
 
 ---
 
-## TICKET-02: Authentication — Registration (Conexão API)
+## TICKET-02: Authentication — Registration (Conexão API) ✅
 
 **Descrição**
 Implementar a lógica de conexão do registo: route handler proxy e função de submit.
@@ -75,15 +75,15 @@ Implementar a lógica de conexão do registo: route handler proxy e função de 
 
 **Critérios de Aceitação**
 
-- [ ] Route handler proxy funciona (mesmo padrão do login).
-- [ ] `register()` envia payload correto.
-- [ ] Erros de validação do backend são retornados em JSON.
-- [ ] CSRF token é incluído no pedido.
-- [ ] Resposta indica se confirmação de email é necessária.
+- [x] Route handler proxy funciona (mesmo padrão do login).
+- [x] `register()` envia payload correto.
+- [x] Erros de validação do backend são retornados em JSON.
+- [x] CSRF token é incluído no pedido.
+- [x] Resposta indica se confirmação de email é necessária.
 
 ---
 
-## TICKET-03: Authentication — Current User State (Conexão API)
+## TICKET-03: Authentication — Current User State (Conexão API) ✅
 
 **Descrição**
 Implementar o tipo `User`, a função `fetchCurrentUser()`, e o contexto de autenticação que consome `GET /api/1/me/`.
@@ -109,14 +109,14 @@ Implementar o tipo `User`, a função `fetchCurrentUser()`, e o contexto de aute
 
 **Critérios de Aceitação**
 
-- [ ] Tipo `User` definido em `types/api.ts` espelhando o backend.
-- [ ] `fetchCurrentUser()` retorna user ou null (sem erro em 401).
-- [ ] `AuthContext` disponível em toda a aplicação.
-- [ ] `refresh()` permite re-fetch após login/logout.
+- [x] Tipo `User` definido em `types/api.ts` espelhando o backend.
+- [x] `fetchCurrentUser()` retorna user ou null (sem erro em 401).
+- [x] `AuthContext` disponível em toda a aplicação.
+- [x] `refresh()` permite re-fetch após login/logout.
 
 ---
 
-## TICKET-04: Homepage — Dados Dinâmicos (Conexões API)
+## TICKET-04: Homepage — Dados Dinâmicos (Conexões API) ✅
 
 **Descrição**
 Implementar as funções de fetch e tipos necessários para a homepage consumir dados reais do backend, substituindo todo o conteúdo hardcoded (stats, datasets em destaque, storytelling/reuses, notícias) e ativando a pesquisa global do hero.
@@ -477,7 +477,7 @@ Estender `fetchReuses()` para pesquisa/filtros e estender `fetchReuse()` para da
 
 ---
 
-## TICKET-12: Topics/Themes — Dados Dinâmicos (Conexões API v2)
+## TICKET-12: Topics/Themes — Dados Dinâmicos (Conexões API v2) 2ª fase
 
 **Descrição**
 Implementar tipos e funções para consumir a API v2 de topics nas páginas públicas de themes.
@@ -625,7 +625,7 @@ Implementar tipo e função para consumir notificações do utilizador autentica
 
 ---
 
-## TICKET-19: Global Search — Suggest Multi-Entidade (Conexões API)
+## TICKET-19: Global Search — Suggest Multi-Entidade (Conexões API) ✅
 
 **Descrição**
 Implementar uma pesquisa global inspirada no projeto francês cdata (data.gouv.fr): dropdown de seleção de tipo ao digitar + página de resultados com sidebar de tipos/contagens e lista paginada.

@@ -109,10 +109,10 @@ Implementar o tipo `User`, a função `fetchCurrentUser()`, e o contexto de aute
 
 **Critérios de Aceitação**
 
-- [x] Tipo `User` definido em `types/api.ts` espelhando o backend.
-- [x] `fetchCurrentUser()` retorna user ou null (sem erro em 401).
-- [x] `AuthContext` disponível em toda a aplicação.
-- [x] `refresh()` permite re-fetch após login/logout.
+- [ ] Tipo `User` definido em `types/api.ts` espelhando o backend.
+- [ ] `fetchCurrentUser()` retorna user ou null (sem erro em 401).
+- [ ] `AuthContext` disponível em toda a aplicação.
+- [ ] `refresh()` permite re-fetch após login/logout.
 
 ---
 
@@ -156,14 +156,14 @@ Implementar as funções de fetch e tipos necessários para a homepage consumir 
 
 **Critérios de Aceitação**
 
-- [x] Tipos `SiteInfo`, `Post` e `GlobalSearchSuggestion` definidos.
-- [x] `fetchSiteInfo()` retorna métricas do site.
-- [x] `fetchFeaturedDatasets()` retorna datasets com featured=true.
-- [x] `fetchFeaturedReuses()` retorna reuses com featured=true.
-- [x] `fetchPosts()` retorna posts paginados.
-- [x] `suggestGlobalSearch()` retorna sugestões de autocomplete.
-- [x] Pesquisa global redireciona para a página de datasets com o parâmetro `q`.
-- [x] Todas as funções tratam erros graciosamente (retornam dados vazios, não crasham).
+- [ ] Tipos `SiteInfo`, `Post` e `GlobalSearchSuggestion` definidos.
+- [ ] `fetchSiteInfo()` retorna métricas do site.
+- [ ] `fetchFeaturedDatasets()` retorna datasets com featured=true.
+- [ ] `fetchFeaturedReuses()` retorna reuses com featured=true.
+- [ ] `fetchPosts()` retorna posts paginados.
+- [ ] `suggestGlobalSearch()` retorna sugestões de autocomplete.
+- [ ] Pesquisa global redireciona para a página de datasets com o parâmetro `q`.
+- [ ] Todas as funções tratam erros graciosamente (retornam dados vazios, não crasham).
 
 ---
 
@@ -906,6 +906,231 @@ Implementar funções utilitárias para gerar URLs de export CSV dos endpoints d
 
 ---
 
+## TICKET-37: Authentication — Login via Autenticação.gov / SAML (Conexão API)
+
+**Descrição**
+Implementar o fluxo completo de autenticação via Autenticação.gov (Cartão de Cidadão) usando protocolo SAML 2.0, incluindo login, registo automático, e logout — tanto no backend (plugin SAML) como no frontend (redirect flow e callbacks).
+
+**Contexto Arquitetural**
+
+- Referência: projecto `udata-front-pt` já tem implementação completa em `udata_front/saml_plugin/`.
+- Backend usa `pysaml2` (v7.4.2) para comunicação SAML com o IdP da Autenticação.gov.
+- O plugin regista um Blueprint Flask com rotas `/saml/*`.
+- Fluxo SP-initiated: o frontend redireciona para `/saml/login`, o backend gera o AuthnRequest e redireciona para o IdP, o IdP retorna o utilizador para `/saml/sso` (callback).
+- Atributos SAML recebidos do IdP:
+  - `http://interop.gov.pt/MDC/Cidadao/CorreioElectronico` → email (obrigatório)
+  - `http://interop.gov.pt/MDC/Cidadao/NIC` → NIC (opcional, guardado em `user.extras['auth_nic']`)
+  - `http://interop.gov.pt/MDC/Cidadao/NomeProprio` → first_name (opcional)
+  - `http://interop.gov.pt/MDC/Cidadao/NomeApelido` → last_name (opcional)
+- Se o utilizador já existe (por email ou NIC): faz login direto.
+- Se o utilizador não existe: redireciona para `/saml/register` para completar o registo.
+- Logout SAML: `/saml/logout` envia LogoutRequest ao IdP, callback em `/saml/sso_logout`.
+- Sessão: flag `saml_login = True` indica que o login foi via SAML (usado para decidir o fluxo de logout).
+- Suporte adicional para eIDAS (autenticação europeia cross-border) com rotas `/saml/eidas/*`.
+
+**O que deve ser feito**
+
+### Backend
+
+1. **Dependência**: Adicionar `pysaml2>=7.4.2` e `defusedxml>=0.7.1` ao `pyproject.toml`.
+2. **Plugin SAML** em `udata/core/auth/saml_plugin/` (adaptar de `udata-front-pt/udata_front/saml_plugin/`):
+   - `__init__.py` — Blueprint `autenticacao_gov`, registar rotas.
+   - `saml_govpt.py` — Implementação principal:
+     - `saml_client_for(idp_metadata, acs_url, sls_url)` → instanciar `Saml2Client` com config.
+     - `GET /saml/login` — gerar AuthnRequest (com `RequestedAttributes` e `FAALevel`), redirect para IdP.
+     - `POST /saml/sso` — processar SAMLResponse, extrair atributos, lookup/criar utilizador, `login_user()`.
+     - `GET /saml/register` — form de registo para utilizadores novos (pre-preencher com dados SAML).
+     - `POST /saml/register` — criar utilizador, guardar NIC em extras, enviar confirmação.
+     - `GET /saml/logout` — gerar LogoutRequest, redirect para IdP.
+     - `POST /saml/sso_logout` — processar LogoutResponse, `logout_user()`.
+   - `requested_atributes.py` — classes `RequestedAttribute` para os atributos PT.
+   - `faa_level.py` — extensão XML `FAALevel` para Level of Assurance.
+   - `register_user.py` — `UserCustomForm` (WTForms) para o registo pós-SAML.
+3. **Configurações** em `udata/settings.py`:
+   - `SECURITY_SAML_ENTITY_ID` — identificador da entidade SP.
+   - `SECURITY_SAML_ENTITY_NAME` — nome do SP.
+   - `SECURITY_SAML_KEY_FILE` — caminho para a chave privada.
+   - `SECURITY_SAML_CERT_FILE` — caminho para o certificado público.
+   - `SECURITY_SAML_IDP_METADATA` — caminhos para os ficheiros de metadata do IdP (separados por vírgula).
+   - `SECURITY_SAML_FAAALEVEL` — nível de assurance.
+   - `SECURITY_SAML_FA_URL` — URL de destino do Autenticação.gov para logout.
+4. **Registar o Blueprint** em `udata/app.py` → `create_app()` ou via entrypoint `udata.views`.
+5. **Segurança**:
+   - CSRF exempt nas rotas de callback SAML (`/saml/sso`, `/saml/sso_logout`).
+   - Validação de assinatura SAML nas respostas do IdP.
+   - Proteção XXE via `defusedxml`.
+   - Suporte a múltiplos ficheiros de metadata do IdP (fallback se assinatura falhar no primeiro).
+
+### Frontend
+
+#### A página e os componentes para o login via Autenticação.gov e pelo eIDAS, já estão criadas no projeto em `frontend/saml`.
+
+6. **Botão "Autenticação.gov"** em `LoginClient.tsx`:
+   - Adicionar botão/link que redireciona para `/saml/login` (full page redirect, não AJAX).
+   - Estilizar conforme design system (ícone Cartão de Cidadão).
+7. **Rewrite/Proxy** em `next.config.ts`:
+   - Adicionar rewrites para `/saml/*` → backend (porta 7000), para que as rotas SAML funcionem em dev.
+   - Rotas: `/saml/login`, `/saml/sso`, `/saml/register`, `/saml/logout`, `/saml/sso_logout`.
+8. **Página de registo SAML** — opção A (server-rendered pelo backend) ou opção B (frontend):
+   - **Opção A** (mais simples, como no `udata-front-pt`): o backend serve template HTML em `/saml/register`. Frontend só precisa do rewrite.
+   - **Opção B** (SPA): criar `src/app/saml/register/page.tsx` com form que lê dados da sessão e faz POST ao backend.
+9. **Atualizar `AuthContext`** (TICKET-03):
+   - Após redirect de volta do SAML (`/saml/sso` → redirect para `/`), chamar `refresh()` para atualizar o estado do utilizador.
+   - Detetar query param ou flag que indica login SAML bem-sucedido.
+10. **Logout SAML**:
+    - Se `user.saml_login === true` (ou flag na sessão), o botão de logout deve redirecionar para `/saml/logout` em vez de `/logout/`.
+    - Alternativa: o backend decide o fluxo de logout com base na flag de sessão `saml_login`.
+11. **Variáveis de ambiente** em `.env` / `next.config.ts`:
+    - `NEXT_PUBLIC_SAML_ENABLED` — flag para mostrar/esconder o botão Autenticação.gov.
+
+### eIDAS (Opcional / Fase 2)
+
+12. **Rotas eIDAS** no backend: `/saml/eidas/login`, `/saml/eidas/sso`, `/saml/eidas/logout`, `/saml/eidas/sso_logout`.
+13. **Atributos eIDAS**:
+    - `http://eidas.europa.eu/attributes/naturalperson/PersonIdentifier` → email (obrigatório).
+    - `CurrentFamilyName`, `CurrentGivenName`, `DateOfBirth` (opcionais).
+14. **Botão "eIDAS"** no frontend (se ativado).
+
+**Ficheiros de referência** (`udata-front-pt`):
+
+- `udata_front/saml_plugin/saml_govpt.py` — implementação principal (517 linhas)
+- `udata_front/saml_plugin/requested_atributes.py` — atributos SAML custom
+- `udata_front/saml_plugin/faa_level.py` — extensão FAALevel
+- `udata_front/saml_plugin/register_user.py` — form de registo
+- `udata_front/theme/gouvfr/templates/security/register_saml.html` — template de registo
+- `udata_front/theme/gouvfr/templates/security/login_user.html` — template de login com botões SAML
+
+**Dependências**
+
+- Depende de: TICKET-01 (login básico), TICKET-03 (AuthContext/user state).
+- Bloqueia: nenhum (feature independente que adiciona método de autenticação alternativo).
+
+**Critérios de Aceitação**
+
+- [ ] Plugin SAML registado no backend com rotas `/saml/login`, `/saml/sso`, `/saml/register`, `/saml/logout`, `/saml/sso_logout`.
+- [ ] Configurações SAML (`SECURITY_SAML_*`) definidas em `settings.py` com defaults seguros.
+- [ ] `GET /saml/login` gera AuthnRequest válido e redireciona para o IdP.
+- [ ] `POST /saml/sso` processa SAMLResponse, valida assinatura, e faz login ou redireciona para registo.
+- [ ] Utilizador existente (por email/NIC) é autenticado automaticamente.
+- [ ] Utilizador novo é redirecionado para registo com campos pre-preenchidos.
+- [ ] NIC é guardado em `user.extras['auth_nic']` após registo.
+- [ ] Logout SAML (`/saml/logout`) envia LogoutRequest ao IdP e limpa sessão local.
+- [ ] Frontend tem botão "Autenticação.gov" na página de login (visível quando `NEXT_PUBLIC_SAML_ENABLED=true`).
+- [ ] Rewrites no `next.config.ts` encaminham `/saml/*` para o backend.
+- [ ] Após login SAML bem-sucedido, `AuthContext` atualiza o estado do utilizador.
+- [ ] Proteção XXE ativa (via `defusedxml`).
+- [ ] Suporte a múltiplos IdP metadata files com fallback.
+
+---
+
+## TICKET-38: Repository Maintenance — Login Integration & Branch Cleanup ✅
+
+**Descrição**
+Sincronizar as branches divergentes de login (`login_tabs` da Ines e `login_final` do Adriano) na branch `main`, resolvendo conflitos, restaurando arquivos perdidos em resets e unificando a UI com a lógica de API.
+
+**Contexto Arquitetural**
+
+- Trabalho realizado em paralelo em múltiplas branches causou divergência no frontend.
+- `login_tabs` continha o layout moderno com Tabs verticais e suporte a CMD/eIDAS na UI.
+- `login_final` continha a lógica de API e proxying necessária para o funcionamento real do login.
+- Inconsistências de checkout levaram à exclusão acidental de arquivos críticos: `src/app/login/route.ts`, `.env.example`, `src/config/env.ts` e `src/config/site.ts`.
+- Foi necessário unificar o código para garantir que o formulário de login (UI) utilizasse as funções de API restauradas.
+
+**O que deve ser feito**
+
+1. **Consolidação de Branches**:
+   - Identificar e restaurar o estado da branch `main` após resets acidentais.
+   - Unificar o layout (`LoginClient.tsx`) da branch da Ines com as funções de conexão de API.
+2. **Restauração de Arquivos Perdidos**:
+   - Recuperar `src/app/login/route.ts` (API Proxy handler).
+   - Recuperar `.env.example` e diretório `src/config/` (`env.ts` e `site.ts`).
+3. **Integração de Código**:
+   - Conectar o evento `onSubmit` do formulário de login às funções `fetchCsrfToken()` e `login()` do `services/api.ts`.
+   - Garantir que rewrites no `next.config.ts` apontem corretamente para o backend (`BACKEND_URL`).
+4. **Limpeza do Repositório**:
+   - Remover branches locais e remotas obsoletas para evitar futuras divergências.
+
+**Critérios de Aceitação**
+
+- [ ] Todas as branches de login unificadas na `main`.
+- [ ] Arquivos `.env.example`, `env.ts`, `site.ts` e `route.ts` restaurados e versionados.
+- [ ] Formulário de login funcional (autentica via API e trata erros).
+- [ ] Branches secundárias obsoletas removidas.
+
+---
+
+## TICKET-39: Global Search — Página de Pesquisa com Dropdown e Resultados (Frontend)
+
+**Descrição**
+Implementar uma pesquisa global inspirada no projeto francês cdata (data.gouv.fr): dropdown de seleção de tipo ao digitar + página de resultados com sidebar de tipos/contagens e lista paginada.
+
+**Contexto Arquitetural**
+
+- Implementado como parte do TICKET-04 (Ponto 4), mas merece ticket próprio pela complexidade e por ser uma feature distinta da homepage.
+- Inspiração direta no projeto [cdata](https://github.com/datagouv/cdata) — componentes `MenuSearch.vue` (dropdown) e `GlobalSearch` (página de resultados com sidebar).
+- Backend endpoints utilizados:
+  - `GET /api/1/datasets/?q=<query>&page=<n>&page_size=<n>` → pesquisa full-text de datasets.
+  - `GET /api/1/organizations/?q=<query>&page=<n>&page_size=<n>` → pesquisa full-text de organizações.
+  - `GET /api/1/reuses/?q=<query>&page=<n>&page_size=<n>` → pesquisa full-text de reutilizações.
+- Frontend usa `'use client'` com `useSearchParams` (requer `Suspense` wrapper).
+- Navegação por URL: `/pages/search?q=<query>&type=<datasets|reuses|organizations>&page=<n>`.
+
+**O que foi feito**
+
+1. **Funções em `services/api.ts`**:
+   - `searchDatasets(query, page?, pageSize?)` → `GET /api/1/datasets/?q=<query>&page=<n>&page_size=<n>` — retorna `APIResponse<Dataset>`.
+   - `searchOrganizations(query, page?, pageSize?)` → `GET /api/1/organizations/?q=<query>&page=<n>&page_size=<n>` — retorna `APIResponse<Organization>`.
+   - `searchReuses(query, page?, pageSize?)` → `GET /api/1/reuses/?q=<query>&page=<n>&page_size=<n>` — retorna `APIResponse<Reuse>`.
+2. **Componente `SearchDropdown`** (`src/components/search/SearchDropdown.tsx`):
+   - Input de pesquisa reutilizável com dropdown de 3 opções ao digitar: "Pesquisar «X» nos/nas conjuntos de dados / reutilizações / organizações".
+   - Navegação por teclado (ArrowUp/ArrowDown, Enter, Escape) e click-outside para fechar.
+   - Navega para `/pages/search?q=<query>&type=<type>` ao selecionar uma opção.
+   - Props: `id`, `darkMode`, `placeholder`, `label`, `hasVoiceActionButton`.
+   - Usa `InputSearchBar` do agora-design-system internamente.
+   - Integrado no hero da homepage (modo escuro) e no Header (modo claro).
+3. **Componente `SearchClient`** (`src/components/search/SearchClient.tsx`):
+   - Página de resultados com layout sidebar (inspirado no cdata GlobalSearch).
+   - Sidebar esquerda: navegação por tipo (Conjuntos de Dados, Reutilizações, Organizações) com contagens totais.
+   - Conteúdo direito: lista de resultados com paginação (PAGE_SIZE = 10).
+   - Breadcrumb: Início > Pesquisa.
+   - Título dinâmico por tipo ("Pesquisa avançada de conjuntos de dados", etc.).
+   - Usa `SearchDropdown` para permitir nova pesquisa na própria página.
+   - Fetch de totais em paralelo (`Promise.all`) + fetch de resultados do tab ativo.
+   - Estado controlado por URL: `?q=<query>&type=<type>&page=<page>`.
+4. **Página de rota** (`src/app/pages/search/page.tsx`):
+   - Server component que renderiza `SearchClient` dentro de `Suspense` (necessário para `useSearchParams`).
+5. **Integração na homepage** (`src/app/page.tsx`):
+   - Substituído `InputSearchBar` + `useRouter` + estado `searchQuery` pelo componente `SearchDropdown`.
+6. **Integração no Header** (`src/components/Header.tsx`):
+   - Substituído `InputSearchBar` do header pelo `SearchDropdown` na `GeneralBar`.
+
+**Ficheiros criados/alterados**
+
+| Ficheiro                                   | Ação                                         |
+| ------------------------------------------ | -------------------------------------------- |
+| `src/components/search/SearchDropdown.tsx` | Criado                                       |
+| `src/components/search/SearchClient.tsx`   | Criado                                       |
+| `src/app/pages/search/page.tsx`            | Criado                                       |
+| `src/services/api.ts`                      | Alterado — adicionadas 3 funções de pesquisa |
+| `src/app/page.tsx`                         | Alterado — hero usa SearchDropdown           |
+| `src/components/Header.tsx`                | Alterado — header usa SearchDropdown         |
+
+**Critérios de Aceitação**
+
+- [x] `searchDatasets()`, `searchOrganizations()`, `searchReuses()` retornam resultados paginados do backend.
+- [x] Dropdown aparece ao digitar no campo de pesquisa com 3 opções de tipo.
+- [x] Navegação por teclado funciona no dropdown (ArrowUp/Down, Enter, Escape).
+- [x] Seleção de opção navega para `/pages/search?q=<query>&type=<type>`.
+- [x] Página de resultados mostra sidebar com tipos e contagens.
+- [x] Resultados são paginados (10 por página).
+- [x] Pesquisa funciona a partir do hero da homepage e do header.
+- [x] URL reflete o estado da pesquisa (query, tipo, página).
+- [x] Click-outside fecha o dropdown.
+
+**Status**: ✅ Concluído (branch `fix-homepage`, commit `c4e17fb`)
+
+---
+
 # BACKOFFICE / ADMIN — Tickets
 
 > Based on the original project [datagouv/cdata](https://github.com/datagouv/cdata/tree/main/pages/admin) (Vue.js/Nuxt), adapted for our React/Next.js stack.
@@ -1456,231 +1681,6 @@ Implementar a camada de conexão para gestão global do site e moderação de co
 - [ ] `fetchReportReasons()` retorna lista de razões.
 - [ ] URLs de export CSV são geradas corretamente.
 - [ ] Tipos TS definidos para SiteInfo, Report, ReportReason.
-
----
-
-## TICKET-37: Authentication — Login via Autenticação.gov / SAML (Conexão API)
-
-**Descrição**
-Implementar o fluxo completo de autenticação via Autenticação.gov (Cartão de Cidadão) usando protocolo SAML 2.0, incluindo login, registo automático, e logout — tanto no backend (plugin SAML) como no frontend (redirect flow e callbacks).
-
-**Contexto Arquitetural**
-
-- Referência: projecto `udata-front-pt` já tem implementação completa em `udata_front/saml_plugin/`.
-- Backend usa `pysaml2` (v7.4.2) para comunicação SAML com o IdP da Autenticação.gov.
-- O plugin regista um Blueprint Flask com rotas `/saml/*`.
-- Fluxo SP-initiated: o frontend redireciona para `/saml/login`, o backend gera o AuthnRequest e redireciona para o IdP, o IdP retorna o utilizador para `/saml/sso` (callback).
-- Atributos SAML recebidos do IdP:
-  - `http://interop.gov.pt/MDC/Cidadao/CorreioElectronico` → email (obrigatório)
-  - `http://interop.gov.pt/MDC/Cidadao/NIC` → NIC (opcional, guardado em `user.extras['auth_nic']`)
-  - `http://interop.gov.pt/MDC/Cidadao/NomeProprio` → first_name (opcional)
-  - `http://interop.gov.pt/MDC/Cidadao/NomeApelido` → last_name (opcional)
-- Se o utilizador já existe (por email ou NIC): faz login direto.
-- Se o utilizador não existe: redireciona para `/saml/register` para completar o registo.
-- Logout SAML: `/saml/logout` envia LogoutRequest ao IdP, callback em `/saml/sso_logout`.
-- Sessão: flag `saml_login = True` indica que o login foi via SAML (usado para decidir o fluxo de logout).
-- Suporte adicional para eIDAS (autenticação europeia cross-border) com rotas `/saml/eidas/*`.
-
-**O que deve ser feito**
-
-### Backend
-
-1. **Dependência**: Adicionar `pysaml2>=7.4.2` e `defusedxml>=0.7.1` ao `pyproject.toml`.
-2. **Plugin SAML** em `udata/core/auth/saml_plugin/` (adaptar de `udata-front-pt/udata_front/saml_plugin/`):
-   - `__init__.py` — Blueprint `autenticacao_gov`, registar rotas.
-   - `saml_govpt.py` — Implementação principal:
-     - `saml_client_for(idp_metadata, acs_url, sls_url)` → instanciar `Saml2Client` com config.
-     - `GET /saml/login` — gerar AuthnRequest (com `RequestedAttributes` e `FAALevel`), redirect para IdP.
-     - `POST /saml/sso` — processar SAMLResponse, extrair atributos, lookup/criar utilizador, `login_user()`.
-     - `GET /saml/register` — form de registo para utilizadores novos (pre-preencher com dados SAML).
-     - `POST /saml/register` — criar utilizador, guardar NIC em extras, enviar confirmação.
-     - `GET /saml/logout` — gerar LogoutRequest, redirect para IdP.
-     - `POST /saml/sso_logout` — processar LogoutResponse, `logout_user()`.
-   - `requested_atributes.py` — classes `RequestedAttribute` para os atributos PT.
-   - `faa_level.py` — extensão XML `FAALevel` para Level of Assurance.
-   - `register_user.py` — `UserCustomForm` (WTForms) para o registo pós-SAML.
-3. **Configurações** em `udata/settings.py`:
-   - `SECURITY_SAML_ENTITY_ID` — identificador da entidade SP.
-   - `SECURITY_SAML_ENTITY_NAME` — nome do SP.
-   - `SECURITY_SAML_KEY_FILE` — caminho para a chave privada.
-   - `SECURITY_SAML_CERT_FILE` — caminho para o certificado público.
-   - `SECURITY_SAML_IDP_METADATA` — caminhos para os ficheiros de metadata do IdP (separados por vírgula).
-   - `SECURITY_SAML_FAAALEVEL` — nível de assurance.
-   - `SECURITY_SAML_FA_URL` — URL de destino do Autenticação.gov para logout.
-4. **Registar o Blueprint** em `udata/app.py` → `create_app()` ou via entrypoint `udata.views`.
-5. **Segurança**:
-   - CSRF exempt nas rotas de callback SAML (`/saml/sso`, `/saml/sso_logout`).
-   - Validação de assinatura SAML nas respostas do IdP.
-   - Proteção XXE via `defusedxml`.
-   - Suporte a múltiplos ficheiros de metadata do IdP (fallback se assinatura falhar no primeiro).
-
-### Frontend
-
-#### A página e os componentes para o login via Autenticação.gov e pelo eIDAS, já estão criadas no projeto em `frontend/saml`.
-
-6. **Botão "Autenticação.gov"** em `LoginClient.tsx`:
-   - Adicionar botão/link que redireciona para `/saml/login` (full page redirect, não AJAX).
-   - Estilizar conforme design system (ícone Cartão de Cidadão).
-7. **Rewrite/Proxy** em `next.config.ts`:
-   - Adicionar rewrites para `/saml/*` → backend (porta 7000), para que as rotas SAML funcionem em dev.
-   - Rotas: `/saml/login`, `/saml/sso`, `/saml/register`, `/saml/logout`, `/saml/sso_logout`.
-8. **Página de registo SAML** — opção A (server-rendered pelo backend) ou opção B (frontend):
-   - **Opção A** (mais simples, como no `udata-front-pt`): o backend serve template HTML em `/saml/register`. Frontend só precisa do rewrite.
-   - **Opção B** (SPA): criar `src/app/saml/register/page.tsx` com form que lê dados da sessão e faz POST ao backend.
-9. **Atualizar `AuthContext`** (TICKET-03):
-   - Após redirect de volta do SAML (`/saml/sso` → redirect para `/`), chamar `refresh()` para atualizar o estado do utilizador.
-   - Detetar query param ou flag que indica login SAML bem-sucedido.
-10. **Logout SAML**:
-    - Se `user.saml_login === true` (ou flag na sessão), o botão de logout deve redirecionar para `/saml/logout` em vez de `/logout/`.
-    - Alternativa: o backend decide o fluxo de logout com base na flag de sessão `saml_login`.
-11. **Variáveis de ambiente** em `.env` / `next.config.ts`:
-    - `NEXT_PUBLIC_SAML_ENABLED` — flag para mostrar/esconder o botão Autenticação.gov.
-
-### eIDAS (Opcional / Fase 2)
-
-12. **Rotas eIDAS** no backend: `/saml/eidas/login`, `/saml/eidas/sso`, `/saml/eidas/logout`, `/saml/eidas/sso_logout`.
-13. **Atributos eIDAS**:
-    - `http://eidas.europa.eu/attributes/naturalperson/PersonIdentifier` → email (obrigatório).
-    - `CurrentFamilyName`, `CurrentGivenName`, `DateOfBirth` (opcionais).
-14. **Botão "eIDAS"** no frontend (se ativado).
-
-**Ficheiros de referência** (`udata-front-pt`):
-
-- `udata_front/saml_plugin/saml_govpt.py` — implementação principal (517 linhas)
-- `udata_front/saml_plugin/requested_atributes.py` — atributos SAML custom
-- `udata_front/saml_plugin/faa_level.py` — extensão FAALevel
-- `udata_front/saml_plugin/register_user.py` — form de registo
-- `udata_front/theme/gouvfr/templates/security/register_saml.html` — template de registo
-- `udata_front/theme/gouvfr/templates/security/login_user.html` — template de login com botões SAML
-
-**Dependências**
-
-- Depende de: TICKET-01 (login básico), TICKET-03 (AuthContext/user state).
-- Bloqueia: nenhum (feature independente que adiciona método de autenticação alternativo).
-
-**Critérios de Aceitação**
-
-- [ ] Plugin SAML registado no backend com rotas `/saml/login`, `/saml/sso`, `/saml/register`, `/saml/logout`, `/saml/sso_logout`.
-- [ ] Configurações SAML (`SECURITY_SAML_*`) definidas em `settings.py` com defaults seguros.
-- [ ] `GET /saml/login` gera AuthnRequest válido e redireciona para o IdP.
-- [ ] `POST /saml/sso` processa SAMLResponse, valida assinatura, e faz login ou redireciona para registo.
-- [ ] Utilizador existente (por email/NIC) é autenticado automaticamente.
-- [ ] Utilizador novo é redirecionado para registo com campos pre-preenchidos.
-- [ ] NIC é guardado em `user.extras['auth_nic']` após registo.
-- [ ] Logout SAML (`/saml/logout`) envia LogoutRequest ao IdP e limpa sessão local.
-- [ ] Frontend tem botão "Autenticação.gov" na página de login (visível quando `NEXT_PUBLIC_SAML_ENABLED=true`).
-- [ ] Rewrites no `next.config.ts` encaminham `/saml/*` para o backend.
-- [ ] Após login SAML bem-sucedido, `AuthContext` atualiza o estado do utilizador.
-- [ ] Proteção XXE ativa (via `defusedxml`).
-- [ ] Suporte a múltiplos IdP metadata files com fallback.
-
----
-
-## TICKET-38: Repository Maintenance — Login Integration & Branch Cleanup
-
-**Descrição**
-Sincronizar as branches divergentes de login (`login_tabs` da Ines e `login_final` do Adriano) na branch `main`, resolvendo conflitos, restaurando arquivos perdidos em resets e unificando a UI com a lógica de API.
-
-**Contexto Arquitetural**
-
-- Trabalho realizado em paralelo em múltiplas branches causou divergência no frontend.
-- `login_tabs` continha o layout moderno com Tabs verticais e suporte a CMD/eIDAS na UI.
-- `login_final` continha a lógica de API e proxying necessária para o funcionamento real do login.
-- Inconsistências de checkout levaram à exclusão acidental de arquivos críticos: `src/app/login/route.ts`, `.env.example`, `src/config/env.ts` e `src/config/site.ts`.
-- Foi necessário unificar o código para garantir que o formulário de login (UI) utilizasse as funções de API restauradas.
-
-**O que deve ser feito**
-
-1. **Consolidação de Branches**:
-   - Identificar e restaurar o estado da branch `main` após resets acidentais.
-   - Unificar o layout (`LoginClient.tsx`) da branch da Ines com as funções de conexão de API.
-2. **Restauração de Arquivos Perdidos**:
-   - Recuperar `src/app/login/route.ts` (API Proxy handler).
-   - Recuperar `.env.example` e diretório `src/config/` (`env.ts` e `site.ts`).
-3. **Integração de Código**:
-   - Conectar o evento `onSubmit` do formulário de login às funções `fetchCsrfToken()` e `login()` do `services/api.ts`.
-   - Garantir que rewrites no `next.config.ts` apontem corretamente para o backend (`BACKEND_URL`).
-4. **Limpeza do Repositório**:
-   - Remover branches locais e remotas obsoletas para evitar futuras divergências.
-
-**Critérios de Aceitação**
-
-- [ ] Todas as branches de login unificadas na `main`.
-- [ ] Arquivos `.env.example`, `env.ts`, `site.ts` e `route.ts` restaurados e versionados.
-- [ ] Formulário de login funcional (autentica via API e trata erros).
-- [ ] Branches secundárias obsoletas removidas.
-
----
-
-## TICKET-39: Global Search — Página de Pesquisa com Dropdown e Resultados (Frontend)
-
-**Descrição**
-Implementar uma pesquisa global inspirada no projeto francês cdata (data.gouv.fr): dropdown de seleção de tipo ao digitar + página de resultados com sidebar de tipos/contagens e lista paginada.
-
-**Contexto Arquitetural**
-
-- Implementado como parte do TICKET-04 (Ponto 4), mas merece ticket próprio pela complexidade e por ser uma feature distinta da homepage.
-- Inspiração direta no projeto [cdata](https://github.com/datagouv/cdata) — componentes `MenuSearch.vue` (dropdown) e `GlobalSearch` (página de resultados com sidebar).
-- Backend endpoints utilizados:
-  - `GET /api/1/datasets/?q=<query>&page=<n>&page_size=<n>` → pesquisa full-text de datasets.
-  - `GET /api/1/organizations/?q=<query>&page=<n>&page_size=<n>` → pesquisa full-text de organizações.
-  - `GET /api/1/reuses/?q=<query>&page=<n>&page_size=<n>` → pesquisa full-text de reutilizações.
-- Frontend usa `'use client'` com `useSearchParams` (requer `Suspense` wrapper).
-- Navegação por URL: `/pages/search?q=<query>&type=<datasets|reuses|organizations>&page=<n>`.
-
-**O que foi feito**
-
-1. **Funções em `services/api.ts`**:
-   - `searchDatasets(query, page?, pageSize?)` → `GET /api/1/datasets/?q=<query>&page=<n>&page_size=<n>` — retorna `APIResponse<Dataset>`.
-   - `searchOrganizations(query, page?, pageSize?)` → `GET /api/1/organizations/?q=<query>&page=<n>&page_size=<n>` — retorna `APIResponse<Organization>`.
-   - `searchReuses(query, page?, pageSize?)` → `GET /api/1/reuses/?q=<query>&page=<n>&page_size=<n>` — retorna `APIResponse<Reuse>`.
-2. **Componente `SearchDropdown`** (`src/components/search/SearchDropdown.tsx`):
-   - Input de pesquisa reutilizável com dropdown de 3 opções ao digitar: "Pesquisar «X» nos/nas conjuntos de dados / reutilizações / organizações".
-   - Navegação por teclado (ArrowUp/ArrowDown, Enter, Escape) e click-outside para fechar.
-   - Navega para `/pages/search?q=<query>&type=<type>` ao selecionar uma opção.
-   - Props: `id`, `darkMode`, `placeholder`, `label`, `hasVoiceActionButton`.
-   - Usa `InputSearchBar` do agora-design-system internamente.
-   - Integrado no hero da homepage (modo escuro) e no Header (modo claro).
-3. **Componente `SearchClient`** (`src/components/search/SearchClient.tsx`):
-   - Página de resultados com layout sidebar (inspirado no cdata GlobalSearch).
-   - Sidebar esquerda: navegação por tipo (Conjuntos de Dados, Reutilizações, Organizações) com contagens totais.
-   - Conteúdo direito: lista de resultados com paginação (PAGE_SIZE = 10).
-   - Breadcrumb: Início > Pesquisa.
-   - Título dinâmico por tipo ("Pesquisa avançada de conjuntos de dados", etc.).
-   - Usa `SearchDropdown` para permitir nova pesquisa na própria página.
-   - Fetch de totais em paralelo (`Promise.all`) + fetch de resultados do tab ativo.
-   - Estado controlado por URL: `?q=<query>&type=<type>&page=<page>`.
-4. **Página de rota** (`src/app/pages/search/page.tsx`):
-   - Server component que renderiza `SearchClient` dentro de `Suspense` (necessário para `useSearchParams`).
-5. **Integração na homepage** (`src/app/page.tsx`):
-   - Substituído `InputSearchBar` + `useRouter` + estado `searchQuery` pelo componente `SearchDropdown`.
-6. **Integração no Header** (`src/components/Header.tsx`):
-   - Substituído `InputSearchBar` do header pelo `SearchDropdown` na `GeneralBar`.
-
-**Ficheiros criados/alterados**
-
-| Ficheiro                                   | Ação                                         |
-| ------------------------------------------ | -------------------------------------------- |
-| `src/components/search/SearchDropdown.tsx` | Criado                                       |
-| `src/components/search/SearchClient.tsx`   | Criado                                       |
-| `src/app/pages/search/page.tsx`            | Criado                                       |
-| `src/services/api.ts`                      | Alterado — adicionadas 3 funções de pesquisa |
-| `src/app/page.tsx`                         | Alterado — hero usa SearchDropdown           |
-| `src/components/Header.tsx`                | Alterado — header usa SearchDropdown         |
-
-**Critérios de Aceitação**
-
-- [x] `searchDatasets()`, `searchOrganizations()`, `searchReuses()` retornam resultados paginados do backend.
-- [x] Dropdown aparece ao digitar no campo de pesquisa com 3 opções de tipo.
-- [x] Navegação por teclado funciona no dropdown (ArrowUp/Down, Enter, Escape).
-- [x] Seleção de opção navega para `/pages/search?q=<query>&type=<type>`.
-- [x] Página de resultados mostra sidebar com tipos e contagens.
-- [x] Resultados são paginados (10 por página).
-- [x] Pesquisa funciona a partir do hero da homepage e do header.
-- [x] URL reflete o estado da pesquisa (query, tipo, página).
-- [x] Click-outside fecha o dropdown.
-
-**Status**: ✅ Concluído (branch `fix-homepage`, commit `c4e17fb`)
 
 ---
 

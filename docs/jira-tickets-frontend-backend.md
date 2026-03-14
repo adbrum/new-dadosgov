@@ -363,7 +363,7 @@ Implementar a função de fetch e tipos para a página de detalhe de organizaç�
 
 ---
 
-## TICKET-10: Organizations — Search, Filtros e Página Completa (Conexão API)
+## TICKET-10: Organizations — Search, Filtros e Página Completa (Conexão API) ✅
 
 **Descrição**
 Estender `fetchOrganizations()` para suportar pesquisa e filtros, e completar a página de Organizações com funcionalidades de pesquisa, ordenação, filtros por badge e métricas reais.
@@ -430,7 +430,7 @@ Estender `fetchOrganizations()` para suportar pesquisa e filtros, e completar a 
 
 ---
 
-## TICKET-11: Reuses — Search, Filtros e Detail (Conexões API)
+## TICKET-11: Reuses — Search, Filtros e Detail (Conexões API) ✅
 
 **Descrição**
 Estender `fetchReuses()` para pesquisa/filtros e estender `fetchReuse()` para dados completos incluindo datasets associados.
@@ -444,25 +444,36 @@ Estender `fetchReuses()` para pesquisa/filtros e estender `fetchReuse()` para da
 - Backend: `GET /api/1/reuses/suggest/?q=<query>&size=<n>`.
 - Reuse detail inclui `datasets[]` (referências a datasets associados).
 
-**O que deve ser feito**
+**O que foi feito**
 
-1. **Tipos TS** em `types/api.ts`:
+1. ✅ **Tipos TS** em `types/api.ts`:
    - `ReuseType`: id, label.
    - `ReuseSuggestion`: id, title, slug, image_url, score.
-   - Estender `Reuse` com: `datasets[]` (array de Dataset refs), `dataservices[]`, `owner`, `badges[]`.
-2. **Atualizar `fetchReuses()`** em `services/api.ts`:
-   - Aceitar: `{ q?, type?, tag?, organization?, sort?, page?, pageSize? }`.
-3. **Novas funções** em `services/api.ts`:
+   - `ReuseFilters`: q?, type?, tag?, organization?, sort?.
+   - Estendido `Reuse` com: `datasets[]`, `dataservices[]`, `owner`, `badges[]`.
+2. ✅ **Atualizado `fetchReuses()`** em `services/api.ts`:
+   - Aceita: `{ q?, type?, tag?, organization?, sort?, page?, pageSize? }` via `ReuseFilters`.
+3. ✅ **Novas funções** em `services/api.ts`:
    - `fetchReuseTypes()` → `GET /api/1/reuses/types/`
    - `suggestReuses(query, size?)` → `GET /api/1/reuses/suggest/?q=<query>&size=<n>`
-   - `followReuse(id)` / `unfollowReuse(id)` → (ou reutilizar `followEntity()` do TICKET-08).
+   - `followReuse(id)` → `POST /api/1/reuses/<id>/followers/`
+   - `unfollowReuse(id)` → `DELETE /api/1/reuses/<id>/followers/`
+4. ✅ **Search bar na listing page** ligada à API (parâmetro `q` via URL search params).
+5. ✅ **Sort dropdown** ligado à API (`-created`, `-views`, `-reuses`, `-followers`).
+6. ✅ **Filtro por tipo** populado dinamicamente via `fetchReuseTypes()`.
+7. ✅ **Botão "Limpar filtros"** quando existem filtros ativos.
+8. ✅ **Detail page**: datasets associados agora dinâmicos via `reuse.datasets[]` (removidos os 5 hardcoded).
+9. ✅ **Detail page**: descrição dinâmica via `reuse.description` (removido conteúdo hardcoded).
+10. ✅ **Detail page**: métricas (views, dataset count), owner/organização dinâmicos.
 
 **Critérios de Aceitação**
 
-- [ ] `fetchReuses()` aceita `q`, `type`, `tag`, `organization`.
-- [ ] `fetchReuseTypes()` retorna lista de tipos.
-- [ ] `suggestReuses()` retorna sugestões.
-- [ ] `fetchReuse()` retorna dados completos incluindo datasets associados.
+- [x] `fetchReuses()` aceita `q`, `type`, `tag`, `organization`.
+- [x] `fetchReuseTypes()` retorna lista de tipos.
+- [x] `suggestReuses()` retorna sugestões.
+- [x] `fetchReuse()` retorna dados completos incluindo datasets associados.
+
+**Branch:** `ticket-11-reuses-search-filters-detail` (frontend)
 
 ---
 

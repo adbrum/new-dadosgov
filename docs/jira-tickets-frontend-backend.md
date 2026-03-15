@@ -865,36 +865,41 @@ Implementar as funções de pedido de adesão a organizações e gestão de memb
 
 ---
 
-## TICKET-25: CSV/Data Export (Conexão API)
+## TICKET-25: CSV/Data Export (Conexão API) ✅
 
 **Descrição**
 Implementar funções utilitárias para gerar URLs de export CSV dos endpoints do backend.
 
 **Contexto Arquitetural**
 
-- Backend endpoints de export:
+- Backend endpoints de export (organização):
   - `GET /api/1/organizations/<org>/datasets.csv`
   - `GET /api/1/organizations/<org>/dataservices.csv`
   - `GET /api/1/organizations/<org>/discussions.csv`
   - `GET /api/1/organizations/<org>/datasets-resources.csv`
+- Backend endpoints de export (site/global):
   - `GET /api/1/site/datasets.csv`
+  - `GET /api/1/site/resources.csv`
   - `GET /api/1/site/organizations.csv`
   - `GET /api/1/site/reuses.csv`
+  - `GET /api/1/site/dataservices.csv`
+  - `GET /api/1/site/harvests.csv`
   - `GET /api/1/site/tags.csv`
 
 **O que deve ser feito**
 
 1. **Funções utilitárias** em `services/api.ts`:
    - `getOrgExportUrl(org, type)` → retorna URL completa `${API_BASE}/organizations/<org>/<type>.csv`.
+     - `type`: `'datasets' | 'dataservices' | 'discussions' | 'datasets-resources'`.
    - `getSiteExportUrl(type)` → retorna URL completa `${API_BASE}/site/<type>.csv`.
-   - Onde `type` é `'datasets' | 'dataservices' | 'discussions' | 'datasets-resources' | 'organizations' | 'reuses' | 'tags'`.
+     - `type`: `'datasets' | 'resources' | 'organizations' | 'reuses' | 'dataservices' | 'harvests' | 'tags'`.
 2. **Nota**: Não é necessário fetch — o browser abre a URL diretamente para download.
 
 **Critérios de Aceitação**
 
-- [ ] `getOrgExportUrl()` gera URL correta para exports de organização.
-- [ ] `getSiteExportUrl()` gera URL correta para exports globais.
-- [ ] URLs usam a base URL da API configurada.
+- [x] `getOrgExportUrl()` gera URL correta para exports de organização.
+- [x] `getSiteExportUrl()` gera URL correta para exports globais.
+- [x] URLs usam a base URL da API configurada.
 
 ---
 

@@ -906,7 +906,7 @@ Implementar funções utilitárias para gerar URLs de export CSV dos endpoints d
 
 ---
 
-## TICKET-37: Authentication — Login via Autenticação.gov / SAML (Conexão API)
+## TICKET-37: Authentication — Login via Autenticação.gov / SAML (Conexão API) ✅
 
 **Descrição**
 Implementar o fluxo completo de autenticação via Autenticação.gov (Cartão de Cidadão) usando protocolo SAML 2.0, incluindo login, registo automático, e logout — tanto no backend (plugin SAML) como no frontend (redirect flow e callbacks).
@@ -923,103 +923,28 @@ Implementar o fluxo completo de autenticação via Autenticação.gov (Cartão d
   - `http://interop.gov.pt/MDC/Cidadao/NomeProprio` → first_name (opcional)
   - `http://interop.gov.pt/MDC/Cidadao/NomeApelido` → last_name (opcional)
 - Se o utilizador já existe (por email ou NIC): faz login direto.
-- Se o utilizador não existe: redireciona para `/saml/register` para completar o registo.
+- Se o utilizador não existe: cria conta automaticamente via SAML.
 - Logout SAML: `/saml/logout` envia LogoutRequest ao IdP, callback em `/saml/sso_logout`.
 - Sessão: flag `saml_login = True` indica que o login foi via SAML (usado para decidir o fluxo de logout).
 - Suporte adicional para eIDAS (autenticação europeia cross-border) com rotas `/saml/eidas/*`.
 
-**O que deve ser feito**
-
-### Backend
-
-1. **Dependência**: Adicionar `pysaml2>=7.4.2` e `defusedxml>=0.7.1` ao `pyproject.toml`.
-2. **Plugin SAML** em `udata/core/auth/saml_plugin/` (adaptar de `udata-front-pt/udata_front/saml_plugin/`):
-   - `__init__.py` — Blueprint `autenticacao_gov`, registar rotas.
-   - `saml_govpt.py` — Implementação principal:
-     - `saml_client_for(idp_metadata, acs_url, sls_url)` → instanciar `Saml2Client` com config.
-     - `GET /saml/login` — gerar AuthnRequest (com `RequestedAttributes` e `FAALevel`), redirect para IdP.
-     - `POST /saml/sso` — processar SAMLResponse, extrair atributos, lookup/criar utilizador, `login_user()`.
-     - `GET /saml/register` — form de registo para utilizadores novos (pre-preencher com dados SAML).
-     - `POST /saml/register` — criar utilizador, guardar NIC em extras, enviar confirmação.
-     - `GET /saml/logout` — gerar LogoutRequest, redirect para IdP.
-     - `POST /saml/sso_logout` — processar LogoutResponse, `logout_user()`.
-   - `requested_atributes.py` — classes `RequestedAttribute` para os atributos PT.
-   - `faa_level.py` — extensão XML `FAALevel` para Level of Assurance.
-   - `register_user.py` — `UserCustomForm` (WTForms) para o registo pós-SAML.
-3. **Configurações** em `udata/settings.py`:
-   - `SECURITY_SAML_ENTITY_ID` — identificador da entidade SP.
-   - `SECURITY_SAML_ENTITY_NAME` — nome do SP.
-   - `SECURITY_SAML_KEY_FILE` — caminho para a chave privada.
-   - `SECURITY_SAML_CERT_FILE` — caminho para o certificado público.
-   - `SECURITY_SAML_IDP_METADATA` — caminhos para os ficheiros de metadata do IdP (separados por vírgula).
-   - `SECURITY_SAML_FAAALEVEL` — nível de assurance.
-   - `SECURITY_SAML_FA_URL` — URL de destino do Autenticação.gov para logout.
-4. **Registar o Blueprint** em `udata/app.py` → `create_app()` ou via entrypoint `udata.views`.
-5. **Segurança**:
-   - CSRF exempt nas rotas de callback SAML (`/saml/sso`, `/saml/sso_logout`).
-   - Validação de assinatura SAML nas respostas do IdP.
-   - Proteção XXE via `defusedxml`.
-   - Suporte a múltiplos ficheiros de metadata do IdP (fallback se assinatura falhar no primeiro).
-
-### Frontend
-
-#### A página e os componentes para o login via Autenticação.gov e pelo eIDAS, já estão criadas no projeto em `frontend/saml`.
-
-6. **Botão "Autenticação.gov"** em `LoginClient.tsx`:
-   - Adicionar botão/link que redireciona para `/saml/login` (full page redirect, não AJAX).
-   - Estilizar conforme design system (ícone Cartão de Cidadão).
-7. **Rewrite/Proxy** em `next.config.ts`:
-   - Adicionar rewrites para `/saml/*` → backend (porta 7000), para que as rotas SAML funcionem em dev.
-   - Rotas: `/saml/login`, `/saml/sso`, `/saml/register`, `/saml/logout`, `/saml/sso_logout`.
-8. **Página de registo SAML** — opção A (server-rendered pelo backend) ou opção B (frontend):
-   - **Opção A** (mais simples, como no `udata-front-pt`): o backend serve template HTML em `/saml/register`. Frontend só precisa do rewrite.
-   - **Opção B** (SPA): criar `src/app/saml/register/page.tsx` com form que lê dados da sessão e faz POST ao backend.
-9. **Atualizar `AuthContext`** (TICKET-03):
-   - Após redirect de volta do SAML (`/saml/sso` → redirect para `/`), chamar `refresh()` para atualizar o estado do utilizador.
-   - Detetar query param ou flag que indica login SAML bem-sucedido.
-10. **Logout SAML**:
-    - Se `user.saml_login === true` (ou flag na sessão), o botão de logout deve redirecionar para `/saml/logout` em vez de `/logout/`.
-    - Alternativa: o backend decide o fluxo de logout com base na flag de sessão `saml_login`.
-11. **Variáveis de ambiente** em `.env` / `next.config.ts`:
-    - `NEXT_PUBLIC_SAML_ENABLED` — flag para mostrar/esconder o botão Autenticação.gov.
-
-### eIDAS (Opcional / Fase 2)
-
-12. **Rotas eIDAS** no backend: `/saml/eidas/login`, `/saml/eidas/sso`, `/saml/eidas/logout`, `/saml/eidas/sso_logout`.
-13. **Atributos eIDAS**:
-    - `http://eidas.europa.eu/attributes/naturalperson/PersonIdentifier` → email (obrigatório).
-    - `CurrentFamilyName`, `CurrentGivenName`, `DateOfBirth` (opcionais).
-14. **Botão "eIDAS"** no frontend (se ativado).
-
-**Ficheiros de referência** (`udata-front-pt`):
-
-- `udata_front/saml_plugin/saml_govpt.py` — implementação principal (517 linhas)
-- `udata_front/saml_plugin/requested_atributes.py` — atributos SAML custom
-- `udata_front/saml_plugin/faa_level.py` — extensão FAALevel
-- `udata_front/saml_plugin/register_user.py` — form de registo
-- `udata_front/theme/gouvfr/templates/security/register_saml.html` — template de registo
-- `udata_front/theme/gouvfr/templates/security/login_user.html` — template de login com botões SAML
-
-**Dependências**
-
-- Depende de: TICKET-01 (login básico), TICKET-03 (AuthContext/user state).
-- Bloqueia: nenhum (feature independente que adiciona método de autenticação alternativo).
-
 **Critérios de Aceitação**
 
-- [ ] Plugin SAML registado no backend com rotas `/saml/login`, `/saml/sso`, `/saml/register`, `/saml/logout`, `/saml/sso_logout`.
-- [ ] Configurações SAML (`SECURITY_SAML_*`) definidas em `settings.py` com defaults seguros.
-- [ ] `GET /saml/login` gera AuthnRequest válido e redireciona para o IdP.
-- [ ] `POST /saml/sso` processa SAMLResponse, valida assinatura, e faz login ou redireciona para registo.
-- [ ] Utilizador existente (por email/NIC) é autenticado automaticamente.
-- [ ] Utilizador novo é redirecionado para registo com campos pre-preenchidos.
-- [ ] NIC é guardado em `user.extras['auth_nic']` após registo.
-- [ ] Logout SAML (`/saml/logout`) envia LogoutRequest ao IdP e limpa sessão local.
-- [ ] Frontend tem botão "Autenticação.gov" na página de login (visível quando `NEXT_PUBLIC_SAML_ENABLED=true`).
-- [ ] Rewrites no `next.config.ts` encaminham `/saml/*` para o backend.
-- [ ] Após login SAML bem-sucedido, `AuthContext` atualiza o estado do utilizador.
-- [ ] Proteção XXE ativa (via `defusedxml`).
-- [ ] Suporte a múltiplos IdP metadata files com fallback.
+- [x] Plugin SAML registado no backend com rotas `/saml/login`, `/saml/sso`, `/saml/logout`, `/saml/sso_logout`.
+- [x] Rotas eIDAS: `/saml/eidas/login`, `/saml/eidas/sso`, `/saml/eidas/logout`, `/saml/eidas/sso_logout`.
+- [x] Configurações SAML (`SECURITY_SAML_*`) definidas em `udata.cfg` com valores adequados.
+- [x] `GET /saml/login` gera AuthnRequest válido e redireciona para o IdP.
+- [x] `POST /saml/sso` processa SAMLResponse, valida assinatura, e faz login ou cria conta.
+- [x] Utilizador existente (por email/NIC) é autenticado automaticamente.
+- [x] Utilizador novo é criado automaticamente.
+- [x] NIC é guardado em `user.extras['auth_nic']` após criação.
+- [x] Logout SAML (`/saml/logout`) envia LogoutRequest ao IdP e limpa sessão local.
+- [x] Frontend tem botões CMD e eIDAS na página de login (visíveis quando `NEXT_PUBLIC_SAML_ENABLED=true`).
+- [x] Rewrites no `next.config.ts` encaminham `/saml/*` para o backend.
+- [x] Após login SAML bem-sucedido, `AuthContext` atualiza o estado do utilizador.
+- [x] Proteção XXE ativa (via `defusedxml`).
+- [x] Suporte a múltiplos IdP metadata files com fallback.
+- [x] Frontend logout diferencia sessões SAML — redireciona para `/saml/logout` em vez de `/logout/` quando `saml_login` é `true`.
 
 ---
 
@@ -1128,6 +1053,99 @@ Implementar uma pesquisa global inspirada no projeto francês cdata (data.gouv.f
 - [x] Click-outside fecha o dropdown.
 
 **Status**: ✅ Concluído (branch `fix-homepage`, commit `c4e17fb`)
+
+---
+
+## TICKET-40: Legacy Account Migration to CMD/eIDAS ✅
+
+**Descrição**
+Migrar utilizadores legados (email/password) para CMD (Chave Móvel Digital) ou eIDAS como único método de autenticação, sem perda de dados. Inclui wizard de migração, bloqueio de login legado, remoção da página de registo, e criação automática de conta via SAML.
+
+**Contexto Arquitetural**
+
+- Depende de TICKET-37 (autenticação SAML já implementada).
+- Abordagem MERGE: manter o utilizador existente, adicionar NIC a `extras`, anular `password` → todos os `ReferenceField` (datasets, orgs, reuses, discussions, follows) mantêm-se válidos.
+- Plano detalhado em `docs/ticket-37-legacy-account-migration-cmd.md`.
+
+**Fluxos implementados**
+
+- **Fluxo A — Migração via CMD/eIDAS**: utilizador autentica-se via SAML → backend deteta conta legada (password + sem NIC) → redirect para wizard de migração → confirmação visual → verificação por código ou password → merge.
+- **Fluxo B — Bloqueio de login legado**: utilizador legado faz login por email/password → route handler verifica migração pendente → faz logout → mostra aviso de migração obrigatória com botões CMD e eIDAS.
+- **Criação de conta**: CMD/eIDAS → SAML → backend não encontra utilizador → cria automaticamente. Sem página de registo separada.
+
+**O que foi feito**
+
+### Backend (`udata/auth/saml/saml_plugin/saml_govpt.py`)
+
+1. **`_find_or_create_saml_user()`** — retorna tuple `(user, status)`: `"existing_saml"`, `"migration_candidate"`, `"new"`, `"error"`.
+2. **`idp_initiated()` + `idp_eidas_initiated()`** — detetam candidatos a migração e redirecionam para wizard.
+3. **Helpers**: `_handle_migration_redirect()`, `_mask_email()`, `_send_migration_code()`, `_find_legacy_user()`.
+4. **Endpoints de migração** (`/saml/migration/*`):
+   - `GET /check` — verifica se utilizador autenticado precisa de migração.
+   - `GET /pending` — estado da migração (email mascarado, nome, apelido).
+   - `POST /search` — procura conta legada por email ou nome.
+   - `POST /send-code` — gera e envia código de 6 dígitos (10 min expiração, máx 5 tentativas, máx 3 envios).
+   - `POST /confirm` — verifica código ou password, faz merge (`password = None`, adiciona NIC), login.
+   - `POST /skip` — cria conta nova sem migrar.
+
+### Frontend
+
+5. **Wizard de migração** (`MigrateAccountClient.tsx`):
+   - Step 1: Deteção → Step 2: Pesquisa manual (se sem email) → Step 3: Confirmação visual (nome + email mascarado) → Step 4: Escolha de método → Step 5: Verificação (código ou password) → Step 6: Sucesso.
+6. **Bloqueio de login legado** (`login/route.ts`): após login, chama `/saml/migration/check`; se legado, faz logout e devolve 403.
+7. **LoginClient.tsx**: tabs CMD/eIDAS com "conta criada automaticamente"; tab legada com aviso de migração e botões "Migrar com CMD" / "Migrar com eIDAS".
+8. **Remoção da página de registo**: `RegisterClient.tsx`, `LoginRegisterClient.tsx`, `register/route.ts` removidos; `/pages/register` e `/pages/loginregister` → redirect para `/pages/login`; `register()` removida de `api.ts`; Header atualizado.
+9. **Rewrites**: `/saml/migration/:path*` → backend.
+10. **Funções API**: `fetchMigrationPending()`, `searchMigrationAccount()`, `sendMigrationCode()`, `confirmMigration()`, `skipMigration()`.
+
+**Ficheiros criados**
+
+| Ficheiro                                                 | Descrição                     |
+| -------------------------------------------------------- | ----------------------------- |
+| `frontend/src/app/pages/migrate-account/page.tsx`        | Rota da página de migração    |
+| `frontend/src/components/login/MigrateAccountClient.tsx` | Wizard de migração multi-step |
+
+**Ficheiros removidos**
+
+| Ficheiro                                                | Motivo                               |
+| ------------------------------------------------------- | ------------------------------------ |
+| `frontend/src/components/login/RegisterClient.tsx`      | Registo por email/password eliminado |
+| `frontend/src/components/login/LoginRegisterClient.tsx` | Duplicado — redirecionado para login |
+| `frontend/src/app/register/route.ts`                    | Proxy de registo desnecessário       |
+
+**Ficheiros modificados**
+
+| Ficheiro                                            | Alterações                                                                                                             |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `backend/udata/auth/saml/saml_plugin/saml_govpt.py` | `_find_or_create_saml_user()` → tuple; redirect migração em ambos os callbacks; endpoints `/saml/migration/*`; helpers |
+| `frontend/next.config.ts`                           | Rewrite `/saml/migration/:path*`                                                                                       |
+| `frontend/src/app/login/route.ts`                   | Interceção login legado: `/saml/migration/check` → logout → 403                                                        |
+| `frontend/src/services/api.ts`                      | 5 funções de migração; `register()` removida                                                                           |
+| `frontend/src/components/login/LoginClient.tsx`     | Mensagem "criar conta automaticamente"; estado `migrationRequired` com aviso e botões CMD/eIDAS                        |
+| `frontend/src/components/Header.tsx`                | `/pages/loginregister` → `/pages/login`                                                                                |
+| `frontend/src/app/pages/register/page.tsx`          | Redirect para `/pages/login`                                                                                           |
+| `frontend/src/app/pages/loginregister/page.tsx`     | Redirect para `/pages/login`                                                                                           |
+
+**Dependências**
+
+- Depende de: TICKET-37 (SAML/CMD/eIDAS), TICKET-01 (login básico), TICKET-03 (AuthContext).
+
+**Critérios de Aceitação**
+
+- [x] Utilizador legado (password + sem NIC) detetado como candidato a migração ao autenticar via CMD/eIDAS.
+- [x] Wizard de migração com confirmação visual (nome + email mascarado) e verificação por código ou password.
+- [x] Código de verificação: 6 dígitos, expiração 10 min, máx 5 tentativas, máx 3 envios.
+- [x] Após migração: `extras.auth_nic` definido, `password = None`, dados (datasets, orgs, reuses) mantidos.
+- [x] Login legado bloqueado para utilizadores não migrados — aviso com botões CMD e eIDAS.
+- [x] Após migração: login por email/password falha permanentemente.
+- [x] Re-login via CMD/eIDAS funciona diretamente sem wizard.
+- [x] Fallback sem email: pesquisa manual por email ou nome → mesmo fluxo.
+- [x] Página de registo eliminada — `/pages/register` e `/pages/loginregister` redirecionam para `/pages/login`.
+- [x] Tabs CMD e eIDAS informam que conta é criada automaticamente.
+- [x] Utilizador novo criado automaticamente ao autenticar via CMD/eIDAS sem conta existente.
+- [x] Endpoints de migração: `/saml/migration/check`, `/pending`, `/search`, `/send-code`, `/confirm`, `/skip`.
+- [x] Rewrite `/saml/migration/:path*` configurado no `next.config.ts`.
+- [x] `npm run lint` sem novos erros.
 
 ---
 
@@ -1727,5 +1745,6 @@ Implementar a camada de conexão para gestão global do site e moderação de co
 | 35                                    | Admin — User Management (Sysadmin)                       | Admin  | Low      | Not started                        |
 | 36                                    | Admin — Site Management & Moderation (Sysadmin)          | Admin  | Medium   | Not started                        |
 | **AUTENTICAÇÃO EXTERNA**              |                                                          |        |          |                                    |
-| 37                                    | Auth — Autenticação.gov / SAML (plugin + frontend)       | Auth   | High     | Not started                        |
+| 37                                    | Auth — Autenticação.gov / SAML (plugin + frontend)       | Auth   | High     | Concluído                          |
 | 38                                    | Maintenance — Sync Login branches & resolution           | Repo   | High     | Concluído                          |
+| 40                                    | Legacy Account Migration to CMD/eIDAS                    | Auth   | High     | Concluído                          |

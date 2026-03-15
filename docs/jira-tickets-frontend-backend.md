@@ -820,7 +820,7 @@ Implementar tipos e funções para submeter reports de conteúdo ao backend.
 
 ---
 
-## TICKET-24: Organization Membership (Conexões API)
+## TICKET-24: Organization Membership (Conexões API) ✅
 
 **Descrição**
 Implementar as funções de pedido de adesão a organizações e gestão de membros.

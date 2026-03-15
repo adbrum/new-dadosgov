@@ -477,7 +477,7 @@ Estender `fetchReuses()` para pesquisa/filtros e estender `fetchReuse()` para da
 
 ---
 
-## TICKET-12: Topics/Themes — Dados Dinâmicos (Conexões API v2) 2ª fase
+## TICKET-12: Topics/Themes — Dados Dinâmicos (Conexões API v2) 2ª fase ✅
 
 **Descrição**
 Implementar tipos e funções para consumir a API v2 de topics nas páginas públicas de themes.
@@ -504,11 +504,11 @@ Implementar tipos e funções para consumir a API v2 de topics nas páginas púb
 
 **Critérios de Aceitação**
 
-- [ ] Funções usam `NEXT_PUBLIC_API_V2_BASE` como base URL.
-- [ ] `fetchTopics()` retorna lista paginada.
-- [ ] `fetchTopic()` retorna detalhes completos.
-- [ ] `fetchTopicElements()` retorna datasets e reuses associados.
-- [ ] Tipos TS espelham a resposta da API v2.
+- [x] Funções usam `NEXT_PUBLIC_API_V2_BASE` como base URL.
+- [x] `fetchTopics()` retorna lista paginada.
+- [x] `fetchTopic()` retorna detalhes completos.
+- [x] `fetchTopicElements()` retorna datasets e reuses associados.
+- [x] Tipos TS espelham a resposta da API v2.
 
 ---
 
@@ -542,10 +542,10 @@ Implementar as funções de fetch para perfis de utilizador: perfil público e d
 
 **Critérios de Aceitação**
 
-- [ ] `fetchMyDatasets()` e `fetchMyReuses()` retornam listas paginadas.
-- [ ] `fetchMyOrgDatasets()` retorna datasets das organizações do utilizador.
-- [ ] `fetchUserProfile()` retorna perfil público de qualquer utilizador.
-- [ ] 404 é tratado para utilizadores inexistentes.
+- [x] `fetchMyDatasets()` e `fetchMyReuses()` retornam listas paginadas.
+- [x] `fetchMyOrgDatasets()` retorna datasets das organizações do utilizador.
+- [x] `fetchUserProfile()` retorna perfil público de qualquer utilizador.
+- [x] 404 é tratado para utilizadores inexistentes.
 
 ---
 

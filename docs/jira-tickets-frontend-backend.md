@@ -512,7 +512,7 @@ Implementar tipos e funções para consumir a API v2 de topics nas páginas púb
 
 ---
 
-## TICKET-13: User Profile (Conexões API)
+## TICKET-13: User Profile (Conexões API) ✅
 
 **Descrição**
 Implementar as funções de fetch para perfis de utilizador: perfil público e dados do utilizador autenticado (datasets, reuses, organizações).
@@ -567,34 +567,36 @@ Implementar as funções de fetch para perfis de utilizador: perfil público e d
 
 ---
 
-## TICKET-17: Posts/News — Leitura (Conexões API)
+## TICKET-17: Posts/News — Leitura (Conexões API) ✅
 
 **Descrição**
-Implementar tipos e funções para consumir a API de posts nas páginas públicas de notícias.
+Implementar tipos e funções para consumir a API de posts nas páginas públicas de notícias, e integrar nas páginas de artigos existentes.
 
 **Contexto Arquitetural**
 
-- `ArticleDetail.tsx` é placeholder sem conexão API.
-- Homepage tem secção de notícias hardcoded.
 - Backend endpoints:
   - `GET /api/1/posts/?page=<n>&page_size=<n>` → listar posts.
   - `GET /api/1/posts/<post>/` → detalhes de um post.
 
-**O que deve ser feito**
+**O que foi feito**
 
-1. **Tipos TS** em `types/api.ts` (se não criados no TICKET-04):
-   - `Post`: id, name, slug, headline, content, body_type, kind, published, owner, tags[], image, image_thumbnail, credit_to, credit_url, created_at, last_modified.
-2. **Funções em `services/api.ts`** (se não criadas no TICKET-04):
-   - `fetchPosts(page?, pageSize?)` → `GET /api/1/posts/`
-   - `fetchPost(slugOrId)` → `GET /api/1/posts/<post>/`
-3. **Nota**: O CRUD admin de posts está no TICKET-34. Aqui é só leitura pública.
+1. **Tipo `Post` completo** em `types/api.ts` — todos os campos: id, name, slug, headline, content, body_type, kind, published, owner, image, image_thumbnail, credit_to, credit_url, created_at, last_modified, tags[].
+2. **`fetchPosts(page?, pageSize?)`** em `services/api.ts` — lista paginada de posts.
+3. **`fetchPost(slugOrId)`** em `services/api.ts` — post individual com tratamento de 404 (retorna `null`).
+4. **`ArticleClient.tsx`** integrado com `fetchPosts()` — paginação real, loading state, empty state. Mock data removido.
+5. **`ArticleDetail.tsx`** integrado com `fetchPost()` — conteúdo da API, sidebar com posts relacionados, tags, créditos. Mock data removido.
+6. **Tratamento de 404** — página "Artigo não encontrado" com link para voltar à lista.
+7. **Homepage** integrada com posts reais da API (chama `fetchPosts(1, 3)`).
+8. **Nota**: O CRUD admin de posts está no TICKET-34. Aqui é só leitura pública.
 
 **Critérios de Aceitação**
 
-- [ ] Tipo `Post` definido com todos os campos.
-- [ ] `fetchPosts()` retorna lista paginada.
-- [ ] `fetchPost()` retorna post completo.
-- [ ] 404 é tratado.
+- [x] `fetchPosts()` retorna lista paginada.
+- [x] Tipo `Post` definido com **todos** os campos (kind, published, owner, credit_to, credit_url).
+- [x] `fetchPost(slugOrId)` retorna post completo.
+- [x] `ArticleClient.tsx` consome `fetchPosts()` em vez de dados mock.
+- [x] `ArticleDetail.tsx` consome `fetchPost()` em vez de dados mock.
+- [x] 404 é tratado na página de detalhe.
 
 ---
 

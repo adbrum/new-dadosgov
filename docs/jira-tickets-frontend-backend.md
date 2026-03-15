@@ -748,11 +748,13 @@ Definir a estratégia de dados e implementar os tipos e funções para substitui
 ## TICKET-22: Spatial/Geographic (Conexões API)
 
 **Descrição**
-Implementar tipos e funções para a API spatial: suggest de zonas, granularidades, e levels.
+Implementar tipos e funções para a API spatial: suggest de zonas, granularidades, e levels. Integrar nos filtros de datasets.
 
 **Contexto Arquitetural**
 
-- Filtros "Spatial Coverage" e "Spatial Granularity" em `DatasetsFilters.tsx` são estáticos.
+- Filtros "Spatial Coverage" e "Spatial Granularity" **não existem ainda** em `DatasetsFilters.tsx` — precisam ser adicionados.
+- `DatasetFilters.granularity` já existe como query param (string) em `types/api.ts` e é passado na `fetchDatasets()`.
+- `DatasetFilters.geozone` já existe como query param em `types/api.ts`.
 - Backend endpoints:
   - `GET /api/1/spatial/zones/suggest/?q=<query>&size=<n>` → suggest de zonas geográficas.
   - `GET /api/1/spatial/zones/<ids>/` → zonas como GeoJSON.
@@ -770,6 +772,9 @@ Implementar tipos e funções para a API spatial: suggest de zonas, granularidad
    - `fetchSpatialZones(ids)` → `GET /api/1/spatial/zones/<ids>/` (retorna GeoJSON).
    - `fetchGranularities()` → `GET /api/1/spatial/granularities/`
    - `fetchGeoLevels()` → `GET /api/1/spatial/levels/`
+3. **Integração em `DatasetsFilters.tsx`**:
+   - Adicionar filtro "Granularidade Espacial" usando `fetchGranularities()` (carregado no `useEffect` inicial, mesmo padrão de organizations/licenses/frequencies).
+   - Adicionar filtro "Cobertura Espacial" usando `suggestSpatialZones()` como autocomplete (mesmo padrão de tags/formats com `suggest: true`).
 
 **Critérios de Aceitação**
 
@@ -777,6 +782,8 @@ Implementar tipos e funções para a API spatial: suggest de zonas, granularidad
 - [ ] `suggestSpatialZones()` retorna sugestões para autocomplete.
 - [ ] `fetchGranularities()` retorna lista de granularidades.
 - [ ] `fetchGeoLevels()` retorna lista de níveis.
+- [ ] Filtro "Granularidade Espacial" aparece em `DatasetsFilters.tsx` com dados dinâmicos da API.
+- [ ] Filtro "Cobertura Espacial" aparece em `DatasetsFilters.tsx` com autocomplete via `suggestSpatialZones()`.
 
 ---
 

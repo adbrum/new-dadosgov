@@ -1153,7 +1153,7 @@ Migrar utilizadores legados (email/password) para CMD (Chave Móvel Digital) ou 
 
 ---
 
-## TICKET-26: Admin — Datasets CRUD (Conexões API)
+## TICKET-26: Admin — Datasets CRUD (Conexões API) ✅
 
 **Descrição**
 Implementar toda a camada de conexão (tipos TS + funções API) necessária para as páginas admin de datasets: listagem pessoal, criação, edição, eliminação, e gestão de resources.

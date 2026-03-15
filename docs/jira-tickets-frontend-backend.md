@@ -840,10 +840,10 @@ Implementar as funções de pedido de adesão a organizações e gestão de memb
 **O que deve ser feito**
 
 1. **Tipos TS** em `types/api.ts`:
-   - `MembershipRequest`: id, user (ref), status, created, comment?.
-   - `OrgMember`: user (ref User), role.
-   - `OrgRole`: id, label.
-2. **Funções em `services/api.ts`**:
+   - `MembershipRequest`: id, user (ref), status, created, comment?. ❌ Em falta.
+   - `OrgMember`: user (ref User), role. ⚠️ Parcial — existe como `OrganizationMember` (com campo `since` extra). Considerar reutilizar.
+   - `OrgRole`: id, label. ❌ Em falta.
+2. **Funções em `services/api.ts`** — ❌ **Nenhuma implementada**:
    - `requestMembership(org)` → `POST /api/1/organizations/<org>/membership/`
    - `fetchMembershipRequests(org)` → `GET /api/1/organizations/<org>/membership/`
    - `acceptMembership(org, requestId)` → `POST /api/1/organizations/<org>/membership/<id>/accept/`
@@ -853,14 +853,15 @@ Implementar as funções de pedido de adesão a organizações e gestão de memb
    - `removeMember(org, userId)` → `DELETE /api/1/organizations/<org>/member/<user>/`
    - `fetchOrgRoles()` → `GET /api/1/organizations/roles/`
 3. **Nota**: Funções partilhadas com TICKET-29 (admin organizations). Definir uma vez e reutilizar.
+4. **Estado atual**: Display read-only de membros já existe em `OrganizationTabs.tsx` (tab "Informações"). Backend totalmente implementado.
 
 **Critérios de Aceitação**
 
-- [ ] Tipos `MembershipRequest`, `OrgMember`, `OrgRole` definidos.
-- [ ] Request membership funciona.
-- [ ] Accept/refuse request funciona.
-- [ ] Gestão de membros (add, update role, remove) funciona.
-- [ ] `fetchOrgRoles()` retorna roles disponíveis.
+- [x] Tipos `MembershipRequest`, `OrgRole` definidos. (`OrganizationMember` atualizado com campo `label`.)
+- [x] Request membership funciona — `requestMembership(org, comment?)` em `services/api.ts`.
+- [x] Accept/refuse request funciona — `acceptMembership(org, id)` e `refuseMembership(org, id, comment?)`.
+- [x] Gestão de membros (add, update role, remove) funciona — `addMember()`, `updateMemberRole()`, `removeMember()`.
+- [x] `fetchOrgRoles()` retorna roles disponíveis.
 
 ---
 

@@ -703,7 +703,7 @@ Implementar uma pesquisa global inspirada no projeto francês cdata (data.gouv.f
 
 ---
 
-## TICKET-20: Mini-Courses — Fonte de Dados (Conexão API)
+## TICKET-20: Mini-Courses — Fonte de Dados (Conexão API) ❓
 
 **Descrição**
 Definir a estratégia de dados e implementar os tipos e funções para substituir os mini-courses hardcoded.
@@ -737,38 +737,11 @@ Definir a estratégia de dados e implementar os tipos e funções para substitui
 
 ---
 
-## TICKET-21: Password Reset (Conexão API)
+## TICKET-21: ~~Password Reset (Conexão API)~~ — CANCELADO
 
-**Descrição**
-Implementar as funções para o fluxo de reset de password usando os endpoints proxied pelos rewrites do Next.js.
+**Estado:** ❌ Cancelado — não aplicável.
 
-**Contexto Arquitetural**
-
-- Backend (Flask-Security):
-  - `POST /reset/` → enviar email de reset (body: `email`, `csrf_token`).
-  - `POST /reset/<token>` → definir nova password (body: `password`, `password_confirm`, `csrf_token`).
-- Next.js rewrites em `next.config.ts` já fazem proxy de `/reset/` e `/reset/:token` ao backend.
-- Backend retorna respostas HTML → pode ser necessário um route handler para traduzir.
-
-**O que deve ser feito**
-
-1. **Route handler** (se necessário) `src/app/reset/route.ts`:
-   - Proxy de `POST /reset/` ao backend.
-   - Traduzir resposta HTML para JSON (mesmo padrão do login route handler).
-2. **Funções em `services/api.ts`**:
-   - `requestPasswordReset(email, csrfToken)` → `POST /reset/` (body: email + csrf_token).
-   - `resetPassword(token, password, passwordConfirm, csrfToken)` → `POST /reset/<token>` (body: password + password_confirm + csrf_token).
-3. **Fluxo de dados**:
-   - Formulário "esqueceu a password" → `fetchCsrfToken()` + `requestPasswordReset()`.
-   - Backend envia email com link `/reset/<token>`.
-   - Formulário de nova password → `fetchCsrfToken()` + `resetPassword()`.
-
-**Critérios de Aceitação**
-
-- [ ] `requestPasswordReset()` envia email e CSRF token.
-- [ ] `resetPassword()` envia token, passwords e CSRF.
-- [ ] Respostas de sucesso e erro são retornadas em formato utilizável.
-- [ ] Token expirado/inválido é detetado.
+**Motivo:** A autenticação do portal será exclusivamente via Chave Móvel Digital (CMD/SAML) e eIDAS. O login por email/password está a ser descontinuado, pelo que o fluxo de reset de password não será implementado. Os rewrites de `/reset/` foram também removidos do `next.config.ts`.
 
 ---
 

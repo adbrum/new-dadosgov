@@ -600,30 +600,36 @@ Implementar tipos e funções para consumir a API de posts nas páginas pública
 
 ---
 
-## TICKET-18: Notifications (Conexão API)
+## TICKET-18: Notifications (Conexão API) ✅
 
 **Descrição**
 Implementar tipo e função para consumir notificações do utilizador autenticado.
 
 **Contexto Arquitetural**
 
-- Backend: `GET /api/1/notifications/` → lista notificações do utilizador. Auth required.
-- Modelo `DiscussionNotificationDetails` recentemente adicionado (commit `fb47e8d9`).
-- Frontend não tem nenhuma lógica de notificações.
+- Backend: `GET /api/1/notifications/` → lista notificações do utilizador. Auth required (`@api.secure`).
+- Modelo `Notification` em `udata/features/notifications/models.py` com 3 tipos de detalhes:
+  - `DiscussionNotificationDetails`: discussion, status, message_id
+  - `MembershipRequestNotificationDetails`: request_organization, request_user
+  - `TransferRequestNotificationDetails`: transfer_owner, transfer_recipient, transfer_subject
 
 **O que deve ser feito**
 
 1. **Tipos TS** em `types/api.ts`:
-   - `Notification`: id, type, created_on, details (object com campos variáveis conforme tipo de notificação).
-   - `NotificationDetails`: pode incluir `{ dataset?, discussion?, organization? }` conforme o tipo.
+   - `Notification`: id, created_at, last_modified, handled_at, user, details (union type).
+   - `DiscussionNotificationDetails`: `{ discussion?: string, status?: string, message_id?: string }`
+   - `MembershipRequestNotificationDetails`: `{ request_organization?: OrganizationRef, request_user?: UserRef }`
+   - `TransferRequestNotificationDetails`: `{ transfer_owner?: object, transfer_recipient?: object, transfer_subject?: object }`
+   - `NotificationDetails`: union dos 3 tipos acima.
 2. **Funções em `services/api.ts`**:
    - `fetchNotifications(page?, pageSize?)` → `GET /api/1/notifications/`
 
 **Critérios de Aceitação**
 
-- [ ] Tipo `Notification` definido.
-- [ ] `fetchNotifications()` retorna lista paginada.
-- [ ] Auth required (401 se não autenticado).
+- [x] Tipo `Notification` definido (com campos corretos: id, created_at, handled_at, user, details).
+- [x] Tipos de detalhes (Discussion, MembershipRequest, TransferRequest) definidos.
+- [x] `fetchNotifications()` retorna lista paginada.
+- [x] Auth required (401 se não autenticado).
 
 ---
 

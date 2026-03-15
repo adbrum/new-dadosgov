@@ -981,7 +981,7 @@ Sincronizar as branches divergentes de login (`login_tabs` da Ines e `login_fina
 
 ---
 
-## TICKET-39: Global Search — Página de Pesquisa com Dropdown e Resultados (Frontend)
+## TICKET-39: Global Search — Página de Pesquisa com Dropdown e Resultados (Frontend) ✅
 
 **Descrição**
 Implementar uma pesquisa global inspirada no projeto francês cdata (data.gouv.fr): dropdown de seleção de tipo ao digitar + página de resultados com sidebar de tipos/contagens e lista paginada.
@@ -1185,53 +1185,53 @@ Implementar toda a camada de conexão (tipos TS + funções API) necessária par
     - `GET /api/1/datasets/resource_types/` — tipos de resource.
     - `GET /api/1/datasets/extensions/` — extensões de ficheiro permitidas.
 
-**O que deve ser feito**
+**O que foi feito**
 
 1. **Tipos TS** em `types/api.ts`:
-   - Estender `Dataset` com campos completos: `acronym`, `private`, `featured`, `archived`, `frequency`, `temporal_coverage`, `spatial`, `quality`, `badges[]`, `owner`.
-   - Criar `DatasetCreatePayload` (campos enviados no POST).
-   - Criar `DatasetUpdatePayload` (campos enviados no PUT).
-   - Criar `ResourceCreatePayload`, `ResourceUpdatePayload`.
-   - Criar `License`, `Frequency`, `Schema`, `Activity` types.
+   - `Dataset` estendido com: `acronym`, `private`, `featured`, `archived`, `frequency`, `frequency_date`, `temporal_coverage`, `spatial`, `quality`, `badges[]`, `owner`, `uri`, `permissions`, `description_short`, `schema`, `harvest`, `extras`, `community_resources`, `deleted`, `last_update`.
+   - `Resource` estendido com: `description`, `filetype`, `mime`, `checksum`, `last_modified`, `schema`, `extras`, `preview_url`, `latest`.
+   - Payloads criados: `DatasetCreatePayload`, `DatasetUpdatePayload`, `ResourceCreatePayload`, `ResourceUpdatePayload`.
+   - Tipos auxiliares: `SchemaRef`, `TemporalCoverage`, `SpatialCoverage`, `Checksum`, `DatasetPermissions`, `ResourceType`, `Activity`.
+   - `License`, `Frequency`, `Badge`, `DatasetBadges` — já existiam.
 2. **Funções em `services/api.ts`**:
-   - `fetchMyDatasets(page?, pageSize?)` → `GET /api/1/me/datasets/`
-   - `fetchMyOrgDatasets(page?, pageSize?)` → `GET /api/1/me/org_datasets/`
-   - `createDataset(payload)` → `POST /api/1/datasets/`
-   - `updateDataset(id, payload)` → `PUT /api/1/datasets/<id>/`
-   - `deleteDataset(id)` → `DELETE /api/1/datasets/<id>/`
-   - `uploadResource(datasetId, file)` → `POST /api/1/datasets/<id>/upload/` (multipart)
-   - `createResource(datasetId, payload)` → `POST /api/1/datasets/<id>/resources/`
-   - `updateResource(datasetId, resourceId, payload)` → `PUT /api/1/datasets/<id>/resources/<rid>/`
-   - `deleteResource(datasetId, resourceId)` → `DELETE /api/1/datasets/<id>/resources/<rid>/`
-   - `reorderResources(datasetId, resourceIds[])` → `PUT /api/1/datasets/<id>/resources/`
-   - `fetchLicenses()` → `GET /api/1/datasets/licenses/`
-   - `fetchFrequencies()` → `GET /api/1/datasets/frequencies/`
-   - `fetchSchemas()` → `GET /api/1/datasets/schemas/`
-   - `fetchResourceTypes()` → `GET /api/1/datasets/resource_types/`
-   - `fetchActivity(relatedTo)` → `GET /api/1/activity/?related_to=<id>`
-   - `toggleDatasetFeatured(id, featured)` → `POST|DELETE /api/1/datasets/<id>/featured/`
-3. **Fluxo de criação** (dados que transitam):
-   - Step 1: Escolha do modo (standard ou structured/schema).
-   - Step 2: POST dataset com `private: true` + metadados → backend retorna dataset com `id`.
-   - Step 3: Para cada resource, POST upload ou POST resource com URL → backend retorna resource.
-   - Step 4: PUT dataset com `private: false` para publicar.
-4. **Fluxo de edição** (dados que transitam):
-   - GET dataset completo → preencher form.
-   - PUT com campos alterados → backend retorna dataset atualizado.
-   - CRUD de resources individual.
-   - GET activity log para tab de atividades.
+   - Leitura: `fetchMyDatasets()` (flat array → APIResponse wrapper, filtra datasets pessoais), `fetchMyOrgDatasets()`, `fetchLicenses()`, `fetchFrequencies()`, `fetchSchemas()`, `fetchDatasetBadges()`, `fetchResourceTypes()`, `fetchActivity()`.
+   - Mutações: `createDataset()`, `updateDataset()`, `deleteDataset()`, `uploadResource()` (multipart), `createResource()`, `updateResource()`, `deleteResource()`, `reorderResources()`, `toggleDatasetFeatured()`.
+   - Erros de validação do backend retornados como objetos estruturados.
+3. **Wizard de criação** (`DatasetsAdminClient.tsx`) integrado com API:
+   - Step 2: POST `createDataset()` com `private: true` + metadados → dataset pessoal (owner = current user, sem organization).
+   - Step 3: Upload ficheiros via `uploadResource()` (multipart/form-data).
+   - Step 4: "Publicar" → `updateDataset(private: false)`; "Salvar rascunho" → redirige para listagem.
+   - Dropdowns de licenças e frequências carregados da API.
+   - Loading states e erros de validação exibidos.
+4. **Página de edição** (`app/pages/admin/me/datasets/edit/page.tsx` + `DatasetsEditClient.tsx`):
+   - 4 tabs via Agora `Tabs` component: Metadados, Ficheiros, Discussões, Atividades.
+   - Tab Metadados: edição de título, acrónimo, descrição, licença, frequência, cobertura temporal + botão eliminar.
+   - Tab Ficheiros: listagem de resources com upload e delete.
+   - Tab Atividades: lazy-load de `fetchActivity()`.
+   - Erros de validação do backend exibidos.
+5. **Listagem admin** (`DatasetsClient.tsx` + `SystemDatasetsClient.tsx`):
+   - Mock data removido, dados reais da API.
+   - Pesquisa client-side por título, acrónimo e slug.
+   - Filtro por estado: Público, Rascunho, Arquivo, Excluído.
+   - Ordenação controlada por: título (string), criado em (date), última modificação (date), ficheiros (numeric).
+   - Paginação client-side com `onPageChange` / `onPageSizeChange`.
+   - `DatasetsClient` filtra apenas datasets pessoais (`owner` presente, `organization` ausente).
+   - `SystemDatasetsClient` mostra todos os datasets do sistema.
 
 **Critérios de Aceitação**
 
-- [ ] Todos os tipos TS estão definidos e espelham os campos do backend.
-- [ ] Todas as funções fetch/mutate estão em `services/api.ts` e funcionam.
-- [ ] `fetchMyDatasets()` retorna a lista paginada do utilizador.
-- [ ] `createDataset()` envia o payload correto e retorna o dataset criado.
-- [ ] Upload de ficheiros funciona com `multipart/form-data`.
-- [ ] `updateDataset()` e `deleteDataset()` funcionam.
-- [ ] Resource CRUD (create, update, delete, reorder) funciona.
-- [ ] Funções auxiliares (licenses, frequencies, schemas) retornam dados corretos.
-- [ ] Erros de validação do backend são retornados em formato utilizável pelo frontend.
+- [x] `fetchMyDatasets()` retorna a lista paginada do utilizador.
+- [x] Funções auxiliares (licenses, frequencies, schemas) retornam dados corretos.
+- [x] Todos os tipos TS estão definidos e espelham os campos do backend (Dataset extensions, payloads, Schema, Activity).
+- [x] Todas as funções fetch/mutate estão em `services/api.ts` e funcionam.
+- [x] `createDataset()` envia o payload correto e retorna o dataset criado.
+- [x] Upload de ficheiros funciona com `multipart/form-data`.
+- [x] `updateDataset()` e `deleteDataset()` funcionam.
+- [x] Resource CRUD (create, update, delete, reorder) funciona.
+- [x] Listagem admin usa dados reais da API (mock data removido).
+- [x] Wizard de criação integrado com API (POST dataset → upload resources → publicar).
+- [x] Página de edição de dataset implementada e funcional.
+- [x] Erros de validação do backend são retornados em formato utilizável pelo frontend.
 
 ---
 
@@ -1730,7 +1730,7 @@ Implementar a camada de conexão para gestão global do site e moderação de co
 | 24                                    | Organization Membership (request, accept, members)       | Public | Low      | Not started                        |
 | 25                                    | CSV/Data Export (URL generators)                         | Public | Low      | Not started                        |
 | **BACKOFFICE / ADMIN — Conexões API** |                                                          |        |          |                                    |
-| 26                                    | Admin — Datasets CRUD (tipos TS + fetch/mutate)          | Admin  | High     | Not started                        |
+| 26                                    | Admin — Datasets CRUD (tipos TS + fetch/mutate)          | Admin  | High     | Concluído                          |
 | 27                                    | Admin — Reuses CRUD (tipos TS + fetch/mutate)            | Admin  | High     | Not started                        |
 | 28                                    | Admin — Dataservices CRUD (wiring form existente)        | Admin  | Medium   | UI exists, needs wiring            |
 | 29                                    | Admin — Organizations CRUD + Members                     | Admin  | High     | Not started                        |

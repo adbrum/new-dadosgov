@@ -737,7 +737,7 @@ Definir a estratégia de dados e implementar os tipos e funções para substitui
 
 ---
 
-## TICKET-21: ~~Password Reset (Conexão API)~~ — CANCELADO
+## TICKET-21: ~~Password Reset (Conexão API)~~ — `CANCELADO`
 
 **Estado:** ❌ Cancelado — não aplicável.
 
@@ -789,7 +789,7 @@ Implementar tipos e funções para a API spatial: suggest de zonas, granularidad
 
 ---
 
-## TICKET-23: Reports — Submissão (Conexão API)
+## TICKET-23: Reports — Submissão (Conexão API) — ✅
 
 **Descrição**
 Implementar tipos e funções para submeter reports de conteúdo ao backend.
@@ -797,14 +797,15 @@ Implementar tipos e funções para submeter reports de conteúdo ao backend.
 **Contexto Arquitetural**
 
 - Backend endpoints:
-  - `POST /api/1/reports/` → criar report (body: subject `{class, id}`, reason, comment). Auth required.
-  - `GET /api/1/reports/reasons/` → razões de report disponíveis.
+  - `POST /api/1/reports/` → criar report (body: subject `{class, id}`, reason, message). Supports anonymous submissions.
+  - `GET /api/1/reports/reasons/` → razões de report disponíveis (public).
 
 **O que deve ser feito**
 
 1. **Tipos TS** em `types/api.ts`:
-   - `ReportCreatePayload`: subject `{ class: string, id: string }`, reason, comment?.
-   - `ReportReason`: id, label.
+   - `ReportCreatePayload`: subject `{ class: string, id: string }`, reason, message?.
+   - `ReportReason`: value, label.
+   - `Report`: full response type (id, by, subject, reason, message, reported_at, dismissed_at, etc.).
 2. **Funções em `services/api.ts`**:
    - `fetchReportReasons()` → `GET /api/1/reports/reasons/`
    - `createReport(payload)` → `POST /api/1/reports/`
@@ -812,10 +813,10 @@ Implementar tipos e funções para submeter reports de conteúdo ao backend.
 
 **Critérios de Aceitação**
 
-- [ ] `fetchReportReasons()` retorna lista de razões.
-- [ ] `createReport()` envia subject, reason e comment.
-- [ ] Auth required (401 se não autenticado).
-- [ ] Erros de validação retornados em formato utilizável.
+- [x] `fetchReportReasons()` retorna lista de razões. → `services/api.ts:fetchReportReasons()`
+- [x] `createReport()` envia subject, reason e message. → `services/api.ts:createReport()`
+- [x] Credentials included (cookies sent for authenticated users, anonymous also supported).
+- [x] Erros de validação retornados em formato utilizável (error thrown with parsed message).
 
 ---
 

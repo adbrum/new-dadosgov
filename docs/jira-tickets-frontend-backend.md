@@ -1290,7 +1290,7 @@ Implementar a camada de conexão para as páginas admin de reuses: listagem pess
 
 ---
 
-## TICKET-28: Admin — Dataservices CRUD (Conexões API)
+## TICKET-28: Admin — Dataservices CRUD (Conexões API) ✅
 
 **Descrição**
 Implementar a camada de conexão para dataservices: listagem, criação (wiring do form existente `ApiRegistrationClient.tsx`), edição e eliminação.
@@ -1333,7 +1333,7 @@ Implementar a camada de conexão para dataservices: listagem, criação (wiring 
 
 ---
 
-## TICKET-29: Admin — Organizations CRUD (Conexões API)
+## TICKET-29: Admin — Organizations CRUD (Conexões API) ✅
 
 **Descrição**
 Implementar a camada de conexão para organizações no admin: criação, edição, eliminação, logo upload, e gestão de membros.
@@ -1389,15 +1389,15 @@ Implementar a camada de conexão para organizações no admin: criação, ediç�
 
 **Critérios de Aceitação**
 
-- [ ] Tipos completos para Organization, Member, MembershipRequest.
-- [ ] CRUD de organização funciona (create, update, delete).
-- [ ] Upload de logo funciona com multipart.
-- [ ] Gestão de membros: add, update role, remove, accept/refuse request.
-- [ ] Autocomplete de organizações funciona.
+- [x] Tipos completos para Organization, Member, MembershipRequest.
+- [x] CRUD de organização funciona (create, update, delete).
+- [x] Upload de logo funciona com multipart.
+- [x] Gestão de membros: add, update role, remove, accept/refuse request.
+- [x] Autocomplete de organizações funciona.
 
 ---
 
-## TICKET-30: Admin — User Profile & Metrics (Conexões API)
+## TICKET-30: Admin — User Profile & Metrics (Conexões API) ✅
 
 **Descrição**
 Implementar a camada de conexão para o perfil do utilizador autenticado: edição de perfil, upload de avatar, invitations de organizações, eliminação de conta, e métricas pessoais.
@@ -1416,29 +1416,29 @@ Implementar a camada de conexão para o perfil do utilizador autenticado: ediç�
   - `GET /api/1/me/metrics/` — métricas agregadas do utilizador.
   - `GET /api/1/activity/?owner=<userId>` — atividade do utilizador.
 
-**O que deve ser feito**
+**O que foi feito**
 
 1. **Tipos TS** em `types/api.ts`:
-   - Estender `User` (do TICKET-03) com: `about`, `website`, `organizations[]`, `apikey`.
-   - Criar `UserUpdatePayload`: first_name, last_name, about, website.
-   - Criar `OrgInvitation`: id, organization, status, created.
-   - Criar `UserMetrics`: datasets, reuses, followers, views, downloads (ou conforme resposta da API).
+   - `UserPublic` estendido com `apikey: string | null`.
+   - `UserMetrics` estendido com `downloads: number`.
+   - Criado `UserUpdatePayload`: first_name, last_name, about, website (todos opcionais).
+   - Criado `OrgInvitation`: id, organization, status (pending|accepted|refused), created.
 2. **Funções em `services/api.ts`**:
-   - `updateProfile(payload)` → `PUT /api/1/me/`
-   - `uploadAvatar(file)` → `POST /api/1/me/avatar/` (multipart)
-   - `deleteAccount()` → `DELETE /api/1/me/`
-   - `fetchOrgInvitations()` → `GET /api/1/me/org_invitations/`
-   - `fetchMyMetrics()` → `GET /api/1/me/metrics/`
-   - `fetchUserActivity(userId?, page?)` → `GET /api/1/activity/?owner=<id>`
+   - `updateProfile(payload)` → `PUT /api/1/me/` — envia JSON, retorna `UserPublic`.
+   - `uploadAvatar(file)` → `POST /api/1/me/avatar` — multipart/form-data, retorna `UserPublic`.
+   - `deleteAccount()` → `DELETE /api/1/me/` — sem retorno (void).
+   - `fetchOrgInvitations(page?, pageSize?)` → `GET /api/1/me/org_invitations/` — retorna `APIResponse<OrgInvitation>`.
+   - `fetchMyMetrics()` → `GET /api/1/me/metrics/` — retorna `UserMetrics`.
+   - `fetchUserActivity(userId?, page?, pageSize?)` → `GET /api/1/activity/?owner=<id>` — retorna `APIResponse<Activity>`.
 
 **Critérios de Aceitação**
 
-- [ ] `updateProfile()` envia os campos corretos e retorna user atualizado.
-- [ ] `uploadAvatar()` funciona com multipart.
-- [ ] `deleteAccount()` funciona e retorna confirmação.
-- [ ] `fetchOrgInvitations()` retorna lista de convites.
-- [ ] `fetchMyMetrics()` retorna métricas agregadas.
-- [ ] Tipos TS espelham as respostas da API.
+- [x] `updateProfile()` envia os campos corretos e retorna user atualizado.
+- [x] `uploadAvatar()` funciona com multipart.
+- [x] `deleteAccount()` funciona e retorna confirmação.
+- [x] `fetchOrgInvitations()` retorna lista de convites.
+- [x] `fetchMyMetrics()` retorna métricas agregadas.
+- [x] Tipos TS espelham as respostas da API.
 
 ---
 
@@ -1703,7 +1703,6 @@ Implementar a camada de conexão para gestão global do site e moderação de co
 
 ---
 
-
 ## TICKET-40: Dataset Detail Page — Fix Hardcoded Content & UI Bugs (Frontend)
 
 **Descrição**
@@ -1795,13 +1794,13 @@ Corrigir a página de detalhe de dataset que contém múltiplos blocos de conte�
 
 **Ficheiros a alterar**
 
-| Ficheiro | Alterações |
-|---|---|
-| `src/components/datasets/DatasetDetailClient.tsx` | Remover conteúdo estático, usar dados da API |
-| `src/components/datasets/DatasetTabs.tsx` | Popular tabs com dados reais |
-| `src/components/datasets/DatasetsClient.tsx` | Corrigir métrica hardcoded nos cards |
-| `src/types/api.ts` | Adicionar/verificar tipo `DatasetQuality` se necessário |
-| `src/services/api.ts` | Adicionar funções em falta (community resources, etc.) |
+| Ficheiro                                          | Alterações                                              |
+| ------------------------------------------------- | ------------------------------------------------------- |
+| `src/components/datasets/DatasetDetailClient.tsx` | Remover conteúdo estático, usar dados da API            |
+| `src/components/datasets/DatasetTabs.tsx`         | Popular tabs com dados reais                            |
+| `src/components/datasets/DatasetsClient.tsx`      | Corrigir métrica hardcoded nos cards                    |
+| `src/types/api.ts`                                | Adicionar/verificar tipo `DatasetQuality` se necessário |
+| `src/services/api.ts`                             | Adicionar funções em falta (community resources, etc.)  |
 
 **Critérios de Aceitação**
 
@@ -1815,6 +1814,7 @@ Corrigir a página de detalhe de dataset que contém múltiplos blocos de conte�
 - [ ] Nenhum link `href="#"` restante na página.
 - [ ] Botão favoritos persiste estado via API.
 - [ ] "Metadados: 35%" na listagem corrigido ou removido.
+
 ## TICKET-42: Admin — Organization Content Pages (Conexões API — `org/*`)
 
 **Descrição**
@@ -1946,7 +1946,6 @@ Implementar controlo de permissões no frontend do admin: esconder secções da 
 - [ ] "Minha organização" só é visível para utilizadores que pertencem a pelo menos uma organização.
 - [ ] Acesso direto a rotas protegidas (via URL) é bloqueado com redirecionamento.
 - [ ] Utilizadores não autenticados são redirecionados para login ao aceder a qualquer página `/admin/*`.
-
 
 ---
 

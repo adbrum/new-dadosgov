@@ -1326,10 +1326,10 @@ Implementar a camada de conexão para dataservices: listagem, criação (wiring 
 
 **Critérios de Aceitação**
 
-- [ ] Tipo `Dataservice` definido em `types/api.ts`.
-- [ ] Todas as funções CRUD estão em `services/api.ts`.
-- [ ] O form existente (`ApiRegistrationClient.tsx`) submete ao backend.
-- [ ] Erros de validação são retornados e utilizáveis.
+- [x] Tipo `Dataservice` definido em `types/api.ts`.
+- [x] Todas as funções CRUD estão em `services/api.ts`.
+- [x] O form existente (`ApiRegistrationClient.tsx`) submete ao backend.
+- [x] Erros de validação são retornados e utilizáveis.
 
 ---
 

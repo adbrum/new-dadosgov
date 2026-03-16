@@ -1865,7 +1865,7 @@ Implementar as páginas de conteúdo da organização no admin (`/admin/org/`): 
 
 ---
 
-## TICKET-43: Admin — Editorial Page (Conexões API — Sysadmin)
+## TICKET-43: Admin — Editorial Page (Conexões API — Sysadmin) ✅
 
 **Descrição**
 Implementar a camada de conexão para a página editorial do admin (`/admin/system/editorial`): gestão de conteúdo destacado na homepage (datasets, reuses e organizações em destaque).
@@ -1901,11 +1901,11 @@ Implementar a camada de conexão para a página editorial do admin (`/admin/syst
 
 **Critérios de Aceitação**
 
-- [ ] Listagem de datasets e reuses destacados carregada da API.
-- [ ] Autocomplete funciona para pesquisar e adicionar items.
-- [ ] Reordenação e remoção funcionam.
-- [ ] PUT envia a lista atualizada e persiste no backend.
-- [ ] Tipos TS definidos para HomeContent.
+- [x] Listagem de datasets e reuses destacados carregada da API.
+- [x] Autocomplete funciona para pesquisar e adicionar items.
+- [x] Reordenação e remoção funcionam.
+- [x] PUT envia a lista atualizada e persiste no backend.
+- [x] Tipos TS definidos para HomeContent.
 
 ---
 
@@ -1992,7 +1992,7 @@ Implementar controlo de permissões no frontend do admin: esconder secções da 
 | 35                                    | Admin — User Management (Sysadmin)                       | Admin  | Low      | Not started                        |
 | 36                                    | Admin — Site Management & Moderation (Sysadmin)          | Admin  | Medium   | Not started                        |
 | 42                                    | Admin — Organization Content Pages (`org/*`)             | Admin  | High     | Concluído                          |
-| 43                                    | Admin — Editorial Page (Sysadmin)                        | Admin  | Medium   | Not started                        |
+| 43                                    | Admin — Editorial Page (Sysadmin)                        | Admin  | Medium   | Concluído                          |
 | 44                                    | Admin — Permission Guards & Role-Based Navigation        | Admin  | High     | Not started                        |
 | **AUTENTICAÇÃO EXTERNA**              |                                                          |        |          |                                    |
 | 37                                    | Auth — Autenticação.gov / SAML (plugin + frontend)       | Auth   | High     | Concluído                          |

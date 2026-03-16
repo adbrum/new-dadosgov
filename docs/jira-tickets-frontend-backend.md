@@ -1909,7 +1909,7 @@ Implementar a camada de conexão para a página editorial do admin (`/admin/syst
 
 ---
 
-## TICKET-44: Admin — Permission Guards & Role-Based Navigation
+## TICKET-44: Admin — Permission Guards & Role-Based Navigation ✅
 
 **Descrição**
 Implementar controlo de permissões no frontend do admin: esconder secções da navegação lateral com base nos roles do utilizador, proteger rotas com guards, e garantir que apenas sysadmins acedem a "Sistema" e que "Minha organização" só aparece para utilizadores com organização.
@@ -1941,11 +1941,11 @@ Implementar controlo de permissões no frontend do admin: esconder secções da 
 
 **Critérios de Aceitação**
 
-- [ ] `UserRef` / AuthContext inclui `roles[]` e `organizations[]`.
-- [ ] "Sistema" só é visível na navegação para utilizadores com role `admin`.
-- [ ] "Minha organização" só é visível para utilizadores que pertencem a pelo menos uma organização.
-- [ ] Acesso direto a rotas protegidas (via URL) é bloqueado com redirecionamento.
-- [ ] Utilizadores não autenticados são redirecionados para login ao aceder a qualquer página `/admin/*`.
+- [x] `UserRef` / AuthContext inclui `roles[]` e `organizations[]`.
+- [x] "Sistema" só é visível na navegação para utilizadores com role `admin`.
+- [x] "Minha organização" só é visível para utilizadores que pertencem a pelo menos uma organização.
+- [x] Acesso direto a rotas protegidas (via URL) é bloqueado com redirecionamento.
+- [x] Utilizadores não autenticados são redirecionados para login ao aceder a qualquer página `/admin/*`.
 
 ---
 
@@ -1993,7 +1993,7 @@ Implementar controlo de permissões no frontend do admin: esconder secções da 
 | 36                                    | Admin — Site Management & Moderation (Sysadmin)          | Admin  | Medium   | Not started                        |
 | 42                                    | Admin — Organization Content Pages (`org/*`)             | Admin  | High     | Concluído                          |
 | 43                                    | Admin — Editorial Page (Sysadmin)                        | Admin  | Medium   | Concluído                          |
-| 44                                    | Admin — Permission Guards & Role-Based Navigation        | Admin  | High     | Not started                        |
+| 44                                    | Admin — Permission Guards & Role-Based Navigation        | Admin  | High     | Concluído                          |
 | **AUTENTICAÇÃO EXTERNA**              |                                                          |        |          |                                    |
 | 37                                    | Auth — Autenticação.gov / SAML (plugin + frontend)       | Auth   | High     | Concluído                          |
 | 38                                    | Maintenance — Sync Login branches & resolution           | Repo   | High     | Concluído                          |

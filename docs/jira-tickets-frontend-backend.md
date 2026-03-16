@@ -1235,7 +1235,7 @@ Implementar toda a camada de conexão (tipos TS + funções API) necessária par
 
 ---
 
-## TICKET-27: Admin — Reuses CRUD (Conexões API)
+## TICKET-27: Admin — Reuses CRUD (Conexões API) ✅
 
 **Descrição**
 Implementar a camada de conexão para as páginas admin de reuses: listagem pessoal, criação, edição, eliminação, e gestão de datasets/dataservices associados.
@@ -1281,12 +1281,12 @@ Implementar a camada de conexão para as páginas admin de reuses: listagem pess
 
 **Critérios de Aceitação**
 
-- [ ] Tipos TS espelham os campos do backend.
-- [ ] `fetchMyReuses()` retorna lista paginada.
-- [ ] `createReuse()` + `uploadReuseImage()` + `linkDatasetToReuse()` funcionam em sequência.
-- [ ] `updateReuse()` e `deleteReuse()` funcionam.
-- [ ] Tipos e tópicos de reuse são carregados do backend.
-- [ ] Erros de validação são retornados em formato utilizável.
+- [x] Tipos TS espelham os campos do backend.
+- [x] `fetchMyReuses()` retorna lista paginada.
+- [x] `createReuse()` + `uploadReuseImage()` + `linkDatasetToReuse()` funcionam em sequência.
+- [x] `updateReuse()` e `deleteReuse()` funcionam.
+- [x] Tipos e tópicos de reuse são carregados do backend.
+- [x] Erros de validação são retornados em formato utilizável.
 
 ---
 

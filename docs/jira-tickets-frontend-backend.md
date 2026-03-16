@@ -1849,7 +1849,7 @@ Implementar as páginas de conteúdo da organização no admin (`/admin/org/`): 
    - `org/profile/page.tsx` — edição do perfil da org (nome, descrição, logo), reutilizando funções do TICKET-29.
    - `org/statistics/page.tsx` — métricas da org (datasets, reuses, followers, views).
 3. **Funções em `services/api.ts`** (se não existirem dos tickets anteriores):
-   - `fetchOrgReuses(org, page?)` → `GET /api/1/organizations/<org>/reuses/`
+      - `fetchOrgReuses(org, page?)` → `GET /api/1/organizations/<org>/reuses/`
    - `fetchOrgDataservices(org, page?)` → `GET /api/1/dataservices/?organization=<org>`
    - `fetchOrgHarvesters(org, page?)` → `GET /api/1/harvest/sources/?organization=<org>`
    - `fetchOrgCommunityResources(org, page?)` → `GET /api/1/datasets/community_resources/?organization=<org>`
@@ -1904,7 +1904,7 @@ Implementar a camada de conexão para a página editorial do admin (`/admin/syst
 - [x] Listagem de datasets e reuses destacados carregada da API.
 - [x] Autocomplete funciona para pesquisar e adicionar items.
 - [x] Reordenação e remoção funcionam.
-- [x] PUT envia a lista atualizada e persiste no backend.
+- [x] PUT envia a lista após reordenação e persiste no backend.
 - [x] Tipos TS definidos para HomeContent.
 
 ---
@@ -1949,7 +1949,96 @@ Implementar controlo de permissões no frontend do admin: esconder secções da 
 
 ---
 
-## TICKET-45: Explorar — Redirecionar HVDs para Datasets com tag=hvd
+## TICKET-45: Global Search — Unify Local Searches with CategoryToggles Navigation
+
+**Descrição**
+Unificar as pesquisas locais das páginas de listagem (datasets, organizations, reuses, dataservices) numa pesquisa global integrada. Ao pesquisar em qualquer página de listagem, o componente `CategoryToggles` deve mostrar os totais de resultados para todas as categorias, e ao clicar numa categoria, navegar para a respetiva página já com os resultados da pesquisa pré-carregados. Seguir o padrão do projeto CDATA (`cdata-pt`) onde o `MenuSearch` no header e o `GlobalSearch` com radio toggles permitem pesquisar e navegar entre tipos de resultado.
+
+**Contexto Arquitetural**
+
+- No CDATA (`cdata-pt`), a pesquisa global funciona assim:
+  - O `MenuSearch` no header (Headless UI Combobox) mostra 4 opções ao escrever: "Pesquisar «query» nos datasets/APIs/reutilizações/organizações".
+  - Cada opção navega para `/datasets/search?q=...`, `/dataservices/search?q=...`, `/reuses/search?q=...`, `/organizations?q=...`.
+  - A página `GlobalSearch` usa radio buttons (tipo `CategoryToggles`) para alternar entre categorias, mostrando o total de resultados por tipo.
+  - Ao mudar de categoria, a URL muda e os filtros incompatíveis são resetados, mantendo o parâmetro `q`.
+  - A API é chamada em paralelo para obter totais de todas as categorias simultaneamente.
+- No projeto atual (`new-dadosgov/frontend`):
+  - Existe `SearchDropdown` no header que já navega para `/pages/search?q=...&type=...`.
+  - Existe `SearchClient` em `/pages/search` que já pesquisa datasets, organizations e reuses com toggles por tipo.
+  - Existe `CategoryToggles` que mostra as 4 categorias (reutilizações, datasets, APIs, organizações) com contagens do `SiteMetrics`, mas **apenas navega para a página** sem propagar a query de pesquisa.
+  - `CategoryToggles` só é usado em `OrganizationsFilters.tsx` — **falta nas páginas de datasets, reuses e dataservices**.
+  - Cada página de listagem (datasets, organizations, reuses) tem o seu próprio `InputSearchBar` que pesquisa localmente com `?q=`.
+  - Não existe página de listagem pública para dataservices (apenas `/pages/dataservices/preview/`).
+- Endpoints de pesquisa no backend:
+  - `GET /api/1/datasets/?q=` — pesquisa datasets
+  - `GET /api/1/organizations/?q=` — pesquisa organizações
+  - `GET /api/1/reuses/?q=` — pesquisa reutilizações
+  - `GET /api/1/dataservices/?q=` — pesquisa dataservices (API v1)
+- Dependências: TICKET-05 (Datasets Search), TICKET-10 (Organizations Search), TICKET-11 (Reuses Search).
+
+**O que deve ser feito**
+
+1. **Atualizar `CategoryToggles` para suportar query de pesquisa**:
+   - Adicionar prop opcional `searchQuery?: string` ao componente.
+   - Quando `searchQuery` estiver definido, propagar o parâmetro `?q=` na navegação: `router.push(item.href + '?q=' + encodeURIComponent(searchQuery))`.
+   - Quando `searchQuery` estiver definido, substituir as contagens do `SiteMetrics` pelos totais de resultados da pesquisa para cada categoria (chamar os endpoints de pesquisa em paralelo com `page_size=1` para obter apenas os totais).
+   - Adicionar estado interno e `useEffect` para fazer fetch dos totais de pesquisa quando `searchQuery` muda.
+   - Manter o comportamento atual (contagens `SiteMetrics`, navegação sem `?q=`) quando `searchQuery` não for fornecido.
+
+2. **Adicionar `CategoryToggles` à página de datasets (`DatasetsFilters.tsx` ou `DatasetsClient.tsx`)**:
+   - Importar e renderizar `CategoryToggles` na sidebar de filtros, acima dos filtros existentes.
+   - Passar `siteMetrics` e `searchQuery` (do URL param `q`) como props.
+   - Garantir que o `CategoryToggles` reflete a categoria "datasets" como ativa (via pathname).
+
+3. **Adicionar `CategoryToggles` à página de reuses (`ReusesClient.tsx`)**:
+   - Importar e renderizar `CategoryToggles` na sidebar, seguindo o mesmo padrão da página de organizações.
+   - Passar `siteMetrics` e `searchQuery` como props.
+   - Garantir que o `CategoryToggles` reflete a categoria "reutilizações" como ativa.
+
+4. **Criar página de listagem pública de dataservices**:
+   - Criar `src/app/pages/dataservices/page.tsx` (server component) com suporte a `?q=` e `?page=`.
+   - Criar `src/components/dataservices/DataservicesClient.tsx` (client component) com:
+     - `InputSearchBar` no banner.
+     - `CategoryToggles` na sidebar with `searchQuery`.
+     - Listagem de dataservices com cards.
+     - Paginação.
+   - Adicionar `fetchDataservices(page, pageSize, filters)` e `searchDataservices(query, page, pageSize)` em `services/api.ts` se não existirem.
+   - Adicionar tipo `Dataservice` em `types/api.ts` se não existir.
+
+5. **Atualizar `SearchDropdown` no header para incluir opção de APIs/Dataservices**:
+   - Adicionar "APIs" como 4ª opção no `SEARCH_OPTIONS` do `SearchDropdown`.
+   - Atualizar o tipo `SearchType` para incluir `"dataservices"`.
+   - Ao selecionar "APIs", navegar para `/pages/dataservices?q=...`.
+
+6. **Atualizar `SearchClient` (página `/pages/search`) para incluir dataservices**:
+   - Adicionar "APIs" como 4ª tab nos `TYPES`.
+   - Adicionar estado e fetch para dataservices (`searchDataservices`).
+   - Adicionar renderização de resultados de dataservices.
+   - Atualizar totais para incluir dataservices.
+
+7. **Garantir propagação bidirecional da query entre páginas**:
+   - Quando o utilizador pesquisa na página de datasets e clica em "Organizações" no `CategoryToggles`, deve navegar para `/pages/organizations?q=mesma-query`.
+   - Quando chega a `/pages/organizations?q=query`, o `InputSearchBar` dessa página deve mostrar a query e os resultados devem estar filtrados.
+   - O mesmo para todas as combinações: datasets↔organizations↔reuses↔dataservices.
+
+8. **Atualizar `OrganizationsFilters.tsx`** para passar `searchQuery` ao `CategoryToggles`:
+   - Receber a query de pesquisa atual (do URL param `q`) e passá-la ao componente `CategoryToggles` já existente.
+
+**Critérios de Aceitação**
+
+- [ ] `CategoryToggles` aceita `searchQuery` e mostra totais de pesquisa por categoria (não apenas `SiteMetrics`).
+- [ ] `CategoryToggles` está presente em todas as 4 páginas de listagem: datasets, organizations, reuses, dataservices.
+- [ ] Ao clicar numa categoria no `CategoryToggles`, navega para a página correta com `?q=` preservado.
+- [ ] A página de destino mostra os resultados da pesquisa para a query recebida.
+- [ ] Existe página de listagem pública de dataservices (`/pages/dataservices`) com pesquisa e `CategoryToggles`.
+- [ ] `SearchDropdown` no header inclui opção "APIs" (dataservices).
+- [ ] `SearchClient` (`/pages/search`) inclui tab de "APIs" com resultados de dataservices.
+- [ ] A query de pesquisa é bidirecional entre todas as páginas de listagem.
+- [ ] Sem `searchQuery`, o `CategoryToggles` mantém o comportamento atual (contagens `SiteMetrics`).
+
+---
+
+## TICKET-46: Explorar — Redirecionar HVDs para Datasets com tag=hvd para nao existir conflitos
 
 **Descrição**
 Atualmente, o link "HVDs" no menu de navegação "Explorar" do Header aponta para `/pages/hvds`, uma página placeholder em manutenção (`StatusCard` com "Página em manutenção"). Os HVDs (High Value Datasets) são datasets com a tag `hvd` e a página de datasets já suporta filtro por tag via query param (`/pages/datasets?tag=hvd`). Este ticket consiste em redirecionar o link do menu e eliminar a página placeholder.
@@ -2035,4 +2124,7 @@ Atualmente, o link "HVDs" no menu de navegação "Explorar" do Header aponta par
 | 38                                    | Maintenance — Sync Login branches & resolution           | Repo   | High     | Concluído                          |
 | 40                                    | Dataset Detail — Fix hardcoded content & UI bugs         | Public | High     | Not started                        |
 | 41                                    | Legacy Account Migration to CMD/eIDAS                    | Auth   | High     | Concluído                          |
-| 45                                    | Explorar — Redirecionar HVDs para Datasets com tag=hvd   | Public | Medium   | Not started                        |
+| **PESQUISA GLOBAL**                   |                                                          |        |          |                                    |
+| 45                                    | Global Search — Unify Local Searches + CategoryToggles   | Public | High     | Not started                        |
+| 46                                    | Explorar — Redirecionar HVDs para Datasets com tag=hvd   | Public | Medium   | Not started                        |
+

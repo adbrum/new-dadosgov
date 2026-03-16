@@ -1474,10 +1474,10 @@ Implementar a camada de conexão para community resources: listagem pessoal, cri
 
 **Critérios de Aceitação**
 
-- [ ] Tipo `CommunityResource` definido.
-- [ ] CRUD completo funciona.
-- [ ] Upload de ficheiro funciona com multipart.
-- [ ] Associação a dataset específico funciona.
+- [x] Tipo `CommunityResource` definido.
+- [x] CRUD completo funciona.
+- [x] Upload de ficheiro funciona com multipart.
+- [x] Associação a dataset específico funciona.
 
 ---
 

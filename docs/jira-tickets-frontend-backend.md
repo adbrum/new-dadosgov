@@ -1442,7 +1442,7 @@ Implementar a camada de conexão para o perfil do utilizador autenticado: ediç�
 
 ---
 
-## TICKET-31: Admin — Community Resources CRUD (Conexões API)
+## TICKET-31: Admin — Community Resources CRUD (Conexões API) ✅
 
 **Descrição**
 Implementar a camada de conexão para community resources: listagem pessoal, criação, edição, eliminação.
@@ -1519,11 +1519,11 @@ Implementar a camada de conexão para harvesters: listagem, criação, edição,
 
 **Critérios de Aceitação**
 
-- [ ] Tipos `HarvestSource` e `HarvestJob` definidos.
-- [ ] CRUD de harvesters funciona.
-- [ ] Trigger de job retorna o job criado.
-- [ ] Listagem de jobs mostra status e erros.
-- [ ] Validação de source funciona.
+- [x] Tipos `HarvestSource` e `HarvestJob` definidos.
+- [x] CRUD de harvesters funciona.
+- [x] Trigger de job retorna o job criado.
+- [x] Listagem de jobs mostra status e erros.
+- [x] Validação de source funciona.
 
 ---
 

@@ -1949,6 +1949,42 @@ Implementar controlo de permissões no frontend do admin: esconder secções da 
 
 ---
 
+## TICKET-45: Explorar — Redirecionar HVDs para Datasets com tag=hvd
+
+**Descrição**
+Atualmente, o link "HVDs" no menu de navegação "Explorar" do Header aponta para `/pages/hvds`, uma página placeholder em manutenção (`StatusCard` com "Página em manutenção"). Os HVDs (High Value Datasets) são datasets com a tag `hvd` e a página de datasets já suporta filtro por tag via query param (`/pages/datasets?tag=hvd`). Este ticket consiste em redirecionar o link do menu e eliminar a página placeholder.
+
+**Contexto Arquitetural**
+
+- O menu "Explorar" está definido em `src/components/Header.tsx` (linhas ~462-468), com `href: "/pages/hvds"`.
+- A página `/pages/hvds` é composta por:
+  - `src/app/pages/hvds/page.tsx` — server component que renderiza `HvdsClient`.
+  - `src/components/hvds/HvdsClient.tsx` — componente com `StatusCard` de manutenção.
+- A página de datasets (`src/app/pages/datasets/page.tsx`) já suporta o filtro `tag` via query params:
+  ```typescript
+  if (resolved?.tag) filters.tag = resolved.tag;
+  ```
+- O `fetchDatasets` em `services/api.ts` já envia o parâmetro `tag` para a API backend.
+- A API backend `GET /api/1/datasets/?tag=hvd` já retorna corretamente os datasets com a tag HVD.
+
+**O que deve ser feito**
+
+1. **Atualizar o link no Header** (`src/components/Header.tsx`):
+   - Alterar o `href` do item "HVDs" no menu "Explorar" de `/pages/hvds` para `/pages/datasets?tag=hvd`.
+2. **Remover a página placeholder HVD**:
+   - Eliminar `src/app/pages/hvds/page.tsx`.
+   - Eliminar `src/components/hvds/HvdsClient.tsx`.
+   - Remover o diretório `src/app/pages/hvds/` e `src/components/hvds/` se ficarem vazios.
+
+**Critérios de Aceitação**
+
+- [ ] O link "HVDs" no menu "Explorar" aponta para `/pages/datasets?tag=hvd`.
+- [ ] Ao clicar em "HVDs", o utilizador vê a listagem de datasets filtrada pela tag `hvd`.
+- [ ] A página placeholder `/pages/hvds` foi removida (ficheiros eliminados).
+- [ ] Não existem referências restantes a `/pages/hvds` no código.
+
+---
+
 ## Summary Table
 
 | #                                     | Ticket                                                   | Area   | Priority | Status                             |
@@ -1999,3 +2035,4 @@ Implementar controlo de permissões no frontend do admin: esconder secções da 
 | 38                                    | Maintenance — Sync Login branches & resolution           | Repo   | High     | Concluído                          |
 | 40                                    | Dataset Detail — Fix hardcoded content & UI bugs         | Public | High     | Not started                        |
 | 41                                    | Legacy Account Migration to CMD/eIDAS                    | Auth   | High     | Concluído                          |
+| 45                                    | Explorar — Redirecionar HVDs para Datasets com tag=hvd   | Public | Medium   | Not started                        |

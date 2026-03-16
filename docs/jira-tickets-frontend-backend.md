@@ -1703,7 +1703,7 @@ Implementar a camada de conexão para gestão global do site e moderação de co
 
 ---
 
-## TICKET-40: Dataset Detail Page — Fix Hardcoded Content & UI Bugs (Frontend)
+## TICKET-40: Dataset Detail Page — Fix Hardcoded Content & UI Bugs (Frontend) ✅
 
 **Descrição**
 Corrigir a página de detalhe de dataset que contém múltiplos blocos de conteúdo estático/hardcoded (incluindo texto copiado de um dataset francês), métricas falsas, links não funcionais, e tabs sem dados reais. Substituir todo o conteúdo estático por dados dinâmicos da API.
@@ -1815,7 +1815,7 @@ Corrigir a página de detalhe de dataset que contém múltiplos blocos de conte�
 - [ ] Botão favoritos persiste estado via API.
 - [ ] "Metadados: 35%" na listagem corrigido ou removido.
 
-## TICKET-42: Admin — Organization Content Pages (Conexões API — `org/*`)
+## TICKET-42: Admin — Organization Content Pages (Conexões API — `org/*`) ✅
 
 **Descrição**
 Implementar as páginas de conteúdo da organização no admin (`/admin/org/`): listagens de dataservices, reuses, harvesters, community resources, perfil da organização e estatísticas — tudo no contexto da organização do utilizador autenticado.
@@ -1857,11 +1857,11 @@ Implementar as páginas de conteúdo da organização no admin (`/admin/org/`): 
 
 **Critérios de Aceitação**
 
-- [ ] Todas as 6 páginas de `org/*` em falta estão implementadas e acessíveis pela navegação lateral.
-- [ ] Cada página filtra conteúdo pela organização do utilizador autenticado.
-- [ ] Se o utilizador não pertencer a nenhuma organização, a secção "Minha organização" mostra estado vazio ou está oculta.
-- [ ] Funções de fetch por organização estão em `services/api.ts`.
-- [ ] Reutilização máxima de componentes e lógica dos tickets 27–32.
+- [x] Todas as 6 páginas de `org/*` em falta estão implementadas e acessíveis pela navegação lateral.
+- [x] Cada página filtra conteúdo pela organização do utilizador autenticado.
+- [x] Se o utilizador não pertencer a nenhuma organização, a secção "Minha organização" mostra estado vazio ou está oculta.
+- [x] Funções de fetch por organização estão em `services/api.ts`.
+- [x] Reutilização máxima de componentes e lógica dos tickets 27–32.
 
 ---
 
@@ -1991,7 +1991,7 @@ Implementar controlo de permissões no frontend do admin: esconder secções da 
 | 34                                    | Admin — Posts CRUD                                       | Admin  | Medium   | Not started                        |
 | 35                                    | Admin — User Management (Sysadmin)                       | Admin  | Low      | Not started                        |
 | 36                                    | Admin — Site Management & Moderation (Sysadmin)          | Admin  | Medium   | Not started                        |
-| 42                                    | Admin — Organization Content Pages (`org/*`)             | Admin  | High     | Not started                        |
+| 42                                    | Admin — Organization Content Pages (`org/*`)             | Admin  | High     | Concluído                          |
 | 43                                    | Admin — Editorial Page (Sysadmin)                        | Admin  | Medium   | Not started                        |
 | 44                                    | Admin — Permission Guards & Role-Based Navigation        | Admin  | High     | Not started                        |
 | **AUTENTICAÇÃO EXTERNA**              |                                                          |        |          |                                    |

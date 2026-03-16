@@ -1481,7 +1481,7 @@ Implementar a camada de conexão para community resources: listagem pessoal, cri
 
 ---
 
-## TICKET-32: Admin — Harvesters CRUD (Conexões API)
+## TICKET-32: Admin — Harvesters CRUD (Conexões API) ✅
 
 **Descrição**
 Implementar a camada de conexão para harvesters: listagem, criação, edição, eliminação, trigger de jobs, e consulta de job history.
@@ -1527,7 +1527,7 @@ Implementar a camada de conexão para harvesters: listagem, criação, edição,
 
 ---
 
-## TICKET-33: Admin — Topics CRUD (Conexões API v2)
+## TICKET-33: Admin — Topics CRUD (Conexões API v2) ✅
 
 **Descrição**
 Implementar a camada de conexão para topics (themes) usando a API v2: listagem, criação, edição, eliminação, e gestão de elementos (datasets/reuses associados).
@@ -1564,14 +1564,14 @@ Implementar a camada de conexão para topics (themes) usando a API v2: listagem,
 
 **Critérios de Aceitação**
 
-- [ ] Funções usam `NEXT_PUBLIC_API_V2_BASE` como base URL.
-- [ ] CRUD de topics funciona.
-- [ ] Gestão de elementos (add/remove datasets e reuses) funciona.
-- [ ] Tipos TS definidos e consistentes.
+- [x] Funções usam `NEXT_PUBLIC_API_V2_BASE` como base URL.
+- [x] CRUD de topics funciona.
+- [x] Gestão de elementos (add/remove datasets e reuses) funciona.
+- [x] Tipos TS definidos e consistentes.
 
 ---
 
-## TICKET-34: Admin — Posts CRUD (Conexões API)
+## TICKET-34: Admin — Posts CRUD (Conexões API) ✅
 
 **Descrição**
 Implementar a camada de conexão para posts/notícias: listagem, criação, edição, eliminação, e upload de imagens.
@@ -1603,14 +1603,14 @@ Implementar a camada de conexão para posts/notícias: listagem, criação, edi�
 
 **Critérios de Aceitação**
 
-- [ ] Tipo `Post` definido com todos os campos.
-- [ ] CRUD completo funciona.
-- [ ] Upload de imagem funciona com multipart.
-- [ ] Posts podem ser criados como draft (`published: false`) e publicados depois.
+- [x] Tipo `Post` definido com todos os campos.
+- [x] CRUD completo funciona.
+- [x] Upload de imagem funciona com multipart.
+- [x] Posts podem ser criados como draft (`published: false`) e publicados depois.
 
 ---
 
-## TICKET-35: Admin — User Management (Conexões API — Sysadmin)
+## TICKET-35: Admin — User Management (Conexões API — Sysadmin) ✅
 
 **Descrição**
 Implementar a camada de conexão para gestão de utilizadores por sysadmins: listagem, consulta de detalhes, edição de roles, e eliminação.
@@ -1641,15 +1641,15 @@ Implementar a camada de conexão para gestão de utilizadores por sysadmins: lis
 
 **Critérios de Aceitação**
 
-- [ ] Listagem de utilizadores paginada com pesquisa.
-- [ ] Detalhes de utilizador incluem roles e content counts.
-- [ ] Atualização de roles funciona.
-- [ ] Eliminação funciona.
-- [ ] Autocomplete funciona.
+- [x] Listagem de utilizadores paginada com pesquisa.
+- [x] Detalhes de utilizador incluem roles e content counts.
+- [x] Atualização de roles funciona.
+- [x] Eliminação funciona.
+- [x] Autocomplete funciona.
 
 ---
 
-## TICKET-36: Admin — Site Management & Moderation (Conexões API — Sysadmin)
+## TICKET-36: Admin — Site Management & Moderation (Conexões API — Sysadmin) ✅
 
 **Descrição**
 Implementar a camada de conexão para gestão global do site e moderação de conteúdo: stats do site, configuração, e gestão de reports.
@@ -1694,12 +1694,12 @@ Implementar a camada de conexão para gestão global do site e moderação de co
 
 **Critérios de Aceitação**
 
-- [ ] `fetchSiteInfo()` retorna stats do site.
-- [ ] `fetchReports()` retorna lista filtrada por status.
-- [ ] `dismissReport()` altera status do report.
-- [ ] `fetchReportReasons()` retorna lista de razões.
-- [ ] URLs de export CSV são geradas corretamente.
-- [ ] Tipos TS definidos para SiteInfo, Report, ReportReason.
+- [x] `fetchSiteInfo()` retorna stats do site.
+- [x] `fetchReports()` retorna lista filtrada por status.
+- [x] `dismissReport()` altera status do report.
+- [x] `fetchReportReasons()` retorna lista de razões.
+- [x] URLs de export CSV são geradas corretamente.
+- [x] Tipos TS definidos para SiteInfo, Report, ReportReason.
 
 ---
 

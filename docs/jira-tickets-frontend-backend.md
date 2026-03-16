@@ -156,18 +156,18 @@ Implementar as funções de fetch e tipos necessários para a homepage consumir 
 
 **Critérios de Aceitação**
 
-- [ ] Tipos `SiteInfo`, `Post` e `GlobalSearchSuggestion` definidos.
-- [ ] `fetchSiteInfo()` retorna métricas do site.
-- [ ] `fetchFeaturedDatasets()` retorna datasets com featured=true.
-- [ ] `fetchFeaturedReuses()` retorna reuses com featured=true.
-- [ ] `fetchPosts()` retorna posts paginados.
-- [ ] `suggestGlobalSearch()` retorna sugestões de autocomplete.
-- [ ] Pesquisa global redireciona para a página de datasets com o parâmetro `q`.
-- [ ] Todas as funções tratam erros graciosamente (retornam dados vazios, não crasham).
+- [x] Tipos `SiteInfo`, `Post` e `GlobalSearchSuggestion` definidos.
+- [x] `fetchSiteInfo()` retorna métricas do site.
+- [x] `fetchFeaturedDatasets()` retorna datasets com featured=true.
+- [x] `fetchFeaturedReuses()` retorna reuses com featured=true.
+- [x] `fetchPosts()` retorna posts paginados.
+- [x] `suggestGlobalSearch()` retorna sugestões de autocomplete.
+- [x] Pesquisa global redireciona para a página de datasets com o parâmetro `q`.
+- [x] Todas as funções tratam erros graciosamente (retornam dados vazios, não crasham).
 
 ---
 
-## TICKET-05: Datasets — Search (Conexão API)
+## TICKET-05: Datasets — Search (Conexão API) ✅
 
 **Descrição**
 Estender `fetchDatasets()` para suportar pesquisa full-text e implementar a função de suggest/autocomplete.
@@ -191,14 +191,14 @@ Estender `fetchDatasets()` para suportar pesquisa full-text e implementar a fun�
 
 **Critérios de Aceitação**
 
-- [ ] `fetchDatasets()` aceita `q` e passa ao backend.
-- [ ] Resultados de pesquisa são paginados corretamente.
-- [ ] `suggestDatasets()` retorna sugestões para autocomplete.
-- [ ] Pesquisa vazia retorna todos os datasets.
+- [x] `fetchDatasets()` aceita `q` e passa ao backend.
+- [x] Resultados de pesquisa são paginados corretamente.
+- [x] `suggestDatasets()` retorna sugestões para autocomplete.
+- [x] Pesquisa vazia retorna todos os datasets.
 
 ---
 
-## TICKET-06: Datasets — Filtros Avançados (Conexões API)
+## TICKET-06: Datasets — Filtros Avançados (Conexões API) ✅
 
 **Descrição**
 Implementar as funções de fetch para opções de filtros e estender `fetchDatasets()` para aceitar todos os parâmetros de filtro do backend.
@@ -229,14 +229,14 @@ Implementar as funções de fetch para opções de filtros e estender `fetchData
 
 **Critérios de Aceitação**
 
-- [ ] Funções de fetch para licenças, frequências, schemas, badges retornam dados do backend.
-- [ ] `suggestFormats()` e `suggestTags()` retornam sugestões.
-- [ ] `fetchDatasets()` aceita todos os filtros e os passa como query params.
-- [ ] Múltiplos filtros podem ser combinados numa só chamada.
+- [x] Funções de fetch para licenças, frequências, schemas, badges retornam dados do backend.
+- [x] `suggestFormats()` e `suggestTags()` retornam sugestões.
+- [x] `fetchDatasets()` aceita todos os filtros e os passa como query params.
+- [x] Múltiplos filtros podem ser combinados numa só chamada.
 
 ---
 
-## TICKET-07: Discussions (Conexões API)
+## TICKET-07: Discussions (Conexões API) ✅
 
 **Descrição**
 Implementar tipos e funções para o CRUD de discussions associadas a datasets.
@@ -267,16 +267,16 @@ Implementar tipos e funções para o CRUD de discussions associadas a datasets.
 
 **Critérios de Aceitação**
 
-- [ ] Tipos `Discussion` e `DiscussionMessage` definidos.
-- [ ] `fetchDiscussions()` retorna lista de discussions para um dataset.
-- [ ] `createDiscussion()` envia o payload correto (title + comment + subject).
-- [ ] `replyToDiscussion()` adiciona mensagem a uma discussion existente.
-- [ ] `closeDiscussion()` fecha a discussion.
-- [ ] Erros de autenticação (401) são tratados.
+- [x] Tipos `Discussion` e `DiscussionMessage` definidos.
+- [x] `fetchDiscussions()` retorna lista de discussions para um dataset.
+- [x] `createDiscussion()` envia o payload correto (title + comment + subject).
+- [x] `replyToDiscussion()` adiciona mensagem a uma discussion existente.
+- [x] `closeDiscussion()` fecha a discussion.
+- [x] Erros de autenticação (401) são tratados.
 
 ---
 
-## TICKET-08: Followers (Conexões API)
+## TICKET-08: Followers (Conexões API) ✅
 
 **Descrição**
 Implementar as funções de follow/unfollow genéricas para datasets, organizations, e reuses.
@@ -303,10 +303,10 @@ Implementar as funções de follow/unfollow genéricas para datasets, organizati
 
 **Critérios de Aceitação**
 
-- [ ] Funções follow/unfollow funcionam para datasets, organizations e reuses.
-- [ ] `fetchFollowers()` retorna lista de seguidores.
-- [ ] POST retorna 201 em sucesso, DELETE retorna 200.
-- [ ] Erros de autenticação (401) são tratados.
+- [x] Funções follow/unfollow funcionam para datasets, organizations e reuses.
+- [x] `fetchFollowers()` retorna lista de seguidores.
+- [x] POST retorna 201 em sucesso, DELETE retorna 200.
+- [x] Erros de autenticação (401) são tratados.
 
 ---
 
@@ -1699,6 +1699,120 @@ Implementar a camada de conexão para gestão global do site e moderação de co
 
 ---
 
+## TICKET-40: Dataset Detail Page — Fix Hardcoded Content & UI Bugs (Frontend)
+
+**Descrição**
+Corrigir a página de detalhe de dataset que contém múltiplos blocos de conteúdo estático/hardcoded (incluindo texto copiado de um dataset francês), métricas falsas, links não funcionais, e tabs sem dados reais. Substituir todo o conteúdo estático por dados dinâmicos da API.
+
+**Contexto Arquitetural**
+
+- `DatasetDetailClient.tsx` foi criado com conteúdo placeholder que nunca foi substituído por dados reais da API.
+- O objeto `Dataset` da API já contém campos suficientes para substituir quase todo o conteúdo hardcoded: `license`, `quality`, `metrics`, `description`, `private`, `archived`.
+- `DatasetTabs.tsx` tem 3 tabs com placeholders (Reutilizações, Discussões, Recursos comunitários) — as funções de API para discussões já existem (TICKET-07).
+- `DatasetsClient.tsx` (listagem) também tem uma métrica hardcoded.
+
+**Problemas identificados**
+
+### A. Conteúdo francês/placeholder que deve ser removido
+
+1. **Secção "Observações preliminares"** (`DatasetDetailClient.tsx`, linhas 64-70):
+   - Texto estático sobre "tendências demográficas e económicas" — não vem da API.
+   - **Ação**: Remover completamente. A descrição do dataset já é renderizada acima.
+
+2. **Secção "O que é DVF?"** (`DatasetDetailClient.tsx`, linhas 72-85):
+   - Texto copiado de um dataset francês (DVF — Données de Valorisation Foncière), traduzido para português.
+   - Referências a "Alsácia, Mosela e Mayotte", "Direção Geral das Finanças Públicas" francesa.
+   - **Ação**: Remover completamente.
+
+3. **Box "Está à procura do preço de venda de um imóvel ou terreno?"** (`DatasetDetailClient.tsx`, linhas 190-203):
+   - Bloco promocional de uma aplicação francesa (DVF) que não existe no portal português.
+   - **Ação**: Remover completamente.
+
+### B. Dados hardcoded que devem vir da API
+
+4. **Pill "Rascunho"** (`DatasetDetailClient.tsx`, linha 33):
+   - Aparece sempre, independentemente do estado do dataset.
+   - **Ação**: Mostrar condicionalmente: `dataset.private` → "Rascunho", `dataset.archived` → "Arquivado", caso contrário não mostrar.
+
+5. **Licença hardcoded** (`DatasetDetailClient.tsx`, linha 124):
+   - Texto fixo "Licença Aberta / Licença Aberta versão 2.0" com `href="#"`.
+   - **Ação**: Usar `dataset.license` da API para o título e URL da licença.
+
+6. **Métricas de variação hardcoded** (`DatasetDetailClient.tsx`, linhas 145-148, 163-166):
+   - Valores fixos `+11.2 mil` e `+37.2 mil` e data "desde julho de 2022".
+   - **Ação**: Remover os pills de variação (a API não fornece deltas). Manter apenas os valores reais de `dataset.metrics.views` e `dataset.metrics.downloads`.
+
+7. **Qualidade dos metadados hardcoded a 100%** (`DatasetDetailClient.tsx`, linhas 175-179):
+   - `ProgressBar value={100}` fixo.
+   - **Ação**: Usar `dataset.quality` da API. Calcular a percentagem com base nos campos preenchidos (description, tags, license, resources, temporal_coverage, frequency, spatial).
+
+8. **"Metadados: 35%" na listagem** (`DatasetsClient.tsx`, linha 188):
+   - Todos os cards de dataset mostram 35% fixo.
+   - **Ação**: Calcular individualmente por dataset usando `dataset.quality` ou remover se não disponível.
+
+### C. Links não funcionais (href="#")
+
+9. **4 links com `href="#"`** (`DatasetDetailClient.tsx`, linhas 81, 123, 183, 198):
+   - "Leia mais" → remover (faz parte do conteúdo francês a eliminar).
+   - Licença → usar URL da licença da API.
+   - "Saiba mais sobre este indicador" → linkar a documentação real ou remover.
+   - "Consulte o aplicativo DVF" → remover (conteúdo francês).
+
+### D. Tabs com placeholder
+
+10. **Tab "Reutilizações e APIs"** (`DatasetTabs.tsx`, linhas 40-42):
+    - Texto placeholder "Conteúdo das reutilizações e APIs."
+    - **Ação**: Fetch reuses associados ao dataset via API (`fetchReuses` com filtro por dataset).
+
+11. **Tab "Discussões"** (`DatasetTabs.tsx`, linhas 46-50):
+    - Contagem hardcoded `(0)` e texto placeholder.
+    - **Ação**: Usar `fetchDiscussions(dataset.id)` (já implementado no TICKET-07) para listar discussões e mostrar contagem real.
+
+12. **Tab "Recursos comunitários"** (`DatasetTabs.tsx`, linhas 54-58):
+    - Texto placeholder "Recursos da comunidade."
+    - **Ação**: Fetch community resources via API.
+
+### E. Favorito não persistido
+
+13. **Estado de favorito local** (`DatasetDetailClient.tsx`, linha 16):
+    - `useState(false)` — nunca persiste nem verifica na API.
+    - **Ação**: Usar `followDataset()`/`unfollowDataset()` do TICKET-08 para persistir. Verificar estado inicial com `fetchFollowers()` ou endpoint de check.
+
+**O que deve ser feito**
+
+1. **Remover conteúdo francês/placeholder**: Eliminar secções "Observações preliminares", "O que é DVF?", e box DVF (pontos A.1, A.2, A.3).
+2. **Corrigir estado de publicação**: Mostrar Pill "Rascunho"/"Arquivado" condicionalmente com base em `dataset.private`/`dataset.archived` (ponto B.4).
+3. **Usar licença da API**: Substituir texto e link fixo pela licença real do dataset (ponto B.5).
+4. **Corrigir métricas**: Remover deltas falsos, usar apenas valores reais da API; calcular qualidade dos metadados dinamicamente (pontos B.6, B.7, B.8).
+5. **Remover links mortos**: Eliminar `href="#"` — usar URLs reais ou remover (ponto C.9).
+6. **Popular tabs com dados reais**: Implementar fetch de discussões (já existe), reutilizações e recursos comunitários nos tabs (pontos D.10, D.11, D.12).
+7. **Persistir favoritos**: Ligar botão de favoritos às funções follow/unfollow da API (ponto E.13).
+
+**Ficheiros a alterar**
+
+| Ficheiro | Alterações |
+|---|---|
+| `src/components/datasets/DatasetDetailClient.tsx` | Remover conteúdo estático, usar dados da API |
+| `src/components/datasets/DatasetTabs.tsx` | Popular tabs com dados reais |
+| `src/components/datasets/DatasetsClient.tsx` | Corrigir métrica hardcoded nos cards |
+| `src/types/api.ts` | Adicionar/verificar tipo `DatasetQuality` se necessário |
+| `src/services/api.ts` | Adicionar funções em falta (community resources, etc.) |
+
+**Critérios de Aceitação**
+
+- [ ] Nenhum conteúdo francês ou placeholder estático visível na página.
+- [ ] Pill de estado ("Rascunho"/"Arquivado") aparece condicionalmente.
+- [ ] Licença exibida vem de `dataset.license`.
+- [ ] Métricas (views, downloads) mostram valores reais sem deltas inventados.
+- [ ] Qualidade dos metadados calculada dinamicamente.
+- [ ] Tab "Discussões" carrega discussões reais via API.
+- [ ] Tab "Reutilizações" carrega reutilizações associadas ao dataset.
+- [ ] Nenhum link `href="#"` restante na página.
+- [ ] Botão favoritos persiste estado via API.
+- [ ] "Metadados: 35%" na listagem corrigido ou removido.
+
+---
+
 ## Summary Table
 
 | #                                     | Ticket                                                   | Area   | Priority | Status                             |
@@ -1744,4 +1858,5 @@ Implementar a camada de conexão para gestão global do site e moderação de co
 | **AUTENTICAÇÃO EXTERNA**              |                                                          |        |          |                                    |
 | 37                                    | Auth — Autenticação.gov / SAML (plugin + frontend)       | Auth   | High     | Concluído                          |
 | 38                                    | Maintenance — Sync Login branches & resolution           | Repo   | High     | Concluído                          |
-| 40                                    | Legacy Account Migration to CMD/eIDAS                    | Auth   | High     | Concluído                          |
+| 40                                    | Dataset Detail — Fix hardcoded content & UI bugs         | Public | High     | Not started                        |
+| 41                                    | Legacy Account Migration to CMD/eIDAS                    | Auth   | High     | Concluído                          |

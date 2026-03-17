@@ -46,7 +46,7 @@ Implementar a lógica de conexão do login: fluxo CSRF → POST login → sessio
 
 ---
 
-## TICKET-02: Authentication — Registration (Conexão API) ✅
+## TICKET-02: Authentication — Registration (Conexão API) ✅✅
 
 **Descrição**
 Implementar a lógica de conexão do registo: route handler proxy e função de submit.
@@ -83,7 +83,7 @@ Implementar a lógica de conexão do registo: route handler proxy e função de 
 
 ---
 
-## TICKET-03: Authentication — Current User State (Conexão API) ✅
+## TICKET-03: Authentication — Current User State (Conexão API) ✅✅
 
 **Descrição**
 Implementar o tipo `User`, a função `fetchCurrentUser()`, e o contexto de autenticação que consome `GET /api/1/me/`.
@@ -116,7 +116,7 @@ Implementar o tipo `User`, a função `fetchCurrentUser()`, e o contexto de aute
 
 ---
 
-## TICKET-04: Homepage — Dados Dinâmicos (Conexões API) ✅
+## TICKET-04: Homepage — Dados Dinâmicos (Conexões API) ✅✅
 
 **Descrição**
 Implementar as funções de fetch e tipos necessários para a homepage consumir dados reais do backend, substituindo todo o conteúdo hardcoded (stats, datasets em destaque, storytelling/reuses, notícias) e ativando a pesquisa global do hero.
@@ -167,7 +167,7 @@ Implementar as funções de fetch e tipos necessários para a homepage consumir 
 
 ---
 
-## TICKET-05: Datasets — Search (Conexão API) ✅
+## TICKET-05: Datasets — Search (Conexão API) ✅✅
 
 **Descrição**
 Estender `fetchDatasets()` para suportar pesquisa full-text e implementar a função de suggest/autocomplete.
@@ -198,7 +198,7 @@ Estender `fetchDatasets()` para suportar pesquisa full-text e implementar a fun�
 
 ---
 
-## TICKET-06: Datasets — Filtros Avançados (Conexões API) ✅
+## TICKET-06: Datasets — Filtros Avançados (Conexões API) ✅✅
 
 **Descrição**
 Implementar as funções de fetch para opções de filtros e estender `fetchDatasets()` para aceitar todos os parâmetros de filtro do backend.
@@ -236,7 +236,7 @@ Implementar as funções de fetch para opções de filtros e estender `fetchData
 
 ---
 
-## TICKET-07: Discussions (Conexões API) ✅
+## TICKET-07: Discussions (Conexões API) ✅✅
 
 **Descrição**
 Implementar tipos e funções para o CRUD de discussions associadas a datasets.
@@ -276,7 +276,7 @@ Implementar tipos e funções para o CRUD de discussions associadas a datasets.
 
 ---
 
-## TICKET-08: Followers (Conexões API) ✅
+## TICKET-08: Followers (Conexões API) ✅✅
 
 **Descrição**
 Implementar as funções de follow/unfollow genéricas para datasets, organizations, e reuses.
@@ -310,7 +310,7 @@ Implementar as funções de follow/unfollow genéricas para datasets, organizati
 
 ---
 
-## TICKET-09: Organization Detail (Conexões API) ✅
+## TICKET-09: Organization Detail (Conexões API) ✅✅
 
 **Descrição**
 Implementar a função de fetch e tipos para a página de detalhe de organização (que não existe ainda).
@@ -363,7 +363,7 @@ Implementar a função de fetch e tipos para a página de detalhe de organizaç�
 
 ---
 
-## TICKET-10: Organizations — Search, Filtros e Página Completa (Conexão API) ✅
+## TICKET-10: Organizations — Search, Filtros e Página Completa (Conexão API) ✅✅
 
 **Descrição**
 Estender `fetchOrganizations()` para suportar pesquisa e filtros, e completar a página de Organizações com funcionalidades de pesquisa, ordenação, filtros por badge e métricas reais.
@@ -903,7 +903,7 @@ Implementar funções utilitárias para gerar URLs de export CSV dos endpoints d
 
 ---
 
-## TICKET-37: Authentication — Login via Autenticação.gov / SAML (Conexão API) ✅
+## TICKET-37: Authentication — Login via Autenticação.gov / SAML (Conexão API) ✅✅
 
 **Descrição**
 Implementar o fluxo completo de autenticação via Autenticação.gov (Cartão de Cidadão) usando protocolo SAML 2.0, incluindo login, registo automático, migração de contas legado para CMD, e logout — tanto no backend (plugin SAML) como no frontend (redirect flow e callbacks).
@@ -963,7 +963,7 @@ Implementar o fluxo completo de autenticação via Autenticação.gov (Cartão d
 
 ---
 
-## TICKET-38: Repository Maintenance — Login Integration & Branch Cleanup ✅
+## TICKET-38: Repository Maintenance — Login Integration & Branch Cleanup ✅✅
 
 **Descrição**
 Sincronizar as branches divergentes de login (`login_tabs` da Ines e `login_final` do Adriano) na branch `main`, resolvendo conflitos, restaurando arquivos perdidos em resets e unificando a UI com a lógica de API.
@@ -999,7 +999,7 @@ Sincronizar as branches divergentes de login (`login_tabs` da Ines e `login_fina
 
 ---
 
-## TICKET-39: Global Search — Página de Pesquisa com Dropdown e Resultados (Frontend) ✅
+## TICKET-39: Global Search — Página de Pesquisa com Dropdown e Resultados (Frontend) ✅✅
 
 **Descrição**
 Implementar uma pesquisa global inspirada no projeto francês cdata (data.gouv.fr): dropdown de seleção de tipo ao digitar + página de resultados com sidebar de tipos/contagens e lista paginada.
@@ -1071,7 +1071,7 @@ Implementar uma pesquisa global inspirada no projeto francês cdata (data.gouv.f
 
 ---
 
-## TICKET-40: Dataset Detail Page — Fix Hardcoded Content & UI Bugs (Frontend) ✅
+## TICKET-40: Dataset Detail Page — Fix Hardcoded Content & UI Bugs (Frontend) ✅✅
 
 **Descrição**
 Corrigir a página de detalhe de dataset que contém múltiplos blocos de conteúdo estático/hardcoded (incluindo texto copiado de um dataset francês), métricas falsas, links não funcionais, e tabs sem dados reais. Substituir todo o conteúdo estático por dados dinâmicos da API.
@@ -1183,7 +1183,7 @@ Corrigir a página de detalhe de dataset que contém múltiplos blocos de conte�
 - [ ] Botão favoritos persiste estado via API.
 - [ ] "Metadados: 35%" na listagem corrigido ou removido.
 
-## TICKET-41: Legacy Account Migration to CMD/eIDAS ✅
+## TICKET-41: Legacy Account Migration to CMD/eIDAS ✅✅
 
 **Descrição**
 Migrar utilizadores legados (email/password) para CMD (Chave Móvel Digital) ou eIDAS como único método de autenticação, sem perda de dados. Inclui wizard de migração, bloqueio de login legado, remoção da página de registo, e criação automática de conta via SAML.
@@ -2192,7 +2192,7 @@ Configurar e executar testes de vulnerabilidades no projeto dados.gov.pt utiliza
 | 41                                    | Legacy Account Migration to CMD/eIDAS                    | Auth   | High     | Concluído                          |
 | **PESQUISA GLOBAL**                   |                                                          |        |          |                                    |
 
-| 45                                    | Global Search — Unify Local Searches + CategoryToggles   | Public | High     | Concluído                          |
-| 46                                    | Explorar — Redirecionar HVDs para Datasets com tag=hvd   | Public | Medium   | Concluído                          |
-| **QUALIDADE & SEGURANÇA**             |                                                          |        |          |                                    |
-| 47                                    | Vulnerability Testing — TestSprite MCP Integration       | Security | High   | Not started                        |
+| 45 | Global Search — Unify Local Searches + CategoryToggles | Public | High | Concluído |
+| 46 | Explorar — Redirecionar HVDs para Datasets com tag=hvd | Public | Medium | Concluído |
+| **QUALIDADE & SEGURANÇA** | | | | |
+| 47 | Vulnerability Testing — TestSprite MCP Integration | Security | High | Not started |

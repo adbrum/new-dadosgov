@@ -2089,6 +2089,57 @@ Atualmente, o link "HVDs" no menu de navegação "Explorar" do Header aponta par
 
 ---
 
+## TICKET-47: Vulnerability Testing — TestSprite MCP Integration
+
+**Descrição**
+Configurar e executar testes de vulnerabilidades no projeto dados.gov.pt utilizando o TestSprite MCP (Model Context Protocol). O objetivo é identificar vulnerabilidades de segurança no frontend e backend, seguindo OWASP Top 10 e melhores práticas de segurança web, com relatórios automatizados.
+
+**Contexto Arquitetural**
+
+- O projeto tem dois pontos de entrada: frontend Next.js (porta 3000) e backend Flask/udata (porta 7000).
+- O frontend expõe páginas públicas (`/pages/*`), admin protegido (`/pages/admin/*`), e autenticação (`/login`, `/register`).
+- O backend expõe a API REST em `/api/1/` e `/api/2/` com autenticação via session cookies (CSRF token).
+- TestSprite MCP é um servidor MCP que permite executar testes de segurança automatizados diretamente a partir de agentes AI.
+- O MCP deve ser configurado no `.claude/settings.json` ou `mcp_servers` do projeto para que o agente consiga invocar os testes.
+
+**O que deve ser feito**
+
+1. **Configurar o TestSprite MCP server**:
+   - Adicionar o TestSprite MCP ao ficheiro de configuração MCP do projeto (`.claude/settings.json` ou equivalente).
+   - Verificar que o servidor MCP está acessível e funcional.
+2. **Definir o escopo dos testes de vulnerabilidades**:
+   - Frontend: XSS (reflected e stored), open redirects, CSP headers, cookie flags, CSRF protection.
+   - Backend API: SQL/NoSQL injection, authentication bypass, broken access control, SSRF, mass assignment, rate limiting.
+   - Infraestrutura: HTTP headers de segurança (HSTS, X-Frame-Options, Content-Type-Options), CORS misconfiguration, TLS/SSL.
+3. **Executar os testes no frontend** (target: `http://localhost:3000`):
+   - Scan de páginas públicas (`/pages/datasets`, `/pages/organizations`, `/pages/reuses`).
+   - Scan de formulários de autenticação (`/login`, `/register`).
+   - Scan de páginas admin (com sessão autenticada).
+   - Verificar headers de segurança nas respostas HTTP.
+4. **Executar os testes no backend API** (target: `http://localhost:7000`):
+   - Scan de endpoints públicos (`GET /api/1/datasets/`, `/api/1/organizations/`).
+   - Scan de endpoints autenticados (`POST /api/1/datasets/`, `PUT /api/1/datasets/<id>/`).
+   - Testar CSRF token validation.
+   - Testar broken access control (aceder a endpoints admin sem role adequado).
+5. **Gerar e analisar relatórios**:
+   - Exportar relatório de vulnerabilidades encontradas.
+   - Classificar por severidade (Critical, High, Medium, Low, Info).
+   - Documentar cada vulnerabilidade com: descrição, endpoint afetado, severidade, recomendação de correção.
+6. **Criar plano de remediação**:
+   - Para cada vulnerabilidade encontrada, criar um sub-ticket ou agrupar por categoria.
+   - Priorizar Critical e High para correção imediata.
+
+**Critérios de Aceitação**
+
+- [ ] TestSprite MCP configurado e funcional no projeto.
+- [ ] Testes executados no frontend (páginas públicas, auth, admin).
+- [ ] Testes executados no backend API (endpoints públicos e autenticados).
+- [ ] Relatório de vulnerabilidades gerado com classificação por severidade.
+- [ ] Plano de remediação documentado para vulnerabilidades Critical e High.
+- [ ] Nenhuma vulnerabilidade Critical aberta após remediação.
+
+---
+
 ## Summary Table
 
 | #                                     | Ticket                                                   | Area   | Priority | Status                             |
@@ -2141,9 +2192,7 @@ Atualmente, o link "HVDs" no menu de navegação "Explorar" do Header aponta par
 | 41                                    | Legacy Account Migration to CMD/eIDAS                    | Auth   | High     | Concluído                          |
 | **PESQUISA GLOBAL**                   |                                                          |        |          |                                    |
 
-<<<<<<< HEAD
-| 45 | Global Search — Unify Local Searches + CategoryToggles | Public | High | Not started |
-| 46 | Explorar — Redirecionar HVDs para Datasets com tag=hvd | Public | Medium | Not started |
-
-=======
-| 45 | Global Search — Unify Local Searches + CategoryToggles | Public | High | Concluído |
+| 45                                    | Global Search — Unify Local Searches + CategoryToggles   | Public | High     | Concluído                          |
+| 46                                    | Explorar — Redirecionar HVDs para Datasets com tag=hvd   | Public | Medium   | Concluído                          |
+| **QUALIDADE & SEGURANÇA**             |                                                          |        |          |                                    |
+| 47                                    | Vulnerability Testing — TestSprite MCP Integration       | Security | High   | Not started                        |

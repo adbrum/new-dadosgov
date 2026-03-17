@@ -549,19 +549,19 @@ Implementar as funções de fetch para perfis de utilizador: perfil público e d
 
 ---
 
-## TICKET-14: Dataset Create & Edit
+## TICKET-14: Dataset Create & Edit — `CANCELADO`
 
 > **Nota**: A lógica de conexão para criação e edição de datasets está detalhada no TICKET-26 (Admin — Datasets CRUD). Este ticket é mantido como referência.
 
 ---
 
-## TICKET-15: Reuse Create & Edit
+## TICKET-15: Reuse Create & Edit — `CANCELADO`
 
 > **Nota**: A lógica de conexão para criação e edição de reuses está detalhada no TICKET-27 (Admin — Reuses CRUD). Este ticket é mantido como referência.
 
 ---
 
-## TICKET-16: Dataservices — Wiring do Form Existente
+## TICKET-16: Dataservices — Wiring do Form Existente — `CANCELADO`
 
 > **Nota**: A lógica de conexão para dataservices está detalhada no TICKET-28 (Admin — Dataservices CRUD). Este ticket é mantido como referência.
 

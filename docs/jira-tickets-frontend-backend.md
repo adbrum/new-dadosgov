@@ -906,7 +906,7 @@ Implementar funções utilitárias para gerar URLs de export CSV dos endpoints d
 ## TICKET-37: Authentication — Login via Autenticação.gov / SAML (Conexão API) ✅
 
 **Descrição**
-Implementar o fluxo completo de autenticação via Autenticação.gov (Cartão de Cidadão) usando protocolo SAML 2.0, incluindo login, registo automático, e logout — tanto no backend (plugin SAML) como no frontend (redirect flow e callbacks).
+Implementar o fluxo completo de autenticação via Autenticação.gov (Cartão de Cidadão) usando protocolo SAML 2.0, incluindo login, registo automático, migração de contas legado para CMD, e logout — tanto no backend (plugin SAML) como no frontend (redirect flow e callbacks).
 
 **Contexto Arquitetural**
 
@@ -919,8 +919,18 @@ Implementar o fluxo completo de autenticação via Autenticação.gov (Cartão d
   - `http://interop.gov.pt/MDC/Cidadao/NIC` → NIC (opcional, guardado em `user.extras['auth_nic']`)
   - `http://interop.gov.pt/MDC/Cidadao/NomeProprio` → first_name (opcional)
   - `http://interop.gov.pt/MDC/Cidadao/NomeApelido` → last_name (opcional)
-- Se o utilizador já existe (por email ou NIC): faz login direto.
+- Se o utilizador já existe (por email ou NIC) e já tem NIC associado: faz login direto (`existing_saml`).
+- Se o utilizador já existe mas é legado (tem password, sem NIC): é classificado como `migration_candidate` e redirecionado para o fluxo de migração.
 - Se o utilizador não existe: cria conta automaticamente via SAML.
+- **Fluxo de Migração de Conta Legado → CMD**:
+  - Quando o IdP retorna um email que corresponde a um utilizador legado (com password, sem NIC), o backend guarda os dados SAML em `session["saml_migration_pending"]` e redireciona para `/pages/migrate-account`.
+  - O frontend (`MigrateAccountClient.tsx`) apresenta os dados da conta legada encontrada e oferece ao utilizador a opção de vincular a conta CMD à conta existente.
+  - Se o SAML não devolveu email, o utilizador pode pesquisar a conta legada via email/nome (`POST /saml/migration/search`).
+  - Verificação: o utilizador confirma a migração por **código de verificação enviado por email** (`POST /saml/migration/send-code`) ou por **password antiga** (`POST /saml/migration/confirm`).
+  - Após confirmação, o backend associa o NIC do CMD ao utilizador existente (`user.extras['auth_nic']`), remove a password legada, e faz login automático.
+  - Alternativa: o utilizador pode saltar a migração (`POST /saml/migration/skip`) e criar uma conta nova a partir dos dados SAML.
+  - Endpoint auxiliar: `GET /saml/migration/check` — verifica se o utilizador autenticado é legado e precisa de migração.
+  - Endpoint auxiliar: `GET /saml/migration/pending` — retorna dados da migração pendente na sessão.
 - Logout SAML: `/saml/logout` envia LogoutRequest ao IdP, callback em `/saml/sso_logout`.
 - Sessão: flag `saml_login = True` indica que o login foi via SAML (usado para decidir o fluxo de logout).
 - Suporte adicional para eIDAS (autenticação europeia cross-border) com rotas `/saml/eidas/*`.
@@ -942,6 +952,14 @@ Implementar o fluxo completo de autenticação via Autenticação.gov (Cartão d
 - [x] Proteção XXE ativa (via `defusedxml`).
 - [x] Suporte a múltiplos IdP metadata files com fallback.
 - [x] Frontend logout diferencia sessões SAML — redireciona para `/saml/logout` em vez de `/logout/` quando `saml_login` é `true`.
+- [x] Utilizador legado (com password, sem NIC) é identificado como `migration_candidate` durante login SAML.
+- [x] Backend redireciona `migration_candidate` para `/pages/migrate-account` com dados SAML em sessão.
+- [x] Endpoints de migração implementados: `GET /saml/migration/check`, `GET /saml/migration/pending`, `POST /saml/migration/search`, `POST /saml/migration/send-code`, `POST /saml/migration/confirm`, `POST /saml/migration/skip`.
+- [x] Frontend (`MigrateAccountClient.tsx`) apresenta dados da conta legada e permite vincular ao CMD.
+- [x] Migração confirmável por código de verificação (email) ou password antiga.
+- [x] Após migração, NIC é associado ao utilizador e password legada é removida.
+- [x] Utilizador pode saltar migração e criar conta nova a partir dos dados SAML.
+- [x] Registo direto removido — novos utilizadores são criados exclusivamente via SAML/CMD.
 
 ---
 
@@ -2035,7 +2053,7 @@ Unificar as pesquisas locais das páginas de listagem (datasets, organizations, 
 
 ---
 
-## TICKET-46: Explorar — Redirecionar HVDs para Datasets com tag=hvd para nao existir conflitos
+## TICKET-46: Explorar — Redirecionar HVDs para Datasets com tag=hvd para nao existir conflitos ✅
 
 **Descrição**
 Atualmente, o link "HVDs" no menu de navegação "Explorar" do Header aponta para `/pages/hvds`, uma página placeholder em manutenção (`StatusCard` com "Página em manutenção"). Os HVDs (High Value Datasets) são datasets com a tag `hvd` e a página de datasets já suporta filtro por tag via query param (`/pages/datasets?tag=hvd`). Este ticket consiste em redirecionar o link do menu e eliminar a página placeholder.
@@ -2064,10 +2082,10 @@ Atualmente, o link "HVDs" no menu de navegação "Explorar" do Header aponta par
 
 **Critérios de Aceitação**
 
-- [ ] O link "HVDs" no menu "Explorar" aponta para `/pages/datasets?tag=hvd`.
-- [ ] Ao clicar em "HVDs", o utilizador vê a listagem de datasets filtrada pela tag `hvd`.
-- [ ] A página placeholder `/pages/hvds` foi removida (ficheiros eliminados).
-- [ ] Não existem referências restantes a `/pages/hvds` no código.
+- [x] O link "HVDs" no menu "Explorar" aponta para `/pages/datasets?tag=hvd`.
+- [x] Ao clicar em "HVDs", o utilizador vê a listagem de datasets filtrada pela tag `hvd`.
+- [x] A página placeholder `/pages/hvds` foi removida (ficheiros eliminados).
+- [x] Não existem referências restantes a `/pages/hvds` no código.
 
 ---
 
@@ -2129,5 +2147,3 @@ Atualmente, o link "HVDs" no menu de navegação "Explorar" do Header aponta par
 
 =======
 | 45 | Global Search — Unify Local Searches + CategoryToggles | Public | High | Concluído |
-
-> > > > > > > 63fdb07c (docs: Refine TICKET-45 description for global search, clarify architectural context, and detail implementation steps for `CategoryToggles` and dataservices integration.)

@@ -76,9 +76,10 @@ def stop_normal_processes():
     time.sleep(0.5)
 
 
-def run_servers_normal():
+def run_servers_normal(mode="dev"):
     """Inicia os servidores em modo normal"""
-    print("\n=== Iniciando servidores em MODO NORMAL ===\n")
+    modo_nome = "DESENVOLVIMENTO" if mode == "dev" else "PRODUÇÃO"
+    print(f"\n=== Iniciando servidores em MODO {modo_nome} ===\n")
 
     print("Iniciando o servidor backend...")
     backend_process = subprocess.Popen(
@@ -91,9 +92,23 @@ def run_servers_normal():
     # Aguarda um pouco para o backend iniciar
     time.sleep(2)
 
-    print("Iniciando o servidor frontend...")
+    if mode == "start":
+        print("\n⏳ A compilar o frontend para produção (npm run build)... isto pode demorar alguns minutos.")
+        build_process = subprocess.run(
+            ["npm", "run", "build"],
+            cwd="frontend",
+            stdout=sys.stdout,
+            stderr=sys.stderr,
+        )
+        if build_process.returncode != 0:
+            print("\n❌ Falha na compilação do frontend! A cancelar o arranque.")
+            backend_process.terminate()
+            backend_process.wait()
+            return
+
+    print(f"\nIniciando o servidor frontend em modo {mode}...")
     frontend_process = subprocess.Popen(
-        ["npm", "run", "dev", "--", "--port", "3000"],
+        ["npm", "run", mode, "--", "-p", "3000"],
         cwd="frontend",
         stdout=sys.stdout,
         stderr=sys.stderr,
@@ -210,14 +225,15 @@ def show_menu():
     print("   dados.gov.pt - Gerenciador de Servidores")
     print("=" * 50)
     print("\nEscolha o modo de execução:")
-    print("\n  1. Modo Normal (foreground)")
+    print("\n  1. Modo de Desenvolvimento (foreground)")
     print("     - Servidores rodam no terminal atual")
-    print("     - Logs visíveis em tempo real")
-    print("     - Ctrl+C para parar")
+    print("     - Frontend em modo dev (npm run dev)")
     print("\n  2. Modo Segundo Plano (pm2)")
     print("     - Servidores rodam em background")
     print("     - Processos gerenciados pelo pm2")
-    print("     - Terminal fica livre para outros comandos")
+    print("\n  3. Modo de Produção (foreground)")
+    print("     - Servidores rodam no terminal atual")
+    print("     - Frontend em modo de produção (npm run start)")
     print("\n  0. Sair")
     print("\n" + "=" * 50)
 
@@ -228,7 +244,7 @@ def main():
         show_menu()
 
         try:
-            choice = input("\nDigite sua opção (0-2): ").strip()
+            choice = input("\nDigite sua opção (0-3): ").strip()
 
             if choice == "0":
                 print("\nSaindo...")
@@ -239,7 +255,7 @@ def main():
                 stop_pm2_processes()
                 stop_normal_processes()
                 time.sleep(1)
-                run_servers_normal()
+                run_servers_normal("dev")
                 break
 
             elif choice == "2":
@@ -250,8 +266,16 @@ def main():
                 run_servers_pm2()
                 break
 
+            elif choice == "3":
+                # Para todos os processos antes de iniciar
+                stop_pm2_processes()
+                stop_normal_processes()
+                time.sleep(1)
+                run_servers_normal("start")
+                break
+
             else:
-                print("\n❌ Opção inválida! Por favor, escolha 0, 1 ou 2.")
+                print("\n❌ Opção inválida! Por favor, escolha 0, 1, 2 ou 3.")
                 time.sleep(1)
 
         except KeyboardInterrupt:

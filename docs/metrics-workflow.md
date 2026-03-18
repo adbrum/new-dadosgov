@@ -33,6 +33,7 @@ Complete documentation of the metrics pipeline: how page views, downloads, and s
 │  Task 3: update_udata_metrics                                            │
 │     → Reads datasets_total from PostgREST (api-tabular)                  │
 │     → Writes metrics.views + metrics.resources_downloads to MongoDB      │
+│     → Writes per-resource download counts (resources.$.metrics.views)    │
 │     → Computes followers, discussions, reuses per dataset                 │
 │     → Computes org stats (datasets, reuses, followers, views)            │
 │     → Updates site-level metrics                                         │
@@ -73,7 +74,7 @@ The tracking system captures two types of events via a Flask `after_request` hoo
 | Event Type | Trigger | Endpoint | What is Stored | Deduplication |
 |---|---|---|---|---|
 | `view` | User visits a detail page | `api.dataset`, `api.organization`, `api.reuse`, `api.dataservice`, `apiv2.dataset` | `object_type` + `object_id` + `visitor_ip` | Same IP + object: 1 view per 5 minutes |
-| `download` | User downloads a resource | `api.resource_redirect` | `object_type=dataset` + parent `dataset_id` + `visitor_ip` | None — every click counts |
+| `download` | User downloads a resource | `api.resource_redirect` | `object_type=dataset` + parent `dataset_id` + `resource_id` + `visitor_ip` | None — every click counts |
 
 **Deduplication rules:**
 - **Views**: repeated visits from the same IP to the same object within 5 minutes (`DEDUP_WINDOW_SECONDS = 300`) are ignored. This prevents inflated counts from page refreshes or frontend re-renders.
@@ -81,13 +82,27 @@ The tracking system captures two types of events via a Flask `after_request` hoo
 
 **MongoDB Collection:** `tracking_events`
 
+View event:
 ```json
 {
     "object_type": "dataset",
     "object_id": "698c9485916701f5806d3161",
     "event_type": "view",
+    "resource_id": null,
     "visitor_ip": "192.168.1.10",
     "created_at": "2026-03-18T16:49:03.431Z"
+}
+```
+
+Download event:
+```json
+{
+    "object_type": "dataset",
+    "object_id": "694977089cca6dc28af160a7",
+    "event_type": "download",
+    "resource_id": "e56b6cfb-6ad7-4843-b624-2f4ee05d224e",
+    "visitor_ip": "192.168.1.10",
+    "created_at": "2026-03-18T17:02:15.812Z"
 }
 ```
 
@@ -95,6 +110,7 @@ The tracking system captures two types of events via a Flask `after_request` hoo
 - `(object_type, event_type)` — for aggregation queries
 - `(object_type, object_id)` — for per-object lookups
 - `(object_id, event_type, visitor_ip, created_at)` — for deduplication queries
+- `(resource_id, event_type)` — for per-resource download aggregation
 - `created_at` with TTL of 90 days — automatic cleanup
 
 **Tracked Endpoints:**
@@ -122,6 +138,7 @@ Reads from MongoDB `tracking_events` and aggregates:
 tracking_events (MongoDB)
     → GROUP BY object_id WHERE object_type="dataset" AND event_type="view"
     → GROUP BY object_id WHERE object_type="dataset" AND event_type="download"
+    → GROUP BY resource_id WHERE event_type="download" AND resource_id exists
     → GROUP BY object_id WHERE object_type="organization" AND event_type="view"
     → GROUP BY object_id WHERE object_type="reuse" AND event_type="view"
     → GROUP BY object_id WHERE object_type="dataservice" AND event_type="view"
@@ -158,14 +175,22 @@ GET http://api-tabular:8006/api/datasets_total/data/?visit__greater=0&page_size=
     → dataset.metrics.resources_downloads = download_resource
 ```
 
-**Step 2 — Per-dataset statistics from MongoDB:**
+**Step 2 — Per-resource download counts from tracking_events:**
+```
+tracking_events (GROUP BY resource_id WHERE event_type="download")
+    → dataset.resources.$.metrics.views = download count per resource
+    (uses MongoDB positional operator $ to update the matching embedded resource)
+    (query: {"resources._id": resource_id} — stored as string in MongoDB)
+```
+
+**Step 3 — Per-dataset statistics from MongoDB:**
 ```
 follow collection    → dataset.metrics.followers
 discussion collection → dataset.metrics.discussions, dataset.metrics.discussions_open
 reuse collection     → dataset.metrics.reuses
 ```
 
-**Step 3 — Per-organization statistics from MongoDB:**
+**Step 4 — Per-organization statistics from MongoDB:**
 ```
 dataset collection  → organization.metrics.datasets
 reuse collection    → organization.metrics.reuses
@@ -173,7 +198,7 @@ follow collection   → organization.metrics.followers
 tracking_events     → organization.metrics.views
 ```
 
-**Step 4 — Site-level metrics:**
+**Step 5 — Site-level metrics:**
 ```
 site document → site.metrics.{datasets, resources, organizations, reuses, users, ...}
 metrics collection → daily snapshot
@@ -293,14 +318,22 @@ page               (MongoDB)              extract task         datasets table   
                                                                     │
 Download        →  tracking_events     →  Airflow DAG      →  PostgreSQL        →  PostgREST
 resource           (MongoDB)              extract task         datasets table       /datasets_total
-                                                                    │
-                                          Airflow DAG      ←────────┘
-                                          update task
-                                               │
-                                               ▼
+                   (with resource_id)          │                    │
+                                               │                    │
+                                               ▼                    │
+                                          resource.metrics  ←───────┘
+                                          (per resource)     Airflow DAG
+                                               │             update task
+                                               │                    │
+                                               ▼                    ▼
                                           dataset.metrics    →  /api/1/datasets/  →  Frontend
                                           (MongoDB)              {slug}/
 ```
+
+The Airflow DAG update task writes at **three levels**:
+1. `dataset.metrics.views` / `dataset.metrics.resources_downloads` — from PostgreSQL aggregates
+2. `dataset.resources.$.metrics.views` — per-resource download count, directly from tracking_events
+3. `dataset.metrics.followers/discussions/reuses` — computed from MongoDB collections
 
 ## Metrics Computed
 
@@ -313,6 +346,13 @@ resource           (MongoDB)              extract task         datasets table   
 | `discussions` | `discussion` collection aggregation | Airflow DAG |
 | `discussions_open` | `discussion` collection (closed=null) | Airflow DAG |
 | `reuses` | `reuse` collection aggregation | Airflow DAG |
+
+### Per Resource (embedded in Dataset)
+| Metric | Source | Updated By |
+|---|---|---|
+| `resources.$.metrics.views` | tracking_events (download, grouped by resource_id) | Airflow DAG |
+
+Note: the field is named `views` for legacy compatibility, but it represents **download count** for the individual resource. The resource ID is stored as `resources._id` (string) in MongoDB.
 
 ### Per Organization
 | Metric | Source |
@@ -411,7 +451,7 @@ npx playwright test tests/metrics-downloads.spec.ts
 ## Known Issues & Notes
 
 1. **PostgREST pagination URLs** — api-tabular returns `links.next` with port 8005 instead of 8006. Fixed in `backend/udata/core/metrics/tasks.py` with `_rebase_url()`.
-2. **TTL on tracking_events** — events auto-delete after 90 days. Historical aggregates are preserved in PostgreSQL.
+2. **TTL on tracking_events** — only the individual events in MongoDB `tracking_events` are auto-deleted after 90 days. The aggregated totals are **permanently preserved** in both PostgreSQL (`datasets` table) and MongoDB (`dataset.metrics`). After 90 days you lose the detail of "who visited when", but the totals never disappear.
 3. **DAG $limit** — the legacy DAG had a `$limit: 1000` which excluded datasets. The new DAG aggregates from `tracking_events` without limits.
 4. **Frontend field name** — the backend stores `resources_downloads`, not `downloads`. Frontend types and components were updated to match.
 5. **View deduplication** — same IP visiting the same object within 5 minutes counts as 1 view. Configurable via `DEDUP_WINDOW_SECONDS` in `tracking.py`.

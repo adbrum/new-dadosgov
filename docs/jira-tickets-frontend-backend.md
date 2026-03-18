@@ -430,7 +430,7 @@ Estender `fetchOrganizations()` para suportar pesquisa e filtros, e completar a 
 
 ---
 
-## TICKET-11: Reuses — Search, Filtros e Detail (Conexões API) ✅
+## TICKET-11: Reuses — Search, Filtros e Detail (Conexões API) ✅✅
 
 **Descrição**
 Estender `fetchReuses()` para pesquisa/filtros e estender `fetchReuse()` para dados completos incluindo datasets associados.
@@ -2296,19 +2296,20 @@ Execução de testes funcionais automatizados no frontend Next.js utilizando o T
 
 **Resultados dos testes**
 
-| Grupo | Total | Passed | Failed | Pass Rate |
-|-------|-------|--------|--------|-----------|
-| Dataset Search & Listing | 7 | 7 | 0 | 100% |
-| Dataset Detail | 4 | 3 | 1 | 75% |
-| Organizations | 4 | 3 | 1 | 75% |
-| Reuses | 3 | 3 | 0 | 100% |
-| Global Search | 4 | 3 | 1 | 75% |
-| Themes/Topics | 3 | 2 | 1 | 67% |
-| Registration | 4 | 0 | 4 | 0% |
-| Follow/Favorites | 1 | 0 | 1 | 0% |
-| **Total** | **30** | **21** | **9** | **70%** |
+| Grupo                    | Total  | Passed | Failed | Pass Rate |
+| ------------------------ | ------ | ------ | ------ | --------- |
+| Dataset Search & Listing | 7      | 7      | 0      | 100%      |
+| Dataset Detail           | 4      | 3      | 1      | 75%       |
+| Organizations            | 4      | 3      | 1      | 75%       |
+| Reuses                   | 3      | 3      | 0      | 100%      |
+| Global Search            | 4      | 3      | 1      | 75%       |
+| Themes/Topics            | 3      | 2      | 1      | 67%       |
+| Registration             | 4      | 0      | 4      | 0%        |
+| Follow/Favorites         | 1      | 0      | 1      | 0%        |
+| **Total**                | **30** | **21** | **9**  | **70%**   |
 
 **Classificação das 9 falhas:**
+
 - 4x By design — registo via Autenticação.gov (SAML), sem formulário local.
 - 5x Falso positivo — dados de teste insuficientes ou terminologia PT vs EN.
 - 0x Bugs reais.

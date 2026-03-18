@@ -2253,6 +2253,77 @@ Na página de listagem de datasets (`/pages/datasets`), cada card de dataset mos
 
 ---
 
+## TICKET-50: Frontend — Functional Testing with TestSprite MCP ✅
+
+**Descrição**
+Execução de testes funcionais automatizados no frontend Next.js utilizando o TestSprite MCP (Model Context Protocol). Cobertura de navegação, pesquisa, filtros, paginação, detalhe de entidades e formulários. Inclui correção de bugs encontrados durante os testes e correção de erros de build pré-existentes.
+
+**Contexto Arquitetural**
+
+- Target: frontend Next.js em `http://localhost:3001` (production build).
+- TestSprite MCP configurado via `.claude.json` com API key.
+- Testes gerados automaticamente pelo TestSprite com base no code summary e PRD.
+- Ficheiros de teste e credenciais em `testsprite_tests/` (excluído do git via `.gitignore`).
+- Relatório final em `docs/testsprite-frontend-report.md`.
+
+**O que foi feito**
+
+1. **Configurar o TestSprite MCP server**:
+   - Adicionado TestSprite MCP ao `.claude.json` com API key.
+   - Bootstrap do projeto frontend executado com sucesso.
+2. **Gerar code summary e test plan**:
+   - Code summary YAML gerado com todas as rotas, features e limitações conhecidas.
+   - Test plan com 57 test cases gerado automaticamente (High, Medium, Low priority).
+3. **Corrigir erros de build pré-existentes** (20 ficheiros):
+   - Instalação de dependências em falta (`react-markdown`, `remark-gfm`).
+   - Correção de tipos TypeScript incompatíveis com Agora Design System (ButtonVariant, DropdownType, PopupDimensions, DragAndDropUploader onChange).
+   - Correção de interfaces duplicadas em `types/api.ts`.
+   - Adição de Suspense wrappers para páginas com `useSearchParams`.
+   - Remoção de componente não utilizado (`FooterInstitutional`) com referências a variáveis inexistentes.
+4. **Corrigir bugs encontrados nos testes**:
+   - Removido `blockedLink={true}` em `DatasetsClient.tsx` — impedia navegação pelo título do dataset.
+   - Removido `blockedLink={true}` em `OrganizationsClient.tsx` — mesmo fix para cards de organizações.
+5. **Executar 30 testes em modo produção**:
+   - Build de produção (`npm run build && npm run start`) na porta 3001.
+   - 30 testes executados (limite do plano Free em modo produção).
+   - Resultado: 21/30 passed (70%) — 0 bugs reais, 9 falsos positivos/by-design.
+6. **Gerar relatório final**:
+   - Relatório completo em `docs/testsprite-frontend-report.md`.
+   - Classificação de cada falha (falso positivo, by-design, bug real).
+   - Documentação de todos os fixes aplicados.
+7. **Proteger dados sensíveis**:
+   - Adicionado `/testsprite_tests/` ao `.gitignore` (contém API keys e credenciais).
+
+**Resultados dos testes**
+
+| Grupo | Total | Passed | Failed | Pass Rate |
+|-------|-------|--------|--------|-----------|
+| Dataset Search & Listing | 7 | 7 | 0 | 100% |
+| Dataset Detail | 4 | 3 | 1 | 75% |
+| Organizations | 4 | 3 | 1 | 75% |
+| Reuses | 3 | 3 | 0 | 100% |
+| Global Search | 4 | 3 | 1 | 75% |
+| Themes/Topics | 3 | 2 | 1 | 67% |
+| Registration | 4 | 0 | 4 | 0% |
+| Follow/Favorites | 1 | 0 | 1 | 0% |
+| **Total** | **30** | **21** | **9** | **70%** |
+
+**Classificação das 9 falhas:**
+- 4x By design — registo via Autenticação.gov (SAML), sem formulário local.
+- 5x Falso positivo — dados de teste insuficientes ou terminologia PT vs EN.
+- 0x Bugs reais.
+
+**Critérios de Aceitação**
+
+- [x] TestSprite MCP configurado e funcional.
+- [x] 30 testes funcionais executados em modo produção.
+- [x] Bugs de navegação corrigidos (`blockedLink` em dataset e organization cards).
+- [x] Build de produção funcional (20 erros pré-existentes corrigidos).
+- [x] Relatório documentado em `docs/testsprite-frontend-report.md`.
+- [x] Dados sensíveis protegidos (`testsprite_tests/` no `.gitignore`).
+
+---
+
 ## Summary Table
 
 | #                                     | Ticket                                                   | Area   | Priority | Status                             |
@@ -2312,3 +2383,5 @@ Na página de listagem de datasets (`/pages/datasets`), cada card de dataset mos
 | 48 | Vulnerability Testing — Backend API (TestSprite MCP) | Security | High | Not started |
 | **UX & NAVEGAÇÃO** | | | | |
 | 49 | Datasets Listing — Organization Link in Dataset Card | Public | Medium | Not started |
+| **TESTING & QA** | | | | |
+| 50 | Frontend — Functional Testing with TestSprite MCP | QA | Medium | Concluído |

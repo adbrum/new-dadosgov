@@ -430,7 +430,7 @@ Estender `fetchOrganizations()` para suportar pesquisa e filtros, e completar a 
 
 ---
 
-## TICKET-11: Reuses — Search, Filtros e Detail (Conexões API) ✅
+## TICKET-11: Reuses — Search, Filtros e Detail (Conexões API) ✅✅
 
 **Descrição**
 Estender `fetchReuses()` para pesquisa/filtros e estender `fetchReuse()` para dados completos incluindo datasets associados.

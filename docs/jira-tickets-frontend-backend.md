@@ -2089,54 +2089,167 @@ Atualmente, o link "HVDs" no menu de navegação "Explorar" do Header aponta par
 
 ---
 
-## TICKET-47: Vulnerability Testing — TestSprite MCP Integration
+## TICKET-47: Vulnerability Testing — Frontend (TestSprite MCP)
 
 **Descrição**
-Configurar e executar testes de vulnerabilidades no projeto dados.gov.pt utilizando o TestSprite MCP (Model Context Protocol). O objetivo é identificar vulnerabilidades de segurança no frontend e backend, seguindo OWASP Top 10 e melhores práticas de segurança web, com relatórios automatizados.
+Executar testes de vulnerabilidades no frontend Next.js do projeto dados.gov.pt utilizando o TestSprite MCP (Model Context Protocol). O objetivo é identificar vulnerabilidades de segurança nas páginas públicas, formulários de autenticação e área admin, seguindo OWASP Top 10 e melhores práticas de segurança web.
 
 **Contexto Arquitetural**
 
-- O projeto tem dois pontos de entrada: frontend Next.js (porta 3000) e backend Flask/udata (porta 7000).
-- O frontend expõe páginas públicas (`/pages/*`), admin protegido (`/pages/admin/*`), e autenticação (`/login`, `/register`).
-- O backend expõe a API REST em `/api/1/` e `/api/2/` com autenticação via session cookies (CSRF token).
+- Target: frontend Next.js em `http://localhost:3000`.
+- Páginas públicas: `/pages/datasets`, `/pages/organizations`, `/pages/reuses`, `/pages/themes`.
+- Autenticação: `/login`, `/register` (formulários com CSRF token).
+- Admin protegido: `/pages/admin/*` (requer sessão autenticada e roles).
 - TestSprite MCP é um servidor MCP que permite executar testes de segurança automatizados diretamente a partir de agentes AI.
-- O MCP deve ser configurado no `.claude/settings.json` ou `mcp_servers` do projeto para que o agente consiga invocar os testes.
+- Repositório: `frontend/` (submodule Next.js).
 
 **O que deve ser feito**
 
 1. **Configurar o TestSprite MCP server**:
-   - Adicionar o TestSprite MCP ao ficheiro de configuração MCP do projeto (`.claude/settings.json` ou equivalente).
-   - Verificar que o servidor MCP está acessível e funcional.
-2. **Definir o escopo dos testes de vulnerabilidades**:
-   - Frontend: XSS (reflected e stored), open redirects, CSP headers, cookie flags, CSRF protection.
-   - Backend API: SQL/NoSQL injection, authentication bypass, broken access control, SSRF, mass assignment, rate limiting.
-   - Infraestrutura: HTTP headers de segurança (HSTS, X-Frame-Options, Content-Type-Options), CORS misconfiguration, TLS/SSL.
-3. **Executar os testes no frontend** (target: `http://localhost:3000`):
-   - Scan de páginas públicas (`/pages/datasets`, `/pages/organizations`, `/pages/reuses`).
-   - Scan de formulários de autenticação (`/login`, `/register`).
-   - Scan de páginas admin (com sessão autenticada).
-   - Verificar headers de segurança nas respostas HTTP.
-4. **Executar os testes no backend API** (target: `http://localhost:7000`):
-   - Scan de endpoints públicos (`GET /api/1/datasets/`, `/api/1/organizations/`).
-   - Scan de endpoints autenticados (`POST /api/1/datasets/`, `PUT /api/1/datasets/<id>/`).
-   - Testar CSRF token validation.
-   - Testar broken access control (aceder a endpoints admin sem role adequado).
-5. **Gerar e analisar relatórios**:
+   - Verificar que o TestSprite MCP está configurado e funcional (`.claude.json`).
+   - Executar bootstrap do projeto frontend com TestSprite.
+2. **Definir o escopo dos testes de vulnerabilidades frontend**:
+   - XSS (reflected e stored) em inputs de pesquisa, formulários e parâmetros URL.
+   - Open redirects em links e navegação.
+   - CSP headers — verificar Content-Security-Policy nas respostas.
+   - Cookie flags — Secure, HttpOnly, SameSite nos cookies de sessão.
+   - CSRF protection — verificar tokens nos formulários POST.
+   - Clickjacking — X-Frame-Options e frame-ancestors.
+3. **Executar os testes nas páginas públicas** (target: `http://localhost:3000`):
+   - Scan de `/pages/datasets` (listagem, pesquisa, filtros).
+   - Scan de `/pages/organizations` (listagem, detalhe).
+   - Scan de `/pages/reuses` (listagem, detalhe).
+   - Scan de `/pages/themes` (temas/topics).
+   - Verificar headers de segurança (HSTS, X-Content-Type-Options, X-Frame-Options).
+4. **Executar os testes nos formulários de autenticação**:
+   - Scan de `/login` — XSS, brute force protection, error messages info leakage.
+   - Scan de `/register` — input validation, email enumeration, password policy.
+   - Verificar que tokens CSRF estão presentes e validados.
+5. **Executar os testes na área admin** (com sessão autenticada):
+   - Scan de `/pages/admin/*` — broken access control sem autenticação.
+   - Verificar que rotas admin não são acessíveis sem role adequado.
+   - Testar horizontal privilege escalation entre utilizadores.
+6. **Gerar e analisar relatórios**:
    - Exportar relatório de vulnerabilidades encontradas.
    - Classificar por severidade (Critical, High, Medium, Low, Info).
-   - Documentar cada vulnerabilidade com: descrição, endpoint afetado, severidade, recomendação de correção.
-6. **Criar plano de remediação**:
+   - Documentar cada vulnerabilidade com: descrição, página/componente afetado, severidade, recomendação de correção.
+7. **Criar plano de remediação**:
    - Para cada vulnerabilidade encontrada, criar um sub-ticket ou agrupar por categoria.
    - Priorizar Critical e High para correção imediata.
 
 **Critérios de Aceitação**
 
 - [ ] TestSprite MCP configurado e funcional no projeto.
-- [ ] Testes executados no frontend (páginas públicas, auth, admin).
-- [ ] Testes executados no backend API (endpoints públicos e autenticados).
+- [ ] Testes executados nas páginas públicas (datasets, organizations, reuses, themes).
+- [ ] Testes executados nos formulários de autenticação (login, register).
+- [ ] Testes executados na área admin (access control, privilege escalation).
 - [ ] Relatório de vulnerabilidades gerado com classificação por severidade.
 - [ ] Plano de remediação documentado para vulnerabilidades Critical e High.
-- [ ] Nenhuma vulnerabilidade Critical aberta após remediação.
+
+---
+
+## TICKET-48: Vulnerability Testing — Backend API (TestSprite MCP)
+
+**Descrição**
+Executar testes de vulnerabilidades no backend Flask/udata (API REST) do projeto dados.gov.pt utilizando o TestSprite MCP (Model Context Protocol). O objetivo é identificar vulnerabilidades de segurança nos endpoints públicos e autenticados, seguindo OWASP Top 10 e melhores práticas de segurança para APIs.
+
+**Contexto Arquitetural**
+
+- Target: backend Flask/udata em `http://localhost:7000`.
+- API REST v1: `/api/1/` (datasets, organizations, reuses, users, discussions, posts, contacts, spatial).
+- API REST v2: `/api/2/` (topics).
+- Autenticação: session cookies com CSRF token (`X-CSRFToken` header).
+- Roles: `admin` (gestão da própria org), `sysadmin` (gestão global do site).
+- Repositório: `backend/` (submodule udata/Flask).
+
+**O que deve ser feito**
+
+1. **Configurar o TestSprite MCP server para backend**:
+   - Verificar que o TestSprite MCP está configurado e funcional.
+   - Executar bootstrap do projeto backend com TestSprite.
+2. **Definir o escopo dos testes de vulnerabilidades backend**:
+   - NoSQL injection (MongoDB) em parâmetros de query e body.
+   - Authentication bypass — acesso a endpoints protegidos sem sessão válida.
+   - Broken access control — acesso a recursos de outros utilizadores, escalação de privilégios.
+   - SSRF — parâmetros que aceitam URLs (e.g., `remote_url` em resources).
+   - Mass assignment — enviar campos não permitidos em POST/PUT (e.g., `roles`, `active`).
+   - Rate limiting — verificar proteção contra brute force.
+   - CORS misconfiguration — verificar headers Access-Control-Allow-Origin.
+3. **Executar os testes nos endpoints públicos** (target: `http://localhost:7000`):
+   - Scan de `GET /api/1/datasets/` — injection em parâmetros `q`, `sort`, `tag`, `format`.
+   - Scan de `GET /api/1/organizations/` — injection em parâmetros de pesquisa e filtros.
+   - Scan de `GET /api/1/reuses/` — injection em parâmetros de pesquisa.
+   - Scan de `GET /api/1/spatial/zones/` — injection em parâmetros geoespaciais.
+   - Verificar headers de segurança nas respostas HTTP (HSTS, X-Content-Type-Options, X-Frame-Options).
+4. **Executar os testes nos endpoints autenticados**:
+   - Scan de `POST /api/1/datasets/` — mass assignment, input validation.
+   - Scan de `PUT /api/1/datasets/<id>/` — broken access control (editar dataset de outro user).
+   - Scan de `DELETE /api/1/datasets/<id>/` — verificar que apenas owner/admin pode eliminar.
+   - Scan de `POST /api/1/organizations/` — mass assignment em roles e memberships.
+   - Scan de `PUT /api/1/users/<id>/` — privilege escalation (alterar próprio role para sysadmin).
+   - Testar CSRF token validation — requests sem `X-CSRFToken` devem ser rejeitados.
+5. **Executar os testes nos endpoints sysadmin**:
+   - Scan de `GET /api/1/users/` — acesso sem role sysadmin deve ser negado.
+   - Scan de `PATCH /api/1/site/` — atualização de config sem role sysadmin.
+   - Scan de `DELETE /api/1/users/<id>/` — eliminação de utilizadores sem permissão.
+   - Scan de `GET /api/1/reports/` — acesso a reports de moderação sem role adequado.
+6. **Gerar e analisar relatórios**:
+   - Exportar relatório de vulnerabilidades encontradas.
+   - Classificar por severidade (Critical, High, Medium, Low, Info).
+   - Documentar cada vulnerabilidade com: descrição, endpoint afetado, severidade, recomendação de correção.
+7. **Criar plano de remediação**:
+   - Para cada vulnerabilidade encontrada, criar um sub-ticket ou agrupar por categoria.
+   - Priorizar Critical e High para correção imediata.
+
+**Critérios de Aceitação**
+
+- [ ] TestSprite MCP configurado e funcional para o backend.
+- [ ] Testes executados nos endpoints públicos (datasets, organizations, reuses, spatial).
+- [ ] Testes executados nos endpoints autenticados (CRUD com access control).
+- [ ] Testes executados nos endpoints sysadmin (user management, site config, reports).
+- [ ] CSRF token validation testada em todos os endpoints mutáveis.
+- [ ] Relatório de vulnerabilidades gerado com classificação por severidade.
+- [ ] Plano de remediação documentado para vulnerabilidades Critical e High.
+
+---
+
+## TICKET-49: Datasets Listing — Organization Link in Dataset Card
+
+**Descrição**
+Na página de listagem de datasets (`/pages/datasets`), cada card de dataset mostra o nome e logo da organização. Atualmente, clicar em qualquer parte do card (incluindo no nome/logo da organização) navega para o detalhe do dataset. O comportamento esperado é que clicar no nome ou logo da organização navegue para a página da organização (`/pages/organizations/<slug>`), enquanto clicar no resto do card continua a navegar para o dataset.
+
+**Contexto Arquitetural**
+
+- Componente: `frontend/src/components/datasets/DatasetsClient.tsx`.
+- O card usa o componente `CardLinks` do Agora Design System (`@ama-pt/agora-design-system`).
+- O nome da organização é passado como prop `category` (texto estático, sem link).
+- O logo da organização é passado como prop `image` (imagem estática, sem link).
+- O `onClick` do card inteiro redireciona para `/pages/datasets/<slug>`.
+- A página de detalhe da organização existe em `/pages/organizations/<slug>`.
+- O objeto `dataset.organization` contém `slug`, `name`, `logo`, `id`.
+
+**O que deve ser feito**
+
+1. **Alterar o componente `DatasetsClient.tsx`**:
+   - Verificar se o `CardLinks` do Agora Design System suporta link na prop `category` ou se é necessário usar um slot/render prop customizado.
+   - Se `CardLinks` não suportar link nativo na `category`, usar uma alternativa: passar um elemento `<Link>` como `category` ou sobrepor com CSS o nome da organização como link clicável.
+   - O nome da organização deve ser um link para `/pages/organizations/<slug>`.
+   - O click no link da organização deve usar `e.stopPropagation()` para não disparar o `onClick` do card pai.
+2. **Alterar o logo/imagem da organização**:
+   - Se possível, tornar o logo da organização também clicável para a página da organização.
+   - Se o `CardLinks` não permitir link na imagem, manter como está (apenas o nome será link).
+3. **Verificar comportamento visual**:
+   - O nome da organização deve ter estilo de link (underline on hover, cor de link).
+   - O cursor deve mudar para pointer ao passar sobre o nome da organização.
+   - O resto do card mantém o comportamento atual (click → dataset detail).
+
+**Critérios de Aceitação**
+
+- [ ] Clicar no nome da organização no card navega para `/pages/organizations/<slug>`.
+- [ ] Clicar no logo da organização navega para `/pages/organizations/<slug>` (se suportado pelo componente).
+- [ ] Clicar no resto do card (título, descrição, métricas) continua a navegar para o dataset.
+- [ ] O nome da organização tem estilo visual de link (hover underline, cursor pointer).
+- [ ] Não há conflito entre o click do card e o click da organização (stopPropagation).
 
 ---
 
@@ -2195,4 +2308,7 @@ Configurar e executar testes de vulnerabilidades no projeto dados.gov.pt utiliza
 | 45 | Global Search — Unify Local Searches + CategoryToggles | Public | High | Concluído |
 | 46 | Explorar — Redirecionar HVDs para Datasets com tag=hvd | Public | Medium | Concluído |
 | **QUALIDADE & SEGURANÇA** | | | | |
-| 47 | Vulnerability Testing — TestSprite MCP Integration | Security | High | Not started |
+| 47 | Vulnerability Testing — Frontend (TestSprite MCP) | Security | High | Not started |
+| 48 | Vulnerability Testing — Backend API (TestSprite MCP) | Security | High | Not started |
+| **UX & NAVEGAÇÃO** | | | | |
+| 49 | Datasets Listing — Organization Link in Dataset Card | Public | Medium | Not started |

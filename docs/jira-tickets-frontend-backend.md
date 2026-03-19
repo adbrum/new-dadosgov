@@ -2325,6 +2325,100 @@ Execução de testes funcionais automatizados no frontend Next.js utilizando o T
 
 ---
 
+## TICKET-51: Vulnerability Remediation — Backend (KITS24 Security Audit) ✅
+
+**Descrição**
+Remediação de vulnerabilidades de segurança identificadas nos relatórios de auditoria KITS24 (2021-2026) contra `dados.gov.pt` e `preprod.dados.gov.pt`. Fonte: `Vulnerabilidades_mapa_geral.xlsx` (38 entradas). Implementação de 7 correções cobrindo OWASP Top 10 no backend Flask/udata, abrangendo todos os 10 endpoints de upload (backoffice + API) e endpoints de autenticação.
+
+**Contexto Arquitetural**
+
+- Target: backend Flask/udata em `backend/`.
+- VULNs endereçadas: 1532, 1533, 1534, 1377, 1688, 1496, 1550, 1378, 1379, 1593, 1515, 1595, 1878, 1879, 1498.
+- Findings adicionais de análise de código: CORS origin echo, SVG/XML/PNG upload XSS, security headers, discussion XSS, CAPTCHA fail-open.
+- Branch: `fix_vulnerabilities` no repositório `backend/` (origin: `git@github.com:amagovpt/udata-pt.git`).
+- Documentação detalhada: `docs/vulnerability-remediation.md`.
+
+**O que foi feito**
+
+1. **FIX 1 — User Enumeration (MEDIUM)** — VULN-1532, 1533, 1534, 1377, 1688:
+   - Alterado `SECURITY_RETURN_GENERIC_RESPONSES = True` em `settings.py` — Flask-Security retorna mensagens idênticas para todos os cenários de auth.
+   - Email `welcome_existing` tornado genérico ("Account information") para não revelar existência de conta.
+   - Ficheiros: `udata/settings.py`, `udata/auth/mails.py`.
+
+2. **FIX 2 — CORS Origin Echo (CRITICAL)** — VULN-1496, 1550:
+   - Adicionado `CORS_ALLOWED_ORIGINS = []` em `settings.py` (whitelist obrigatória).
+   - `cors.py` agora valida Origin contra whitelist antes de ecoar headers CORS com credentials.
+   - Removido wildcard `Access-Control-Allow-Origin: *` de `send_static()`.
+   - Ficheiros: `udata/cors.py`, `udata/settings.py`, `udata/app.py`.
+
+3. **FIX 3 — Malicious File Upload (CRITICAL)** — VULN-1378, 1379, 1593:
+   - Criado módulo centralizado `udata/core/storages/validation.py` com `validate_upload()` e `validate_image_stream()`.
+   - Validação de magic bytes (PNG, JPEG, GIF, WebP, BMP, TIFF), Pillow `Image.verify()`, scanning de `<script>`, `javascript:`, event handlers, XXE patterns.
+   - Protege **todos os 10 endpoints de upload** (backoffice `/upload/<name>/` + 5 endpoints API de resources + 4 endpoints de imagens).
+   - Mensagens de erro informativas com nome do ficheiro, tipo detetado e razão da rejeição.
+   - Ficheiros: `udata/core/storages/validation.py` (NEW), `udata/core/storages/api.py`, `udata/core/dataset/api.py`.
+
+4. **FIX 4 — Security Headers (HIGH)** — VULN-1515, 1595:
+   - Adicionado middleware `add_security_headers()` em `app.py` com X-Frame-Options, X-Content-Type-Options, HSTS, Referrer-Policy, CSP.
+   - Usa `setdefault()` para permitir override por endpoint específico.
+   - Ficheiro: `udata/app.py`.
+
+5. **FIX 5 — Discussion Content Sanitization (HIGH)** — VULN-1878:
+   - Adicionado `_sanitize_html()` com `bleach.clean(tags=[], strip=True)` nos 4 formulários de discussões.
+   - Sanitização aplicada antes da validação para manter DataRequired funcional.
+   - Ficheiro: `udata/core/discussions/forms.py`.
+
+6. **FIX 6 — CAPTCHA Fail-Open → Fail-Closed (MEDIUM)** — VULN-1879:
+   - `check_captchetat()` agora retorna `False` (fail-closed) quando o serviço CaptchEtat não está acessível.
+   - Ficheiro: `udata/auth/forms.py`.
+
+7. **FIX 7 — Rate Limiting (MEDIUM)** — VULN-1498, 1879:
+   - Adicionado `flask-limiter[redis]` como dependência.
+   - Limiter global: 200/day, 50/hour por IP.
+   - Rate limit de 5/minuto nos endpoints de login, register, forgot_password, reset_password.
+   - `RATELIMIT_STORAGE_URI = "memory://"` configurável para Redis em produção.
+   - Ficheiros: `pyproject.toml`, `udata/app.py`, `udata/auth/views.py`, `udata/settings.py`.
+
+**Ficheiros alterados**
+
+| Ficheiro | Fix |
+|---|---|
+| `udata/settings.py` | FIX 1, FIX 2, FIX 7 |
+| `udata/cors.py` | FIX 2 |
+| `udata/app.py` | FIX 2, FIX 4, FIX 7 |
+| `udata/core/storages/validation.py` | FIX 3 (NEW) |
+| `udata/core/storages/api.py` | FIX 3 |
+| `udata/core/dataset/api.py` | FIX 3 |
+| `udata/core/discussions/forms.py` | FIX 5 |
+| `udata/auth/forms.py` | FIX 6 |
+| `udata/auth/mails.py` | FIX 1 |
+| `udata/auth/views.py` | FIX 7 |
+| `pyproject.toml` | FIX 7 |
+
+**Configuração necessária para produção**
+
+```python
+# udata.cfg
+CORS_ALLOWED_ORIGINS = ["https://dados.gov.pt", "https://preprod.dados.gov.pt"]
+RATELIMIT_STORAGE_URI = "redis://localhost:6379"
+```
+
+**Critérios de Aceitação**
+
+- [x] CORS — Origin não whitelisted não é ecoado (`curl -H "Origin: http://evil.com"` retorna sem CORS headers).
+- [x] Upload — PNG poisoned (HTML dentro de .png) rejeitado com 415 e mensagem informativa.
+- [x] Upload — XML com XXE/script rejeitado com 415.
+- [x] Upload — SVG com `<script>` rejeitado com 415.
+- [x] Upload — Validação cobre todos os 10 endpoints (backoffice + API + imagens).
+- [x] Security Headers — X-Frame-Options, CSP, HSTS, X-Content-Type-Options presentes nas respostas.
+- [x] Discussions — `<script>alert(1)</script>` em título/comentário é stripped.
+- [x] User Enumeration — Login/register/reset com email existente e inexistente retorna mesma resposta.
+- [x] CAPTCHA — Serviço CaptchEtat inacessível resulta em rejeição (fail-closed).
+- [x] Rate Limiting — 6+ tentativas de login em 1 minuto resulta em HTTP 429.
+- [x] Documentação completa em `docs/vulnerability-remediation.md`.
+
+---
+
 ## Summary Table
 
 | #                                     | Ticket                                                   | Area   | Priority | Status                             |
@@ -2386,3 +2480,5 @@ Execução de testes funcionais automatizados no frontend Next.js utilizando o T
 | 49 | Datasets Listing — Organization Link in Dataset Card | Public | Medium | Not started |
 | **TESTING & QA** | | | | |
 | 50 | Frontend — Functional Testing with TestSprite MCP | QA | Medium | Concluído |
+| **SEGURANÇA — Remediação** | | | | |
+| 51 | Vulnerability Remediation — Backend (KITS24 Audit) | Security | Critical | Concluído |

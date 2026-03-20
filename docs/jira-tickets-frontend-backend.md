@@ -2478,6 +2478,82 @@ Browser (localhost:3000)
 
 ---
 
+## TICKET-53: Fix Server-Side Fetches Failing with Relative API URLs ✅
+
+**Descrição**
+Corrigir o problema em que páginas com Server Components (SSR) — como `/pages/datasets` — não conseguiam carregar dados da API, mostrando "0 resultados" e "Não encontrou o que procurava?" apesar de as contagens no sidebar estarem correctas (19 842 datasets).
+
+**Contexto Arquitetural**
+
+- A página de datasets (`src/app/pages/datasets/page.tsx`) é um **Server Component** — o `fetchDatasets()` corre no Node.js (server-side), não no browser.
+- O TICKET-52 alterou `NEXT_PUBLIC_API_BASE` de `http://localhost:7000/api/1` (absoluto) para `/api/1` (relativo) para resolver CORS em componentes client-side.
+- URLs relativos (como `/api/1/datasets/`) funcionam no browser (o browser resolve contra `localhost:3000`, e o Next.js proxy redireciona para o backend).
+- Mas no Node.js (server-side), `/api/1/datasets/` **não é resolvível** — o Node.js não tem hostname implícito, então o fetch falha silenciosamente.
+- Os contadores no sidebar funcionavam porque eram carregados via componentes client-side (`'use client'`) onde o URL relativo funciona correctamente.
+
+**Causa Raiz**
+
+`API_BASE_URL` em `src/services/api.ts` era uma constante simples:
+```typescript
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || "https://dados.gov.pt/api/1";
+// Resolvia para "/api/1" — funciona no browser, falha no Node.js
+```
+
+Server Components chamavam `fetch("/api/1/datasets/")` no Node.js → URL inválido → fetch falha → catch retorna `{ data: [], total: 0 }` → UI mostra "0 resultados".
+
+**O que foi corrigido**
+
+Alterado `src/services/api.ts` para detectar o ambiente de execução e usar o URL adequado:
+
+```typescript
+const isServer = typeof window === "undefined";
+const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:7000";
+const API_BASE_URL = isServer
+  ? `${BACKEND_URL}/api/1`
+  : (process.env.NEXT_PUBLIC_API_BASE || "/api/1");
+const API_V2_BASE_URL = isServer
+  ? `${BACKEND_URL}/api/2`
+  : (process.env.NEXT_PUBLIC_API_V2_BASE || "/api/2");
+```
+
+**Fluxo após a correção**
+
+```
+Server Component (Node.js — SSR):
+  → fetch("http://localhost:7000/api/1/datasets/")  ← URL absoluto directo
+  → backend responde com 19 842 datasets ✅
+
+Client Component (Browser):
+  → fetch("/api/1/datasets/")                       ← URL relativo
+  → Next.js proxy rewrite → backend                 ← sem CORS ✅
+```
+
+**Ficheiros alterados**
+
+| Ficheiro | Alteração |
+|---|---|
+| `frontend/src/services/api.ts` | `API_BASE_URL` e `API_V2_BASE_URL` agora usam URL absoluto (`BACKEND_URL`) em server-side e relativo em client-side |
+
+**Relação com TICKET-52**
+
+O TICKET-52 corrigiu os fetches **client-side** (homepage) mudando para URLs relativos. Este ticket completa a correção garantindo que os fetches **server-side** (SSR) continuam a funcionar com URLs absolutos.
+
+| Cenário | TICKET-52 (antes) | TICKET-52 (depois) | TICKET-53 (depois) |
+|---|---|---|---|
+| Client Component (browser) | ❌ CORS blocked | ✅ Relativo `/api/1` | ✅ Relativo `/api/1` |
+| Server Component (Node.js) | ✅ Absoluto `localhost:7000` | ❌ Relativo falha | ✅ Absoluto `localhost:7000` |
+
+**Critérios de Aceitação**
+
+- [x] `API_BASE_URL` usa URL absoluto (`BACKEND_URL/api/1`) em server-side.
+- [x] `API_BASE_URL` usa URL relativo (`/api/1`) em client-side.
+- [x] `API_V2_BASE_URL` segue a mesma lógica.
+- [x] Página `/pages/datasets` mostra lista de datasets (SSR).
+- [x] Homepage continua a funcionar (client-side fetches via proxy).
+- [x] Variável `BACKEND_URL` reutilizada de `.env.local` (já existia para `next.config.ts`).
+
+---
+
 ## Summary Table
 
 | #                                     | Ticket                                                   | Area   | Priority | Status                             |
@@ -2543,3 +2619,4 @@ Browser (localhost:3000)
 | 51 | Vulnerability Remediation — Backend (KITS24 Audit) | Security | Critical | Concluído |
 | **INFRAESTRUTURA & CONFIG** | | | | |
 | 52 | Homepage — Fix CORS Blocking All Client-Side API Calls | Frontend | High | Concluído |
+| 53 | Fix Server-Side Fetches Failing with Relative API URLs | Frontend | High | Concluído |

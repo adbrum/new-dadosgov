@@ -2419,6 +2419,65 @@ RATELIMIT_STORAGE_URI = "redis://localhost:6379"
 
 ---
 
+## TICKET-52: Homepage — Fix CORS Blocking All Client-Side API Calls ✅
+
+**Descrição**
+Corrigir o problema em que a homepage mostrava todas as métricas a 0, "Nenhum conjunto de dados encontrado", "Nenhuma reutilização encontrada" e "Nenhuma novidade encontrada" — apesar do backend ter dados (19 842 datasets, organizações, reuses, etc.).
+
+**Contexto Arquitetural**
+
+- A homepage (`src/app/page.tsx`) é um componente `'use client'` — todos os fetches correm no browser.
+- As funções `fetchSiteInfo()`, `fetchLatestDatasets()`, `fetchLatestReuses()`, `fetchPosts()` usavam `API_BASE_URL` definido como `http://localhost:7000/api/1` (URL absoluto cross-origin).
+- O browser em `localhost:3000` fazia pedidos directos a `localhost:7000`, que é um domínio diferente (cross-origin).
+- O backend tem `CORS_ALLOWED_ORIGINS = []` por defeito (`udata/settings.py:124`, `udata/cors.py:18`), o que bloqueia todos os pedidos cross-origin.
+- Todos os fetches falhavam silenciosamente — os blocos `catch` retornavam fallback com zeros e arrays vazios.
+- O Next.js já tinha rewrites configurados em `next.config.ts` para proxy de `/api/:path*` → backend, mas os fetches públicos não os usavam.
+
+**Causa Raiz**
+
+1. `NEXT_PUBLIC_API_BASE=http://localhost:7000/api/1` (URL absoluto) → fetches client-side iam directo ao backend → CORS bloqueado.
+2. `BACKEND_URL` em `next.config.ts` era derivado de `NEXT_PUBLIC_API_BASE` via `.replace("/api/1", "")` — acoplamento frágil entre variável client-side e configuração server-side.
+3. Os error handlers de cada fetch retornavam dados vazios sem erros visíveis na UI (design gracioso, mas esconde o problema).
+
+**O que foi corrigido**
+
+1. **`.env.local`** — Alterado `NEXT_PUBLIC_API_BASE` de `http://localhost:7000/api/1` para `/api/1` (URL relativo). Idem para `NEXT_PUBLIC_API_V2_BASE`. Adicionado `BACKEND_URL=http://localhost:7000` (variável server-side para o proxy).
+2. **`.env.example`** — Actualizado para reflectir o novo padrão com URLs relativos e `BACKEND_URL` separado.
+3. **`next.config.ts`** — `BACKEND_URL` agora lê `process.env.BACKEND_URL` directamente em vez de derivar de `NEXT_PUBLIC_API_BASE`.
+
+**Fluxo após a correção**
+
+```
+Browser (localhost:3000)
+  → fetch("/api/1/site/")          ← URL relativo
+  → Next.js rewrite proxy          ← intercepta /api/:path*
+  → http://localhost:7000/api/1/site/  ← server-side, sem CORS
+  → resposta com metrics.datasets = 19842
+```
+
+**Ficheiros alterados**
+
+| Ficheiro | Alteração |
+|---|---|
+| `frontend/.env.local` | `NEXT_PUBLIC_API_BASE=/api/1`, `NEXT_PUBLIC_API_V2_BASE=/api/2`, adicionado `BACKEND_URL=http://localhost:7000` |
+| `frontend/.env.example` | Idem (template actualizado) |
+| `frontend/next.config.ts` | `BACKEND_URL` lê de `process.env.BACKEND_URL` em vez de derivar de `NEXT_PUBLIC_API_BASE` |
+
+**Nota**: Após alterar variáveis `NEXT_PUBLIC_*`, é necessário limpar o cache do Next.js (`rm -rf .next/`) e reiniciar o dev server, pois estas variáveis são embebidas no bundle JS no momento da compilação.
+
+**Critérios de Aceitação**
+
+- [x] `NEXT_PUBLIC_API_BASE` usa URL relativo (`/api/1`).
+- [x] `BACKEND_URL` é variável separada, server-side only.
+- [x] `next.config.ts` usa `BACKEND_URL` directamente para rewrites.
+- [x] Homepage mostra métricas reais do backend (datasets, reuses, organizações, utilizadores).
+- [x] Homepage mostra datasets recentes (3 cards).
+- [x] Homepage mostra reutilizações recentes (3 cards).
+- [x] Homepage mostra notícias recentes (3 cards).
+- [x] Proxy Next.js responde correctamente: `curl localhost:3000/api/1/site/` retorna dados.
+
+---
+
 ## Summary Table
 
 | #                                     | Ticket                                                   | Area   | Priority | Status                             |
@@ -2427,7 +2486,7 @@ RATELIMIT_STORAGE_URI = "redis://localhost:6379"
 | 01                                    | Auth — Login (CSRF + session)                            | Auth   | High     | Route handler existe, falta wiring |
 | 02                                    | Auth — Registration (proxy + form)                       | Auth   | High     | UI existe, falta wiring            |
 | 03                                    | Auth — Current User (`/me/` + context)                   | Auth   | High     | Not started                        |
-| 04                                    | Homepage — Dados Dinâmicos (site, featured, posts)       | Public | High     | Tudo hardcoded                     |
+| 04                                    | Homepage — Dados Dinâmicos (site, featured, posts)       | Public | High     | Concluído (CORS fix: TICKET-52)    |
 | 05                                    | Datasets — Search (q param + suggest)                    | Public | High     | fetchDatasets sem q                |
 | 06                                    | Datasets — Filtros (licenses, schemas, tags, etc.)       | Public | Medium   | Parcialmente dinâmico              |
 | 07                                    | Discussions CRUD                                         | Public | Medium   | Placeholder                        |
@@ -2482,3 +2541,5 @@ RATELIMIT_STORAGE_URI = "redis://localhost:6379"
 | 50 | Frontend — Functional Testing with TestSprite MCP | QA | Medium | Concluído |
 | **SEGURANÇA — Remediação** | | | | |
 | 51 | Vulnerability Remediation — Backend (KITS24 Audit) | Security | Critical | Concluído |
+| **INFRAESTRUTURA & CONFIG** | | | | |
+| 52 | Homepage — Fix CORS Blocking All Client-Side API Calls | Frontend | High | Concluído |

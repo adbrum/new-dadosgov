@@ -2089,7 +2089,7 @@ Atualmente, o link "HVDs" no menu de navegação "Explorar" do Header aponta par
 
 ---
 
-## TICKET-47: Vulnerability Testing — Frontend (npm audit + curl + OWASP ZAP)
+## TICKET-47: Vulnerability Testing — Frontend (npm audit + curl + OWASP ZAP) ✅
 
 **Descrição**
 Executar testes de vulnerabilidades no frontend Next.js do projeto dados.gov.pt utilizando três ferramentas complementares: **npm audit** (dependências), **curl manual** (headers, XSS, access control), e **OWASP ZAP** (scan automático OWASP Top 10). O objetivo é identificar e corrigir vulnerabilidades de segurança nas páginas públicas, formulários de autenticação e área admin.

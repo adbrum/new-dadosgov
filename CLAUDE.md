@@ -89,7 +89,7 @@ src/
 ## Regras Gerais
 
 - **Idioma do código**: inglês (variáveis, funções, comentários, commits)
-- **Commits**: mensagens descritivas em inglês, referenciar issues com `(fix #XXX)`
+- **Commits**: mensagens descritivas em inglês, referenciar issues com `(fix #XXX)`. **Nunca incluir `Co-Authored-By` ou qualquer atribuição de IA nos commits.**
 - **Ao alterar a API**: atualizar sempre tanto o backend (endpoint + serialização) como o frontend (tipo TS + fetch function)
 - **Novos endpoints**: registar em `backend/udata/api/__init__.py` → `init_app()`
 - **Novos tipos TS**: adicionar em `frontend/src/types/api.ts`

@@ -2566,10 +2566,10 @@ O TICKET-52 corrigiu os fetches **client-side** (homepage) mudando para URLs rel
 
 ---
 
-## TICKET-54: Admin — Organization Discussions & Members (Backend Wiring)
+## TICKET-54: Admin — Organization Sections Wiring, Pagination & Harvester Fix ✅
 
 **Descrição**
-Conectar à API real as 2 secções de backoffice da organização que ainda estão com dados hardcoded/placeholder: Discussões e Membros. As restantes 6 secções (Datasets, Reutilizações, Harvesters, Recursos comunitários, Perfil, Estatísticas) já estão conectadas à API.
+Conectar à API real as secções de backoffice da organização que estavam com dados hardcoded/placeholder (Discussões e Membros), corrigir o filtro de harvesters por organização no backend, e implementar paginação real client-side em todas as secções da organização (o componente `Table` do Agora Design System não pagina os dados automaticamente — apenas mostra o controlo visual).
 
 **Contexto Arquitetural**
 
@@ -2583,6 +2583,7 @@ Conectar à API real as 2 secções de backoffice da organização que ainda est
   - Editar membro: `PUT /api/1/organizations/<id>/member/<user_id>` (body: `{ role: "admin"|"editor" }`).
   - Remover membro: `DELETE /api/1/organizations/<id>/member/<user_id>`.
   - Suggest users: `GET /api/1/users/suggest/?q=<query>` — autocomplete de utilizadores.
+  - Harvesters: `GET /api/1/harvest/sources/?organization=<org_id>` — filtrar por organização.
 
 **O que deve ser feito**
 
@@ -2596,27 +2597,48 @@ Conectar à API real as 2 secções de backoffice da organização que ainda est
 2. **Membros** — Rewrite do `MembersClient.tsx`:
    - Remover `mockMembers` e todo o mock data.
    - Buscar membros da organização via API (`fetchOrganization(org_id)` → `org.members[]`).
-   - Mostrar tabela com: avatar, nome, email, role (badge), data de adesão (`since`), última conexão.
+   - Mostrar tabela com: avatar, nome, email, role (badge), data de adesão (`since`).
    - Implementar "Adicionar membro": popup com `suggestUsers(query)` para autocomplete, seleção de role, e `POST /api/1/organizations/<id>/member/<user_id>`.
-   - Implementar "Editar role": inline ou popup para alterar role de um membro existente.
+   - Implementar "Editar role": popup para alterar role de um membro existente.
    - Implementar "Remover membro": confirmação + `DELETE /api/1/organizations/<id>/member/<user_id>`.
 
-3. **Funções API** (se não existirem):
-   - `fetchOrgMembers(orgId)` — extrair `members[]` do response de `fetchOrganization(orgId)`.
-   - `addOrgMember(orgId, userId, role)` → `POST /api/1/organizations/<id>/member/<user_id>`.
-   - `updateOrgMemberRole(orgId, userId, role)` → `PUT /api/1/organizations/<id>/member/<user_id>`.
-   - `removeOrgMember(orgId, userId)` → `DELETE /api/1/organizations/<id>/member/<user_id>`.
-   - `suggestUsers(query)` → `GET /api/1/users/suggest/?q=<query>` (se não existir).
+3. **Harvesters** — Fix filtro por organização (backend):
+   - O endpoint `GET /api/1/harvest/sources/` não filtrava por `organization` — retornava todos os harvesters (38) independentemente da org selecionada.
+   - Adicionado param `organization` ao `source_parser` em `udata/harvest/api.py`.
+   - Adicionado filtro `sources = sources(organization=args['organization'])` na query.
+
+4. **Paginação real client-side** em todas as secções da organização:
+   - O componente `Table` do Agora Design System mostra controlos de paginação visuais (`paginationProps`) mas **não pagina os dados** — renderiza todas as `TableRow` independentemente do `currentPage`.
+   - Implementada paginação manual com `useState(currentPage)`, `useState(itemsPerPage)` e `useMemo(paginatedItems)`.
+   - Cada secção agora mostra apenas N items por página (default: 10), com selector "Linhas por página" (10/20/50), indicador "1–10 de 329", e setas de navegação < >.
+   - Secções afetadas:
+     - `OrgDatasetsClient.tsx` — Conjuntos de dados
+     - `OrgReusesClient.tsx` — Reutilizações
+     - `DiscussionsClient.tsx` — Discussões
+     - `MembersClient.tsx` — Membros
+     - `OrgHarvestersClient.tsx` — Harvesters
+     - `OrgCommunityResourcesClient.tsx` — Recursos comunitários
+
+5. **Funções API** (já existiam em `services/api.ts`):
+   - `fetchOrgDiscussions(org)` — buscar discussões da organização.
+   - `addMember(org, userId, role)` — adicionar membro.
+   - `updateMemberRole(org, userId, role)` — editar role.
+   - `removeMember(org, userId)` — remover membro.
+   - `suggestUsers(query)` — autocomplete de utilizadores.
 
 **Critérios de Aceitação**
 
 - [ ] Discussões lista dados reais da API com título, autor, data, estado e contagem de mensagens.
-- [ ] Membros lista dados reais da API (nome, email, role, data de adesão, última conexão).
+- [ ] Membros lista dados reais da API (nome, role, data de adesão).
 - [ ] Adicionar membro funciona com autocomplete de utilizadores (`suggestUsers`).
 - [ ] Editar role de membro funciona via API.
 - [ ] Remover membro funciona com confirmação.
 - [ ] Sem dados hardcoded/mock restantes nas secções Discussões e Membros.
 - [ ] Empty states adequados quando não há dados.
+- [ ] Harvesters filtrados por organização (backend fix — endpoint retorna apenas harvesters da org selecionada).
+- [ ] Paginação real funcional em todas as 6 secções da organização (datasets, reuses, discussions, members, harvesters, community resources).
+- [ ] Selector "Linhas por página" com opções 10/20/50 em cada secção.
+- [ ] Indicador de posição "X–Y de Z" em cada secção.
 
 ---
 

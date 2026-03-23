@@ -65,3 +65,4 @@ celerybeat.pid
 # Security reports (contain vulnerability details - do not commit)
 docs/testsprite-frontend-report.md
 docs/testsprite-vulnerability-frontend-report.md
+docs/testsprite-vulnerability-backend-report.md

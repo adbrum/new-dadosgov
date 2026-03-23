@@ -1283,7 +1283,7 @@ Migrar utilizadores legados (email/password) para CMD (Chave Móvel Digital) ou 
 
 ---
 
-## TICKET-26: Admin — Datasets CRUD (Conexões API) ✅
+## TICKET-26: Admin — Datasets CRUD (Conexões API) ✅✅
 
 **Descrição**
 Implementar toda a camada de conexão (tipos TS + funções API) necessária para as páginas admin de datasets: listagem pessoal, criação, edição, eliminação, e gestão de resources.
@@ -1365,7 +1365,7 @@ Implementar toda a camada de conexão (tipos TS + funções API) necessária par
 
 ---
 
-## TICKET-27: Admin — Reuses CRUD (Conexões API) ✅
+## TICKET-27: Admin — Reuses CRUD (Conexões API) ✅✅
 
 **Descrição**
 Implementar a camada de conexão para as páginas admin de reuses: listagem pessoal, criação, edição, eliminação, e gestão de datasets/dataservices associados.
@@ -1420,7 +1420,7 @@ Implementar a camada de conexão para as páginas admin de reuses: listagem pess
 
 ---
 
-## TICKET-28: Admin — Dataservices CRUD (Conexões API) ✅
+## TICKET-28: Admin — Dataservices CRUD (Conexões API) ✅✅
 
 **Descrição**
 Implementar a camada de conexão para dataservices: listagem, criação (wiring do form existente `ApiRegistrationClient.tsx`), edição e eliminação.
@@ -2104,11 +2104,11 @@ Executar testes de vulnerabilidades no frontend Next.js do projeto dados.gov.pt 
 
 **Ferramentas utilizadas**
 
-| Ferramenta | Objetivo | Método |
-|-----------|----------|--------|
-| `npm audit` | Vulnerabilidades em dependências npm | Análise estática de CVEs conhecidos |
-| `curl` manual | Security headers, XSS, open redirect, path traversal, CORS, access control, file exposure | Testes HTTP manuais contra endpoints |
-| OWASP ZAP (Docker) | Scan automático OWASP Top 10 — 183 URLs, 57 regras de segurança | `zap-baseline.py` via `ghcr.io/zaproxy/zaproxy:stable` |
+| Ferramenta         | Objetivo                                                                                  | Método                                                 |
+| ------------------ | ----------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `npm audit`        | Vulnerabilidades em dependências npm                                                      | Análise estática de CVEs conhecidos                    |
+| `curl` manual      | Security headers, XSS, open redirect, path traversal, CORS, access control, file exposure | Testes HTTP manuais contra endpoints                   |
+| OWASP ZAP (Docker) | Scan automático OWASP Top 10 — 183 URLs, 57 regras de segurança                           | `zap-baseline.py` via `ghcr.io/zaproxy/zaproxy:stable` |
 
 **O que deve ser feito**
 
@@ -2337,7 +2337,7 @@ Execução de testes funcionais automatizados no frontend Next.js utilizando o T
 
 ---
 
-## TICKET-51: Vulnerability Remediation — Backend (KITS24 Security Audit) ✅
+## TICKET-51: Vulnerability Remediation — Backend (KITS24 Security Audit) ✅✅
 
 **Descrição**
 Remediação de vulnerabilidades de segurança identificadas nos relatórios de auditoria KITS24 (2021-2026) contra `dados.gov.pt` e `preprod.dados.gov.pt`. Fonte: `Vulnerabilidades_mapa_geral.xlsx` (38 entradas). Implementação de 7 correções cobrindo OWASP Top 10 no backend Flask/udata, abrangendo todos os 10 endpoints de upload (backoffice + API) e endpoints de autenticação.
@@ -2393,19 +2393,19 @@ Remediação de vulnerabilidades de segurança identificadas nos relatórios de 
 
 **Ficheiros alterados**
 
-| Ficheiro | Fix |
-|---|---|
-| `udata/settings.py` | FIX 1, FIX 2, FIX 7 |
-| `udata/cors.py` | FIX 2 |
-| `udata/app.py` | FIX 2, FIX 4, FIX 7 |
-| `udata/core/storages/validation.py` | FIX 3 (NEW) |
-| `udata/core/storages/api.py` | FIX 3 |
-| `udata/core/dataset/api.py` | FIX 3 |
-| `udata/core/discussions/forms.py` | FIX 5 |
-| `udata/auth/forms.py` | FIX 6 |
-| `udata/auth/mails.py` | FIX 1 |
-| `udata/auth/views.py` | FIX 7 |
-| `pyproject.toml` | FIX 7 |
+| Ficheiro                            | Fix                 |
+| ----------------------------------- | ------------------- |
+| `udata/settings.py`                 | FIX 1, FIX 2, FIX 7 |
+| `udata/cors.py`                     | FIX 2               |
+| `udata/app.py`                      | FIX 2, FIX 4, FIX 7 |
+| `udata/core/storages/validation.py` | FIX 3 (NEW)         |
+| `udata/core/storages/api.py`        | FIX 3               |
+| `udata/core/dataset/api.py`         | FIX 3               |
+| `udata/core/discussions/forms.py`   | FIX 5               |
+| `udata/auth/forms.py`               | FIX 6               |
+| `udata/auth/mails.py`               | FIX 1               |
+| `udata/auth/views.py`               | FIX 7               |
+| `pyproject.toml`                    | FIX 7               |
 
 **Configuração necessária para produção**
 
@@ -2469,11 +2469,11 @@ Browser (localhost:3000)
 
 **Ficheiros alterados**
 
-| Ficheiro | Alteração |
-|---|---|
-| `frontend/.env.local` | `NEXT_PUBLIC_API_BASE=/api/1`, `NEXT_PUBLIC_API_V2_BASE=/api/2`, adicionado `BACKEND_URL=http://localhost:7000` |
-| `frontend/.env.example` | Idem (template actualizado) |
-| `frontend/next.config.ts` | `BACKEND_URL` lê de `process.env.BACKEND_URL` em vez de derivar de `NEXT_PUBLIC_API_BASE` |
+| Ficheiro                  | Alteração                                                                                                       |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `frontend/.env.local`     | `NEXT_PUBLIC_API_BASE=/api/1`, `NEXT_PUBLIC_API_V2_BASE=/api/2`, adicionado `BACKEND_URL=http://localhost:7000` |
+| `frontend/.env.example`   | Idem (template actualizado)                                                                                     |
+| `frontend/next.config.ts` | `BACKEND_URL` lê de `process.env.BACKEND_URL` em vez de derivar de `NEXT_PUBLIC_API_BASE`                       |
 
 **Nota**: Após alterar variáveis `NEXT_PUBLIC_*`, é necessário limpar o cache do Next.js (`rm -rf .next/`) e reiniciar o dev server, pois estas variáveis são embebidas no bundle JS no momento da compilação.
 
@@ -2506,8 +2506,10 @@ Corrigir o problema em que páginas com Server Components (SSR) — como `/pages
 **Causa Raiz**
 
 `API_BASE_URL` em `src/services/api.ts` era uma constante simples:
+
 ```typescript
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || "https://dados.gov.pt/api/1";
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE || 'https://dados.gov.pt/api/1';
 // Resolvia para "/api/1" — funciona no browser, falha no Node.js
 ```
 
@@ -2518,14 +2520,14 @@ Server Components chamavam `fetch("/api/1/datasets/")` no Node.js → URL invál
 Alterado `src/services/api.ts` para detectar o ambiente de execução e usar o URL adequado:
 
 ```typescript
-const isServer = typeof window === "undefined";
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:7000";
+const isServer = typeof window === 'undefined';
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:7000';
 const API_BASE_URL = isServer
   ? `${BACKEND_URL}/api/1`
-  : (process.env.NEXT_PUBLIC_API_BASE || "/api/1");
+  : process.env.NEXT_PUBLIC_API_BASE || '/api/1';
 const API_V2_BASE_URL = isServer
   ? `${BACKEND_URL}/api/2`
-  : (process.env.NEXT_PUBLIC_API_V2_BASE || "/api/2");
+  : process.env.NEXT_PUBLIC_API_V2_BASE || '/api/2';
 ```
 
 **Fluxo após a correção**
@@ -2542,18 +2544,18 @@ Client Component (Browser):
 
 **Ficheiros alterados**
 
-| Ficheiro | Alteração |
-|---|---|
+| Ficheiro                       | Alteração                                                                                                           |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
 | `frontend/src/services/api.ts` | `API_BASE_URL` e `API_V2_BASE_URL` agora usam URL absoluto (`BACKEND_URL`) em server-side e relativo em client-side |
 
 **Relação com TICKET-52**
 
 O TICKET-52 corrigiu os fetches **client-side** (homepage) mudando para URLs relativos. Este ticket completa a correção garantindo que os fetches **server-side** (SSR) continuam a funcionar com URLs absolutos.
 
-| Cenário | TICKET-52 (antes) | TICKET-52 (depois) | TICKET-53 (depois) |
-|---|---|---|---|
-| Client Component (browser) | ❌ CORS blocked | ✅ Relativo `/api/1` | ✅ Relativo `/api/1` |
-| Server Component (Node.js) | ✅ Absoluto `localhost:7000` | ❌ Relativo falha | ✅ Absoluto `localhost:7000` |
+| Cenário                    | TICKET-52 (antes)            | TICKET-52 (depois)   | TICKET-53 (depois)           |
+| -------------------------- | ---------------------------- | -------------------- | ---------------------------- |
+| Client Component (browser) | ❌ CORS blocked              | ✅ Relativo `/api/1` | ✅ Relativo `/api/1`         |
+| Server Component (Node.js) | ✅ Absoluto `localhost:7000` | ❌ Relativo falha    | ✅ Absoluto `localhost:7000` |
 
 **Critérios de Aceitação**
 

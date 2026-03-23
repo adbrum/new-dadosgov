@@ -2160,7 +2160,7 @@ Executar testes de vulnerabilidades no frontend Next.js do projeto dados.gov.pt 
 
 ---
 
-## TICKET-48: Vulnerability Testing — Backend API (TestSprite MCP)
+## TICKET-48: Vulnerability Testing — Backend API (TestSprite MCP) ✅
 
 **Descrição**
 Executar testes de vulnerabilidades no backend Flask/udata (API REST) do projeto dados.gov.pt utilizando o TestSprite MCP (Model Context Protocol). O objetivo é identificar vulnerabilidades de segurança nos endpoints públicos e autenticados, seguindo OWASP Top 10 e melhores práticas de segurança para APIs.
@@ -2215,17 +2215,17 @@ Executar testes de vulnerabilidades no backend Flask/udata (API REST) do projeto
 
 **Critérios de Aceitação**
 
-- [ ] TestSprite MCP configurado e funcional para o backend.
-- [ ] Testes executados nos endpoints públicos (datasets, organizations, reuses, spatial).
-- [ ] Testes executados nos endpoints autenticados (CRUD com access control).
-- [ ] Testes executados nos endpoints sysadmin (user management, site config, reports).
-- [ ] CSRF token validation testada em todos os endpoints mutáveis.
-- [ ] Relatório de vulnerabilidades gerado com classificação por severidade.
-- [ ] Plano de remediação documentado para vulnerabilidades Critical e High.
+- [x] TestSprite MCP configurado e funcional para o backend.
+- [x] Testes executados nos endpoints públicos (datasets, organizations, reuses, spatial).
+- [x] Testes executados nos endpoints autenticados (CRUD com access control).
+- [x] Testes executados nos endpoints sysadmin (user management, site config, reports).
+- [x] CSRF token validation testada em todos os endpoints mutáveis.
+- [x] Relatório de vulnerabilidades gerado com classificação por severidade.
+- [x] Plano de remediação documentado para vulnerabilidades Critical e High.
 
 ---
 
-## TICKET-49: Datasets Listing — Organization Link in Dataset Card
+## TICKET-49: Datasets Listing — Organization Link in Dataset Card ✅
 
 **Descrição**
 Na página de listagem de datasets (`/pages/datasets`), cada card de dataset mostra o nome e logo da organização. Atualmente, clicar em qualquer parte do card (incluindo no nome/logo da organização) navega para o detalhe do dataset. O comportamento esperado é que clicar no nome ou logo da organização navegue para a página da organização (`/pages/organizations/<slug>`), enquanto clicar no resto do card continua a navegar para o dataset.
@@ -2257,11 +2257,11 @@ Na página de listagem de datasets (`/pages/datasets`), cada card de dataset mos
 
 **Critérios de Aceitação**
 
-- [ ] Clicar no nome da organização no card navega para `/pages/organizations/<slug>`.
-- [ ] Clicar no logo da organização navega para `/pages/organizations/<slug>` (se suportado pelo componente).
-- [ ] Clicar no resto do card (título, descrição, métricas) continua a navegar para o dataset.
-- [ ] O nome da organização tem estilo visual de link (hover underline, cursor pointer).
-- [ ] Não há conflito entre o click do card e o click da organização (stopPropagation).
+- [x] Clicar no nome da organização no card navega para `/pages/organizations/<slug>`.
+- [x] Clicar no logo da organização navega para `/pages/organizations/<slug>` (se suportado pelo componente).
+- [x] Clicar no resto do card (título, descrição, métricas) continua a navegar para o dataset.
+- [x] O nome da organização tem estilo visual de link (hover underline, cursor pointer).
+- [x] Não há conflito entre o click do card e o click da organização (stopPropagation).
 
 ---
 
@@ -2566,6 +2566,60 @@ O TICKET-52 corrigiu os fetches **client-side** (homepage) mudando para URLs rel
 
 ---
 
+## TICKET-54: Admin — Organization Discussions & Members (Backend Wiring)
+
+**Descrição**
+Conectar à API real as 2 secções de backoffice da organização que ainda estão com dados hardcoded/placeholder: Discussões e Membros. As restantes 6 secções (Datasets, Reutilizações, Harvesters, Recursos comunitários, Perfil, Estatísticas) já estão conectadas à API.
+
+**Contexto Arquitetural**
+
+- Páginas admin da organização: `frontend/src/app/pages/admin/org/[orgId]/`
+- Componentes: `frontend/src/components/admin/`
+- API functions: `frontend/src/services/api.ts`
+- Backend endpoints:
+  - Discussões: `GET /api/1/discussions/?for=<org_id>` — discussões sobre a organização.
+  - Membros: `GET /api/1/organizations/<id>/` → campo `members[]` no response.
+  - Adicionar membro: `POST /api/1/organizations/<id>/member/<user_id>` (body: `{ role: "admin"|"editor" }`).
+  - Editar membro: `PUT /api/1/organizations/<id>/member/<user_id>` (body: `{ role: "admin"|"editor" }`).
+  - Remover membro: `DELETE /api/1/organizations/<id>/member/<user_id>`.
+  - Suggest users: `GET /api/1/users/suggest/?q=<query>` — autocomplete de utilizadores.
+
+**O que deve ser feito**
+
+1. **Discussões** — Wiring do `DiscussionsClient.tsx`:
+   - Remover placeholder "Ainda não há discussões".
+   - Usar `fetchOrgDiscussions(org_id)` (já existe em `services/api.ts`).
+   - Mostrar lista de discussões com: título, autor (avatar + nome), data de criação, estado (aberta/fechada), número de mensagens.
+   - Mostrar empty state quando não há discussões.
+   - Clicar numa discussão pode abrir detalhe (opcional nesta fase).
+
+2. **Membros** — Rewrite do `MembersClient.tsx`:
+   - Remover `mockMembers` e todo o mock data.
+   - Buscar membros da organização via API (`fetchOrganization(org_id)` → `org.members[]`).
+   - Mostrar tabela com: avatar, nome, email, role (badge), data de adesão (`since`), última conexão.
+   - Implementar "Adicionar membro": popup com `suggestUsers(query)` para autocomplete, seleção de role, e `POST /api/1/organizations/<id>/member/<user_id>`.
+   - Implementar "Editar role": inline ou popup para alterar role de um membro existente.
+   - Implementar "Remover membro": confirmação + `DELETE /api/1/organizations/<id>/member/<user_id>`.
+
+3. **Funções API** (se não existirem):
+   - `fetchOrgMembers(orgId)` — extrair `members[]` do response de `fetchOrganization(orgId)`.
+   - `addOrgMember(orgId, userId, role)` → `POST /api/1/organizations/<id>/member/<user_id>`.
+   - `updateOrgMemberRole(orgId, userId, role)` → `PUT /api/1/organizations/<id>/member/<user_id>`.
+   - `removeOrgMember(orgId, userId)` → `DELETE /api/1/organizations/<id>/member/<user_id>`.
+   - `suggestUsers(query)` → `GET /api/1/users/suggest/?q=<query>` (se não existir).
+
+**Critérios de Aceitação**
+
+- [ ] Discussões lista dados reais da API com título, autor, data, estado e contagem de mensagens.
+- [ ] Membros lista dados reais da API (nome, email, role, data de adesão, última conexão).
+- [ ] Adicionar membro funciona com autocomplete de utilizadores (`suggestUsers`).
+- [ ] Editar role de membro funciona via API.
+- [ ] Remover membro funciona com confirmação.
+- [ ] Sem dados hardcoded/mock restantes nas secções Discussões e Membros.
+- [ ] Empty states adequados quando não há dados.
+
+---
+
 ## Summary Table
 
 | #                                     | Ticket                                                   | Area   | Priority | Status                             |
@@ -2632,3 +2686,5 @@ O TICKET-52 corrigiu os fetches **client-side** (homepage) mudando para URLs rel
 | **INFRAESTRUTURA & CONFIG** | | | | |
 | 52 | Homepage — Fix CORS Blocking All Client-Side API Calls | Frontend | High | Concluído |
 | 53 | Fix Server-Side Fetches Failing with Relative API URLs | Frontend | High | Concluído |
+| **BACKOFFICE — Wiring pendente** | | | | |
+| 54 | Admin — Organization Discussions & Members (Backend Wiring) | Admin | High | Not started |

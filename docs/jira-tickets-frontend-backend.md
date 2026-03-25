@@ -6,10 +6,6 @@
 
 ---
 
-# PÁGINAS PÚBLICAS — Tickets
-
----
-
 ## TICKET-01: Authentication — Login (Conexão API) ✅
 
 **Descrição**
@@ -903,386 +899,6 @@ Implementar funções utilitárias para gerar URLs de export CSV dos endpoints d
 
 ---
 
-## TICKET-37: Authentication — Login via Autenticação.gov / SAML (Conexão API) ✅✅
-
-**Descrição**
-Implementar o fluxo completo de autenticação via Autenticação.gov (Cartão de Cidadão) usando protocolo SAML 2.0, incluindo login, registo automático, migração de contas legado para CMD, e logout — tanto no backend (plugin SAML) como no frontend (redirect flow e callbacks).
-
-**Contexto Arquitetural**
-
-- Referência: projecto `udata-front-pt` já tem implementação completa em `udata_front/saml_plugin/`.
-- Backend usa `pysaml2` (v7.4.2) para comunicação SAML com o IdP da Autenticação.gov.
-- O plugin regista um Blueprint Flask com rotas `/saml/*`.
-- Fluxo SP-initiated: o frontend redireciona para `/saml/login`, o backend gera o AuthnRequest e redireciona para o IdP, o IdP retorna o utilizador para `/saml/sso` (callback).
-- Atributos SAML recebidos do IdP:
-  - `http://interop.gov.pt/MDC/Cidadao/CorreioElectronico` → email (obrigatório)
-  - `http://interop.gov.pt/MDC/Cidadao/NIC` → NIC (opcional, guardado em `user.extras['auth_nic']`)
-  - `http://interop.gov.pt/MDC/Cidadao/NomeProprio` → first_name (opcional)
-  - `http://interop.gov.pt/MDC/Cidadao/NomeApelido` → last_name (opcional)
-- Se o utilizador já existe (por email ou NIC) e já tem NIC associado: faz login direto (`existing_saml`).
-- Se o utilizador já existe mas é legado (tem password, sem NIC): é classificado como `migration_candidate` e redirecionado para o fluxo de migração.
-- Se o utilizador não existe: cria conta automaticamente via SAML.
-- **Fluxo de Migração de Conta Legado → CMD**:
-  - Quando o IdP retorna um email que corresponde a um utilizador legado (com password, sem NIC), o backend guarda os dados SAML em `session["saml_migration_pending"]` e redireciona para `/pages/migrate-account`.
-  - O frontend (`MigrateAccountClient.tsx`) apresenta os dados da conta legada encontrada e oferece ao utilizador a opção de vincular a conta CMD à conta existente.
-  - Se o SAML não devolveu email, o utilizador pode pesquisar a conta legada via email/nome (`POST /saml/migration/search`).
-  - Verificação: o utilizador confirma a migração por **código de verificação enviado por email** (`POST /saml/migration/send-code`) ou por **password antiga** (`POST /saml/migration/confirm`).
-  - Após confirmação, o backend associa o NIC do CMD ao utilizador existente (`user.extras['auth_nic']`), remove a password legada, e faz login automático.
-  - Alternativa: o utilizador pode saltar a migração (`POST /saml/migration/skip`) e criar uma conta nova a partir dos dados SAML.
-  - Endpoint auxiliar: `GET /saml/migration/check` — verifica se o utilizador autenticado é legado e precisa de migração.
-  - Endpoint auxiliar: `GET /saml/migration/pending` — retorna dados da migração pendente na sessão.
-- Logout SAML: `/saml/logout` envia LogoutRequest ao IdP, callback em `/saml/sso_logout`.
-- Sessão: flag `saml_login = True` indica que o login foi via SAML (usado para decidir o fluxo de logout).
-- Suporte adicional para eIDAS (autenticação europeia cross-border) com rotas `/saml/eidas/*`.
-
-**Critérios de Aceitação**
-
-- [x] Plugin SAML registado no backend com rotas `/saml/login`, `/saml/sso`, `/saml/logout`, `/saml/sso_logout`.
-- [x] Rotas eIDAS: `/saml/eidas/login`, `/saml/eidas/sso`, `/saml/eidas/logout`, `/saml/eidas/sso_logout`.
-- [x] Configurações SAML (`SECURITY_SAML_*`) definidas em `udata.cfg` com valores adequados.
-- [x] `GET /saml/login` gera AuthnRequest válido e redireciona para o IdP.
-- [x] `POST /saml/sso` processa SAMLResponse, valida assinatura, e faz login ou cria conta.
-- [x] Utilizador existente (por email/NIC) é autenticado automaticamente.
-- [x] Utilizador novo é criado automaticamente.
-- [x] NIC é guardado em `user.extras['auth_nic']` após criação.
-- [x] Logout SAML (`/saml/logout`) envia LogoutRequest ao IdP e limpa sessão local.
-- [x] Frontend tem botões CMD e eIDAS na página de login (visíveis quando `NEXT_PUBLIC_SAML_ENABLED=true`).
-- [x] Rewrites no `next.config.ts` encaminham `/saml/*` para o backend.
-- [x] Após login SAML bem-sucedido, `AuthContext` atualiza o estado do utilizador.
-- [x] Proteção XXE ativa (via `defusedxml`).
-- [x] Suporte a múltiplos IdP metadata files com fallback.
-- [x] Frontend logout diferencia sessões SAML — redireciona para `/saml/logout` em vez de `/logout/` quando `saml_login` é `true`.
-- [x] Utilizador legado (com password, sem NIC) é identificado como `migration_candidate` durante login SAML.
-- [x] Backend redireciona `migration_candidate` para `/pages/migrate-account` com dados SAML em sessão.
-- [x] Endpoints de migração implementados: `GET /saml/migration/check`, `GET /saml/migration/pending`, `POST /saml/migration/search`, `POST /saml/migration/send-code`, `POST /saml/migration/confirm`, `POST /saml/migration/skip`.
-- [x] Frontend (`MigrateAccountClient.tsx`) apresenta dados da conta legada e permite vincular ao CMD.
-- [x] Migração confirmável por código de verificação (email) ou password antiga.
-- [x] Após migração, NIC é associado ao utilizador e password legada é removida.
-- [x] Utilizador pode saltar migração e criar conta nova a partir dos dados SAML.
-- [x] Registo direto removido — novos utilizadores são criados exclusivamente via SAML/CMD.
-
----
-
-## TICKET-38: Repository Maintenance — Login Integration & Branch Cleanup ✅✅
-
-**Descrição**
-Sincronizar as branches divergentes de login (`login_tabs` da Ines e `login_final` do Adriano) na branch `main`, resolvendo conflitos, restaurando arquivos perdidos em resets e unificando a UI com a lógica de API.
-
-**Contexto Arquitetural**
-
-- Trabalho realizado em paralelo em múltiplas branches causou divergência no frontend.
-- `login_tabs` continha o layout moderno com Tabs verticais e suporte a CMD/eIDAS na UI.
-- `login_final` continha a lógica de API e proxying necessária para o funcionamento real do login.
-- Inconsistências de checkout levaram à exclusão acidental de arquivos críticos: `src/app/login/route.ts`, `.env.example`, `src/config/env.ts` e `src/config/site.ts`.
-- Foi necessário unificar o código para garantir que o formulário de login (UI) utilizasse as funções de API restauradas.
-
-**O que deve ser feito**
-
-1. **Consolidação de Branches**:
-   - Identificar e restaurar o estado da branch `main` após resets acidentais.
-   - Unificar o layout (`LoginClient.tsx`) da branch da Ines com as funções de conexão de API.
-2. **Restauração de Arquivos Perdidos**:
-   - Recuperar `src/app/login/route.ts` (API Proxy handler).
-   - Recuperar `.env.example` e diretório `src/config/` (`env.ts` e `site.ts`).
-3. **Integração de Código**:
-   - Conectar o evento `onSubmit` do formulário de login às funções `fetchCsrfToken()` e `login()` do `services/api.ts`.
-   - Garantir que rewrites no `next.config.ts` apontem corretamente para o backend (`BACKEND_URL`).
-4. **Limpeza do Repositório**:
-   - Remover branches locais e remotas obsoletas para evitar futuras divergências.
-
-**Critérios de Aceitação**
-
-- [ ] Todas as branches de login unificadas na `main`.
-- [ ] Arquivos `.env.example`, `env.ts`, `site.ts` e `route.ts` restaurados e versionados.
-- [ ] Formulário de login funcional (autentica via API e trata erros).
-- [ ] Branches secundárias obsoletas removidas.
-
----
-
-## TICKET-39: Global Search — Página de Pesquisa com Dropdown e Resultados (Frontend) ✅✅
-
-**Descrição**
-Implementar uma pesquisa global inspirada no projeto francês cdata (data.gouv.fr): dropdown de seleção de tipo ao digitar + página de resultados com sidebar de tipos/contagens e lista paginada.
-
-**Contexto Arquitetural**
-
-- Implementado como parte do TICKET-04 (Ponto 4), mas merece ticket próprio pela complexidade e por ser uma feature distinta da homepage.
-- Inspiração direta no projeto [cdata](https://github.com/datagouv/cdata) — componentes `MenuSearch.vue` (dropdown) e `GlobalSearch` (página de resultados com sidebar).
-- Backend endpoints utilizados:
-  - `GET /api/1/datasets/?q=<query>&page=<n>&page_size=<n>` → pesquisa full-text de datasets.
-  - `GET /api/1/organizations/?q=<query>&page=<n>&page_size=<n>` → pesquisa full-text de organizações.
-  - `GET /api/1/reuses/?q=<query>&page=<n>&page_size=<n>` → pesquisa full-text de reutilizações.
-- Frontend usa `'use client'` com `useSearchParams` (requer `Suspense` wrapper).
-- Navegação por URL: `/pages/search?q=<query>&type=<datasets|reuses|organizations>&page=<n>`.
-
-**O que foi feito**
-
-1. **Funções em `services/api.ts`**:
-   - `searchDatasets(query, page?, pageSize?)` → `GET /api/1/datasets/?q=<query>&page=<n>&page_size=<n>` — retorna `APIResponse<Dataset>`.
-   - `searchOrganizations(query, page?, pageSize?)` → `GET /api/1/organizations/?q=<query>&page=<n>&page_size=<n>` — retorna `APIResponse<Organization>`.
-   - `searchReuses(query, page?, pageSize?)` → `GET /api/1/reuses/?q=<query>&page=<n>&page_size=<n>` — retorna `APIResponse<Reuse>`.
-2. **Componente `SearchDropdown`** (`src/components/search/SearchDropdown.tsx`):
-   - Input de pesquisa reutilizável com dropdown de 3 opções ao digitar: "Pesquisar «X» nos/nas conjuntos de dados / reutilizações / organizações".
-   - Navegação por teclado (ArrowUp/ArrowDown, Enter, Escape) e click-outside para fechar.
-   - Navega para `/pages/search?q=<query>&type=<type>` ao selecionar uma opção.
-   - Props: `id`, `darkMode`, `placeholder`, `label`, `hasVoiceActionButton`.
-   - Usa `InputSearchBar` do agora-design-system internamente.
-   - Integrado no hero da homepage (modo escuro) e no Header (modo claro).
-3. **Componente `SearchClient`** (`src/components/search/SearchClient.tsx`):
-   - Página de resultados com layout sidebar (inspirado no cdata GlobalSearch).
-   - Sidebar esquerda: navegação por tipo (Conjuntos de Dados, Reutilizações, Organizações) com contagens totais.
-   - Conteúdo direito: lista de resultados com paginação (PAGE_SIZE = 10).
-   - Breadcrumb: Início > Pesquisa.
-   - Título dinâmico por tipo ("Pesquisa avançada de conjuntos de dados", etc.).
-   - Usa `SearchDropdown` para permitir nova pesquisa na própria página.
-   - Fetch de totais em paralelo (`Promise.all`) + fetch de resultados do tab ativo.
-   - Estado controlado por URL: `?q=<query>&type=<type>&page=<page>`.
-4. **Página de rota** (`src/app/pages/search/page.tsx`):
-   - Server component que renderiza `SearchClient` dentro de `Suspense` (necessário para `useSearchParams`).
-5. **Integração na homepage** (`src/app/page.tsx`):
-   - Substituído `InputSearchBar` + `useRouter` + estado `searchQuery` pelo componente `SearchDropdown`.
-6. **Integração no Header** (`src/components/Header.tsx`):
-   - Substituído `InputSearchBar` do header pelo `SearchDropdown` na `GeneralBar`.
-
-**Ficheiros criados/alterados**
-
-| Ficheiro                                   | Ação                                         |
-| ------------------------------------------ | -------------------------------------------- |
-| `src/components/search/SearchDropdown.tsx` | Criado                                       |
-| `src/components/search/SearchClient.tsx`   | Criado                                       |
-| `src/app/pages/search/page.tsx`            | Criado                                       |
-| `src/services/api.ts`                      | Alterado — adicionadas 3 funções de pesquisa |
-| `src/app/page.tsx`                         | Alterado — hero usa SearchDropdown           |
-| `src/components/Header.tsx`                | Alterado — header usa SearchDropdown         |
-
-**Critérios de Aceitação**
-
-- [x] `searchDatasets()`, `searchOrganizations()`, `searchReuses()` retornam resultados paginados do backend.
-- [x] Dropdown aparece ao digitar no campo de pesquisa com 3 opções de tipo.
-- [x] Navegação por teclado funciona no dropdown (ArrowUp/Down, Enter, Escape).
-- [x] Seleção de opção navega para `/pages/search?q=<query>&type=<type>`.
-- [x] Página de resultados mostra sidebar com tipos e contagens.
-- [x] Resultados são paginados (10 por página).
-- [x] Pesquisa funciona a partir do hero da homepage e do header.
-- [x] URL reflete o estado da pesquisa (query, tipo, página).
-- [x] Click-outside fecha o dropdown.
-
-**Status**: ✅ Concluído (branch `fix-homepage`, commit `c4e17fb`)
-
----
-
-## TICKET-40: Dataset Detail Page — Fix Hardcoded Content & UI Bugs (Frontend) ✅✅
-
-**Descrição**
-Corrigir a página de detalhe de dataset que contém múltiplos blocos de conteúdo estático/hardcoded (incluindo texto copiado de um dataset francês), métricas falsas, links não funcionais, e tabs sem dados reais. Substituir todo o conteúdo estático por dados dinâmicos da API.
-
-**Contexto Arquitetural**
-
-- `DatasetDetailClient.tsx` foi criado com conteúdo placeholder que nunca foi substituído por dados reais da API.
-- O objeto `Dataset` da API já contém campos suficientes para substituir quase todo o conteúdo hardcoded: `license`, `quality`, `metrics`, `description`, `private`, `archived`.
-- `DatasetTabs.tsx` tem 3 tabs com placeholders (Reutilizações, Discussões, Recursos comunitários) — as funções de API para discussões já existem (TICKET-07).
-- `DatasetsClient.tsx` (listagem) também tem uma métrica hardcoded.
-
-**Problemas identificados**
-
-### A. Conteúdo francês/placeholder que deve ser removido
-
-1. **Secção "Observações preliminares"** (`DatasetDetailClient.tsx`, linhas 64-70):
-   - Texto estático sobre "tendências demográficas e económicas" — não vem da API.
-   - **Ação**: Remover completamente. A descrição do dataset já é renderizada acima.
-
-2. **Secção "O que é DVF?"** (`DatasetDetailClient.tsx`, linhas 72-85):
-   - Texto copiado de um dataset francês (DVF — Données de Valorisation Foncière), traduzido para português.
-   - Referências a "Alsácia, Mosela e Mayotte", "Direção Geral das Finanças Públicas" francesa.
-   - **Ação**: Remover completamente.
-
-3. **Box "Está à procura do preço de venda de um imóvel ou terreno?"** (`DatasetDetailClient.tsx`, linhas 190-203):
-   - Bloco promocional de uma aplicação francesa (DVF) que não existe no portal português.
-   - **Ação**: Remover completamente.
-
-### B. Dados hardcoded que devem vir da API
-
-4. **Pill "Rascunho"** (`DatasetDetailClient.tsx`, linha 33):
-   - Aparece sempre, independentemente do estado do dataset.
-   - **Ação**: Mostrar condicionalmente: `dataset.private` → "Rascunho", `dataset.archived` → "Arquivado", caso contrário não mostrar.
-
-5. **Licença hardcoded** (`DatasetDetailClient.tsx`, linha 124):
-   - Texto fixo "Licença Aberta / Licença Aberta versão 2.0" com `href="#"`.
-   - **Ação**: Usar `dataset.license` da API para o título e URL da licença.
-
-6. **Métricas de variação hardcoded** (`DatasetDetailClient.tsx`, linhas 145-148, 163-166):
-   - Valores fixos `+11.2 mil` e `+37.2 mil` e data "desde julho de 2022".
-   - **Ação**: Remover os pills de variação (a API não fornece deltas). Manter apenas os valores reais de `dataset.metrics.views` e `dataset.metrics.downloads`.
-
-7. **Qualidade dos metadados hardcoded a 100%** (`DatasetDetailClient.tsx`, linhas 175-179):
-   - `ProgressBar value={100}` fixo.
-   - **Ação**: Usar `dataset.quality` da API. Calcular a percentagem com base nos campos preenchidos (description, tags, license, resources, temporal_coverage, frequency, spatial).
-
-8. **"Metadados: 35%" na listagem** (`DatasetsClient.tsx`, linha 188):
-   - Todos os cards de dataset mostram 35% fixo.
-   - **Ação**: Calcular individualmente por dataset usando `dataset.quality` ou remover se não disponível.
-
-### C. Links não funcionais (href="#")
-
-9. **4 links com `href="#"`** (`DatasetDetailClient.tsx`, linhas 81, 123, 183, 198):
-   - "Leia mais" → remover (faz parte do conteúdo francês a eliminar).
-   - Licença → usar URL da licença da API.
-   - "Saiba mais sobre este indicador" → linkar a documentação real ou remover.
-   - "Consulte o aplicativo DVF" → remover (conteúdo francês).
-
-### D. Tabs com placeholder
-
-10. **Tab "Reutilizações e APIs"** (`DatasetTabs.tsx`, linhas 40-42):
-    - Texto placeholder "Conteúdo das reutilizações e APIs."
-    - **Ação**: Fetch reuses associados ao dataset via API (`fetchReuses` com filtro por dataset).
-
-11. **Tab "Discussões"** (`DatasetTabs.tsx`, linhas 46-50):
-    - Contagem hardcoded `(0)` e texto placeholder.
-    - **Ação**: Usar `fetchDiscussions(dataset.id)` (já implementado no TICKET-07) para listar discussões e mostrar contagem real.
-
-12. **Tab "Recursos comunitários"** (`DatasetTabs.tsx`, linhas 54-58):
-    - Texto placeholder "Recursos da comunidade."
-    - **Ação**: Fetch community resources via API.
-
-### E. Favorito não persistido
-
-13. **Estado de favorito local** (`DatasetDetailClient.tsx`, linha 16):
-    - `useState(false)` — nunca persiste nem verifica na API.
-    - **Ação**: Usar `followDataset()`/`unfollowDataset()` do TICKET-08 para persistir. Verificar estado inicial com `fetchFollowers()` ou endpoint de check.
-
-**O que deve ser feito**
-
-1. **Remover conteúdo francês/placeholder**: Eliminar secções "Observações preliminares", "O que é DVF?", e box DVF (pontos A.1, A.2, A.3).
-2. **Corrigir estado de publicação**: Mostrar Pill "Rascunho"/"Arquivado" condicionalmente com base em `dataset.private`/`dataset.archived` (ponto B.4).
-3. **Usar licença da API**: Substituir texto e link fixo pela licença real do dataset (ponto B.5).
-4. **Corrigir métricas**: Remover deltas falsos, usar apenas valores reais da API; calcular qualidade dos metadados dinamicamente (pontos B.6, B.7, B.8).
-5. **Remover links mortos**: Eliminar `href="#"` — usar URLs reais ou remover (ponto C.9).
-6. **Popular tabs com dados reais**: Implementar fetch de discussões (já existe), reutilizações e recursos comunitários nos tabs (pontos D.10, D.11, D.12).
-7. **Persistir favoritos**: Ligar botão de favoritos às funções follow/unfollow da API (ponto E.13).
-
-**Ficheiros a alterar**
-
-| Ficheiro                                          | Alterações                                              |
-| ------------------------------------------------- | ------------------------------------------------------- |
-| `src/components/datasets/DatasetDetailClient.tsx` | Remover conteúdo estático, usar dados da API            |
-| `src/components/datasets/DatasetTabs.tsx`         | Popular tabs com dados reais                            |
-| `src/components/datasets/DatasetsClient.tsx`      | Corrigir métrica hardcoded nos cards                    |
-| `src/types/api.ts`                                | Adicionar/verificar tipo `DatasetQuality` se necessário |
-| `src/services/api.ts`                             | Adicionar funções em falta (community resources, etc.)  |
-
-**Critérios de Aceitação**
-
-- [ ] Nenhum conteúdo francês ou placeholder estático visível na página.
-- [ ] Pill de estado ("Rascunho"/"Arquivado") aparece condicionalmente.
-- [ ] Licença exibida vem de `dataset.license`.
-- [ ] Métricas (views, downloads) mostram valores reais sem deltas inventados.
-- [ ] Qualidade dos metadados calculada dinamicamente.
-- [ ] Tab "Discussões" carrega discussões reais via API.
-- [ ] Tab "Reutilizações" carrega reutilizações associadas ao dataset.
-- [ ] Nenhum link `href="#"` restante na página.
-- [ ] Botão favoritos persiste estado via API.
-- [ ] "Metadados: 35%" na listagem corrigido ou removido.
-
-## TICKET-41: Legacy Account Migration to CMD/eIDAS ✅✅
-
-**Descrição**
-Migrar utilizadores legados (email/password) para CMD (Chave Móvel Digital) ou eIDAS como único método de autenticação, sem perda de dados. Inclui wizard de migração, bloqueio de login legado, remoção da página de registo, e criação automática de conta via SAML.
-
-**Contexto Arquitetural**
-
-- Depende de TICKET-37 (autenticação SAML já implementada).
-- Abordagem MERGE: manter o utilizador existente, adicionar NIC a `extras`, anular `password` → todos os `ReferenceField` (datasets, orgs, reuses, discussions, follows) mantêm-se válidos.
-- Plano detalhado em `docs/ticket-37-legacy-account-migration-cmd.md`.
-
-**Fluxos implementados**
-
-- **Fluxo A — Migração via CMD/eIDAS**: utilizador autentica-se via SAML → backend deteta conta legada (password + sem NIC) → redirect para wizard de migração → confirmação visual → verificação por código ou password → merge.
-- **Fluxo B — Bloqueio de login legado**: utilizador legado faz login por email/password → route handler verifica migração pendente → faz logout → mostra aviso de migração obrigatória com botões CMD e eIDAS.
-- **Criação de conta**: CMD/eIDAS → SAML → backend não encontra utilizador → cria automaticamente. Sem página de registo separada.
-
-**O que foi feito**
-
-### Backend (`udata/auth/saml/saml_plugin/saml_govpt.py`)
-
-1. **`_find_or_create_saml_user()`** — retorna tuple `(user, status)`: `"existing_saml"`, `"migration_candidate"`, `"new"`, `"error"`.
-2. **`idp_initiated()` + `idp_eidas_initiated()`** — detetam candidatos a migração e redirecionam para wizard.
-3. **Helpers**: `_handle_migration_redirect()`, `_mask_email()`, `_send_migration_code()`, `_find_legacy_user()`.
-4. **Endpoints de migração** (`/saml/migration/*`):
-   - `GET /check` — verifica se utilizador autenticado precisa de migração.
-   - `GET /pending` — estado da migração (email mascarado, nome, apelido).
-   - `POST /search` — procura conta legada por email ou nome.
-   - `POST /send-code` — gera e envia código de 6 dígitos (10 min expiração, máx 5 tentativas, máx 3 envios).
-   - `POST /confirm` — verifica código ou password, faz merge (`password = None`, adiciona NIC), login.
-   - `POST /skip` — cria conta nova sem migrar.
-
-### Frontend
-
-5. **Wizard de migração** (`MigrateAccountClient.tsx`):
-   - Step 1: Deteção → Step 2: Pesquisa manual (se sem email) → Step 3: Confirmação visual (nome + email mascarado) → Step 4: Escolha de método → Step 5: Verificação (código ou password) → Step 6: Sucesso.
-6. **Bloqueio de login legado** (`login/route.ts`): após login, chama `/saml/migration/check`; se legado, faz logout e devolve 403.
-7. **LoginClient.tsx**: tabs CMD/eIDAS com "conta criada automaticamente"; tab legada com aviso de migração e botões "Migrar com CMD" / "Migrar com eIDAS".
-8. **Remoção da página de registo**: `RegisterClient.tsx`, `LoginRegisterClient.tsx`, `register/route.ts` removidos; `/pages/register` e `/pages/loginregister` → redirect para `/pages/login`; `register()` removida de `api.ts`; Header atualizado.
-9. **Rewrites**: `/saml/migration/:path*` → backend.
-10. **Funções API**: `fetchMigrationPending()`, `searchMigrationAccount()`, `sendMigrationCode()`, `confirmMigration()`, `skipMigration()`.
-
-**Ficheiros criados**
-
-| Ficheiro                                                 | Descrição                     |
-| -------------------------------------------------------- | ----------------------------- |
-| `frontend/src/app/pages/migrate-account/page.tsx`        | Rota da página de migração    |
-| `frontend/src/components/login/MigrateAccountClient.tsx` | Wizard de migração multi-step |
-
-**Ficheiros removidos**
-
-| Ficheiro                                                | Motivo                               |
-| ------------------------------------------------------- | ------------------------------------ |
-| `frontend/src/components/login/RegisterClient.tsx`      | Registo por email/password eliminado |
-| `frontend/src/components/login/LoginRegisterClient.tsx` | Duplicado — redirecionado para login |
-| `frontend/src/app/register/route.ts`                    | Proxy de registo desnecessário       |
-
-**Ficheiros modificados**
-
-| Ficheiro                                            | Alterações                                                                                                             |
-| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `backend/udata/auth/saml/saml_plugin/saml_govpt.py` | `_find_or_create_saml_user()` → tuple; redirect migração em ambos os callbacks; endpoints `/saml/migration/*`; helpers |
-| `frontend/next.config.ts`                           | Rewrite `/saml/migration/:path*`                                                                                       |
-| `frontend/src/app/login/route.ts`                   | Interceção login legado: `/saml/migration/check` → logout → 403                                                        |
-| `frontend/src/services/api.ts`                      | 5 funções de migração; `register()` removida                                                                           |
-| `frontend/src/components/login/LoginClient.tsx`     | Mensagem "criar conta automaticamente"; estado `migrationRequired` com aviso e botões CMD/eIDAS                        |
-| `frontend/src/components/Header.tsx`                | `/pages/loginregister` → `/pages/login`                                                                                |
-| `frontend/src/app/pages/register/page.tsx`          | Redirect para `/pages/login`                                                                                           |
-| `frontend/src/app/pages/loginregister/page.tsx`     | Redirect para `/pages/login`                                                                                           |
-
-**Dependências**
-
-- Depende de: TICKET-37 (SAML/CMD/eIDAS), TICKET-01 (login básico), TICKET-03 (AuthContext).
-
-**Critérios de Aceitação**
-
-- [x] Utilizador legado (password + sem NIC) detetado como candidato a migração ao autenticar via CMD/eIDAS.
-- [x] Wizard de migração com confirmação visual (nome + email mascarado) e verificação por código ou password.
-- [x] Código de verificação: 6 dígitos, expiração 10 min, máx 5 tentativas, máx 3 envios.
-- [x] Após migração: `extras.auth_nic` definido, `password = None`, dados (datasets, orgs, reuses) mantidos.
-- [x] Login legado bloqueado para utilizadores não migrados — aviso com botões CMD e eIDAS.
-- [x] Após migração: login por email/password falha permanentemente.
-- [x] Re-login via CMD/eIDAS funciona diretamente sem wizard.
-- [x] Fallback sem email: pesquisa manual por email ou nome → mesmo fluxo.
-- [x] Página de registo eliminada — `/pages/register` e `/pages/loginregister` redirecionam para `/pages/login`.
-- [x] Tabs CMD e eIDAS informam que conta é criada automaticamente.
-- [x] Utilizador novo criado automaticamente ao autenticar via CMD/eIDAS sem conta existente.
-- [x] Endpoints de migração: `/saml/migration/check`, `/pending`, `/search`, `/send-code`, `/confirm`, `/skip`.
-- [x] Rewrite `/saml/migration/:path*` configurado no `next.config.ts`.
-- [x] `npm run lint` sem novos erros.
-
----
-
-# BACKOFFICE / ADMIN — Tickets
-
-> Based on the original project [datagouv/cdata](https://github.com/datagouv/cdata/tree/main/pages/admin) (Vue.js/Nuxt), adapted for our React/Next.js stack.
-> Focus: **lógica de conexão** — tipos TypeScript, funções fetch/mutate em `services/api.ts`, endpoints backend, e fluxo de dados. O layout/UI não faz parte destes tickets.
-
----
-
 ## TICKET-26: Admin — Datasets CRUD (Conexões API) ✅
 
 **Descrição**
@@ -1830,6 +1446,381 @@ Implementar a camada de conexão para gestão global do site e moderação de co
 - [x] `fetchReportReasons()` retorna lista de razões.
 - [x] URLs de export CSV são geradas corretamente.
 - [x] Tipos TS definidos para SiteInfo, Report, ReportReason.
+
+---
+
+## TICKET-37: Authentication — Login via Autenticação.gov / SAML (Conexão API) ✅✅
+
+**Descrição**
+Implementar o fluxo completo de autenticação via Autenticação.gov (Cartão de Cidadão) usando protocolo SAML 2.0, incluindo login, registo automático, migração de contas legado para CMD, e logout — tanto no backend (plugin SAML) como no frontend (redirect flow e callbacks).
+
+**Contexto Arquitetural**
+
+- Referência: projecto `udata-front-pt` já tem implementação completa em `udata_front/saml_plugin/`.
+- Backend usa `pysaml2` (v7.4.2) para comunicação SAML com o IdP da Autenticação.gov.
+- O plugin regista um Blueprint Flask com rotas `/saml/*`.
+- Fluxo SP-initiated: o frontend redireciona para `/saml/login`, o backend gera o AuthnRequest e redireciona para o IdP, o IdP retorna o utilizador para `/saml/sso` (callback).
+- Atributos SAML recebidos do IdP:
+  - `http://interop.gov.pt/MDC/Cidadao/CorreioElectronico` → email (obrigatório)
+  - `http://interop.gov.pt/MDC/Cidadao/NIC` → NIC (opcional, guardado em `user.extras['auth_nic']`)
+  - `http://interop.gov.pt/MDC/Cidadao/NomeProprio` → first_name (opcional)
+  - `http://interop.gov.pt/MDC/Cidadao/NomeApelido` → last_name (opcional)
+- Se o utilizador já existe (por email ou NIC) e já tem NIC associado: faz login direto (`existing_saml`).
+- Se o utilizador já existe mas é legado (tem password, sem NIC): é classificado como `migration_candidate` e redirecionado para o fluxo de migração.
+- Se o utilizador não existe: cria conta automaticamente via SAML.
+- **Fluxo de Migração de Conta Legado → CMD**:
+  - Quando o IdP retorna um email que corresponde a um utilizador legado (com password, sem NIC), o backend guarda os dados SAML em `session["saml_migration_pending"]` e redireciona para `/pages/migrate-account`.
+  - O frontend (`MigrateAccountClient.tsx`) apresenta os dados da conta legada encontrada e oferece ao utilizador a opção de vincular a conta CMD à conta existente.
+  - Se o SAML não devolveu email, o utilizador pode pesquisar a conta legada via email/nome (`POST /saml/migration/search`).
+  - Verificação: o utilizador confirma a migração por **código de verificação enviado por email** (`POST /saml/migration/send-code`) ou por **password antiga** (`POST /saml/migration/confirm`).
+  - Após confirmação, o backend associa o NIC do CMD ao utilizador existente (`user.extras['auth_nic']`), remove a password legada, e faz login automático.
+  - Alternativa: o utilizador pode saltar a migração (`POST /saml/migration/skip`) e criar uma conta nova a partir dos dados SAML.
+  - Endpoint auxiliar: `GET /saml/migration/check` — verifica se o utilizador autenticado é legado e precisa de migração.
+  - Endpoint auxiliar: `GET /saml/migration/pending` — retorna dados da migração pendente na sessão.
+- Logout SAML: `/saml/logout` envia LogoutRequest ao IdP, callback em `/saml/sso_logout`.
+- Sessão: flag `saml_login = True` indica que o login foi via SAML (usado para decidir o fluxo de logout).
+- Suporte adicional para eIDAS (autenticação europeia cross-border) com rotas `/saml/eidas/*`.
+
+**Critérios de Aceitação**
+
+- [x] Plugin SAML registado no backend com rotas `/saml/login`, `/saml/sso`, `/saml/logout`, `/saml/sso_logout`.
+- [x] Rotas eIDAS: `/saml/eidas/login`, `/saml/eidas/sso`, `/saml/eidas/logout`, `/saml/eidas/sso_logout`.
+- [x] Configurações SAML (`SECURITY_SAML_*`) definidas em `udata.cfg` com valores adequados.
+- [x] `GET /saml/login` gera AuthnRequest válido e redireciona para o IdP.
+- [x] `POST /saml/sso` processa SAMLResponse, valida assinatura, e faz login ou cria conta.
+- [x] Utilizador existente (por email/NIC) é autenticado automaticamente.
+- [x] Utilizador novo é criado automaticamente.
+- [x] NIC é guardado em `user.extras['auth_nic']` após criação.
+- [x] Logout SAML (`/saml/logout`) envia LogoutRequest ao IdP e limpa sessão local.
+- [x] Frontend tem botões CMD e eIDAS na página de login (visíveis quando `NEXT_PUBLIC_SAML_ENABLED=true`).
+- [x] Rewrites no `next.config.ts` encaminham `/saml/*` para o backend.
+- [x] Após login SAML bem-sucedido, `AuthContext` atualiza o estado do utilizador.
+- [x] Proteção XXE ativa (via `defusedxml`).
+- [x] Suporte a múltiplos IdP metadata files com fallback.
+- [x] Frontend logout diferencia sessões SAML — redireciona para `/saml/logout` em vez de `/logout/` quando `saml_login` é `true`.
+- [x] Utilizador legado (com password, sem NIC) é identificado como `migration_candidate` durante login SAML.
+- [x] Backend redireciona `migration_candidate` para `/pages/migrate-account` com dados SAML em sessão.
+- [x] Endpoints de migração implementados: `GET /saml/migration/check`, `GET /saml/migration/pending`, `POST /saml/migration/search`, `POST /saml/migration/send-code`, `POST /saml/migration/confirm`, `POST /saml/migration/skip`.
+- [x] Frontend (`MigrateAccountClient.tsx`) apresenta dados da conta legada e permite vincular ao CMD.
+- [x] Migração confirmável por código de verificação (email) ou password antiga.
+- [x] Após migração, NIC é associado ao utilizador e password legada é removida.
+- [x] Utilizador pode saltar migração e criar conta nova a partir dos dados SAML.
+- [x] Registo direto removido — novos utilizadores são criados exclusivamente via SAML/CMD.
+
+---
+
+## TICKET-38: Repository Maintenance — Login Integration & Branch Cleanup ✅✅
+
+**Descrição**
+Sincronizar as branches divergentes de login (`login_tabs` da Ines e `login_final` do Adriano) na branch `main`, resolvendo conflitos, restaurando arquivos perdidos em resets e unificando a UI com a lógica de API.
+
+**Contexto Arquitetural**
+
+- Trabalho realizado em paralelo em múltiplas branches causou divergência no frontend.
+- `login_tabs` continha o layout moderno com Tabs verticais e suporte a CMD/eIDAS na UI.
+- `login_final` continha a lógica de API e proxying necessária para o funcionamento real do login.
+- Inconsistências de checkout levaram à exclusão acidental de arquivos críticos: `src/app/login/route.ts`, `.env.example`, `src/config/env.ts` e `src/config/site.ts`.
+- Foi necessário unificar o código para garantir que o formulário de login (UI) utilizasse as funções de API restauradas.
+
+**O que deve ser feito**
+
+1. **Consolidação de Branches**:
+   - Identificar e restaurar o estado da branch `main` após resets acidentais.
+   - Unificar o layout (`LoginClient.tsx`) da branch da Ines com as funções de conexão de API.
+2. **Restauração de Arquivos Perdidos**:
+   - Recuperar `src/app/login/route.ts` (API Proxy handler).
+   - Recuperar `.env.example` e diretório `src/config/` (`env.ts` e `site.ts`).
+3. **Integração de Código**:
+   - Conectar o evento `onSubmit` do formulário de login às funções `fetchCsrfToken()` e `login()` do `services/api.ts`.
+   - Garantir que rewrites no `next.config.ts` apontem corretamente para o backend (`BACKEND_URL`).
+4. **Limpeza do Repositório**:
+   - Remover branches locais e remotas obsoletas para evitar futuras divergências.
+
+**Critérios de Aceitação**
+
+- [ ] Todas as branches de login unificadas na `main`.
+- [ ] Arquivos `.env.example`, `env.ts`, `site.ts` e `route.ts` restaurados e versionados.
+- [ ] Formulário de login funcional (autentica via API e trata erros).
+- [ ] Branches secundárias obsoletas removidas.
+
+---
+
+## TICKET-39: Global Search — Página de Pesquisa com Dropdown e Resultados (Frontend) ✅✅
+
+**Descrição**
+Implementar uma pesquisa global inspirada no projeto francês cdata (data.gouv.fr): dropdown de seleção de tipo ao digitar + página de resultados com sidebar de tipos/contagens e lista paginada.
+
+**Contexto Arquitetural**
+
+- Implementado como parte do TICKET-04 (Ponto 4), mas merece ticket próprio pela complexidade e por ser uma feature distinta da homepage.
+- Inspiração direta no projeto [cdata](https://github.com/datagouv/cdata) — componentes `MenuSearch.vue` (dropdown) e `GlobalSearch` (página de resultados com sidebar).
+- Backend endpoints utilizados:
+  - `GET /api/1/datasets/?q=<query>&page=<n>&page_size=<n>` → pesquisa full-text de datasets.
+  - `GET /api/1/organizations/?q=<query>&page=<n>&page_size=<n>` → pesquisa full-text de organizações.
+  - `GET /api/1/reuses/?q=<query>&page=<n>&page_size=<n>` → pesquisa full-text de reutilizações.
+- Frontend usa `'use client'` com `useSearchParams` (requer `Suspense` wrapper).
+- Navegação por URL: `/pages/search?q=<query>&type=<datasets|reuses|organizations>&page=<n>`.
+
+**O que foi feito**
+
+1. **Funções em `services/api.ts`**:
+   - `searchDatasets(query, page?, pageSize?)` → `GET /api/1/datasets/?q=<query>&page=<n>&page_size=<n>` — retorna `APIResponse<Dataset>`.
+   - `searchOrganizations(query, page?, pageSize?)` → `GET /api/1/organizations/?q=<query>&page=<n>&page_size=<n>` — retorna `APIResponse<Organization>`.
+   - `searchReuses(query, page?, pageSize?)` → `GET /api/1/reuses/?q=<query>&page=<n>&page_size=<n>` — retorna `APIResponse<Reuse>`.
+2. **Componente `SearchDropdown`** (`src/components/search/SearchDropdown.tsx`):
+   - Input de pesquisa reutilizável com dropdown de 3 opções ao digitar: "Pesquisar «X» nos/nas conjuntos de dados / reutilizações / organizações".
+   - Navegação por teclado (ArrowUp/ArrowDown, Enter, Escape) e click-outside para fechar.
+   - Navega para `/pages/search?q=<query>&type=<type>` ao selecionar uma opção.
+   - Props: `id`, `darkMode`, `placeholder`, `label`, `hasVoiceActionButton`.
+   - Usa `InputSearchBar` do agora-design-system internamente.
+   - Integrado no hero da homepage (modo escuro) e no Header (modo claro).
+3. **Componente `SearchClient`** (`src/components/search/SearchClient.tsx`):
+   - Página de resultados com layout sidebar (inspirado no cdata GlobalSearch).
+   - Sidebar esquerda: navegação por tipo (Conjuntos de Dados, Reutilizações, Organizações) com contagens totais.
+   - Conteúdo direito: lista de resultados com paginação (PAGE_SIZE = 10).
+   - Breadcrumb: Início > Pesquisa.
+   - Título dinâmico por tipo ("Pesquisa avançada de conjuntos de dados", etc.).
+   - Usa `SearchDropdown` para permitir nova pesquisa na própria página.
+   - Fetch de totais em paralelo (`Promise.all`) + fetch de resultados do tab ativo.
+   - Estado controlado por URL: `?q=<query>&type=<type>&page=<page>`.
+4. **Página de rota** (`src/app/pages/search/page.tsx`):
+   - Server component que renderiza `SearchClient` dentro de `Suspense` (necessário para `useSearchParams`).
+5. **Integração na homepage** (`src/app/page.tsx`):
+   - Substituído `InputSearchBar` + `useRouter` + estado `searchQuery` pelo componente `SearchDropdown`.
+6. **Integração no Header** (`src/components/Header.tsx`):
+   - Substituído `InputSearchBar` do header pelo `SearchDropdown` na `GeneralBar`.
+
+**Ficheiros criados/alterados**
+
+| Ficheiro                                   | Ação                                         |
+| ------------------------------------------ | -------------------------------------------- |
+| `src/components/search/SearchDropdown.tsx` | Criado                                       |
+| `src/components/search/SearchClient.tsx`   | Criado                                       |
+| `src/app/pages/search/page.tsx`            | Criado                                       |
+| `src/services/api.ts`                      | Alterado — adicionadas 3 funções de pesquisa |
+| `src/app/page.tsx`                         | Alterado — hero usa SearchDropdown           |
+| `src/components/Header.tsx`                | Alterado — header usa SearchDropdown         |
+
+**Critérios de Aceitação**
+
+- [x] `searchDatasets()`, `searchOrganizations()`, `searchReuses()` retornam resultados paginados do backend.
+- [x] Dropdown aparece ao digitar no campo de pesquisa com 3 opções de tipo.
+- [x] Navegação por teclado funciona no dropdown (ArrowUp/Down, Enter, Escape).
+- [x] Seleção de opção navega para `/pages/search?q=<query>&type=<type>`.
+- [x] Página de resultados mostra sidebar com tipos e contagens.
+- [x] Resultados são paginados (10 por página).
+- [x] Pesquisa funciona a partir do hero da homepage e do header.
+- [x] URL reflete o estado da pesquisa (query, tipo, página).
+- [x] Click-outside fecha o dropdown.
+
+**Status**: ✅ Concluído (branch `fix-homepage`, commit `c4e17fb`)
+
+---
+
+## TICKET-40: Dataset Detail Page — Fix Hardcoded Content & UI Bugs (Frontend) ✅✅
+
+**Descrição**
+Corrigir a página de detalhe de dataset que contém múltiplos blocos de conteúdo estático/hardcoded (incluindo texto copiado de um dataset francês), métricas falsas, links não funcionais, e tabs sem dados reais. Substituir todo o conteúdo estático por dados dinâmicos da API.
+
+**Contexto Arquitetural**
+
+- `DatasetDetailClient.tsx` foi criado com conteúdo placeholder que nunca foi substituído por dados reais da API.
+- O objeto `Dataset` da API já contém campos suficientes para substituir quase todo o conteúdo hardcoded: `license`, `quality`, `metrics`, `description`, `private`, `archived`.
+- `DatasetTabs.tsx` tem 3 tabs com placeholders (Reutilizações, Discussões, Recursos comunitários) — as funções de API para discussões já existem (TICKET-07).
+- `DatasetsClient.tsx` (listagem) também tem uma métrica hardcoded.
+
+**Problemas identificados**
+
+### A. Conteúdo francês/placeholder que deve ser removido
+
+1. **Secção "Observações preliminares"** (`DatasetDetailClient.tsx`, linhas 64-70):
+   - Texto estático sobre "tendências demográficas e económicas" — não vem da API.
+   - **Ação**: Remover completamente. A descrição do dataset já é renderizada acima.
+
+2. **Secção "O que é DVF?"** (`DatasetDetailClient.tsx`, linhas 72-85):
+   - Texto copiado de um dataset francês (DVF — Données de Valorisation Foncière), traduzido para português.
+   - Referências a "Alsácia, Mosela e Mayotte", "Direção Geral das Finanças Públicas" francesa.
+   - **Ação**: Remover completamente.
+
+3. **Box "Está à procura do preço de venda de um imóvel ou terreno?"** (`DatasetDetailClient.tsx`, linhas 190-203):
+   - Bloco promocional de uma aplicação francesa (DVF) que não existe no portal português.
+   - **Ação**: Remover completamente.
+
+### B. Dados hardcoded que devem vir da API
+
+4. **Pill "Rascunho"** (`DatasetDetailClient.tsx`, linha 33):
+   - Aparece sempre, independentemente do estado do dataset.
+   - **Ação**: Mostrar condicionalmente: `dataset.private` → "Rascunho", `dataset.archived` → "Arquivado", caso contrário não mostrar.
+
+5. **Licença hardcoded** (`DatasetDetailClient.tsx`, linha 124):
+   - Texto fixo "Licença Aberta / Licença Aberta versão 2.0" com `href="#"`.
+   - **Ação**: Usar `dataset.license` da API para o título e URL da licença.
+
+6. **Métricas de variação hardcoded** (`DatasetDetailClient.tsx`, linhas 145-148, 163-166):
+   - Valores fixos `+11.2 mil` e `+37.2 mil` e data "desde julho de 2022".
+   - **Ação**: Remover os pills de variação (a API não fornece deltas). Manter apenas os valores reais de `dataset.metrics.views` e `dataset.metrics.downloads`.
+
+7. **Qualidade dos metadados hardcoded a 100%** (`DatasetDetailClient.tsx`, linhas 175-179):
+   - `ProgressBar value={100}` fixo.
+   - **Ação**: Usar `dataset.quality` da API. Calcular a percentagem com base nos campos preenchidos (description, tags, license, resources, temporal_coverage, frequency, spatial).
+
+8. **"Metadados: 35%" na listagem** (`DatasetsClient.tsx`, linha 188):
+   - Todos os cards de dataset mostram 35% fixo.
+   - **Ação**: Calcular individualmente por dataset usando `dataset.quality` ou remover se não disponível.
+
+### C. Links não funcionais (href="#")
+
+9. **4 links com `href="#"`** (`DatasetDetailClient.tsx`, linhas 81, 123, 183, 198):
+   - "Leia mais" → remover (faz parte do conteúdo francês a eliminar).
+   - Licença → usar URL da licença da API.
+   - "Saiba mais sobre este indicador" → linkar a documentação real ou remover.
+   - "Consulte o aplicativo DVF" → remover (conteúdo francês).
+
+### D. Tabs com placeholder
+
+10. **Tab "Reutilizações e APIs"** (`DatasetTabs.tsx`, linhas 40-42):
+    - Texto placeholder "Conteúdo das reutilizações e APIs."
+    - **Ação**: Fetch reuses associados ao dataset via API (`fetchReuses` com filtro por dataset).
+
+11. **Tab "Discussões"** (`DatasetTabs.tsx`, linhas 46-50):
+    - Contagem hardcoded `(0)` e texto placeholder.
+    - **Ação**: Usar `fetchDiscussions(dataset.id)` (já implementado no TICKET-07) para listar discussões e mostrar contagem real.
+
+12. **Tab "Recursos comunitários"** (`DatasetTabs.tsx`, linhas 54-58):
+    - Texto placeholder "Recursos da comunidade."
+    - **Ação**: Fetch community resources via API.
+
+### E. Favorito não persistido
+
+13. **Estado de favorito local** (`DatasetDetailClient.tsx`, linha 16):
+    - `useState(false)` — nunca persiste nem verifica na API.
+    - **Ação**: Usar `followDataset()`/`unfollowDataset()` do TICKET-08 para persistir. Verificar estado inicial com `fetchFollowers()` ou endpoint de check.
+
+**O que deve ser feito**
+
+1. **Remover conteúdo francês/placeholder**: Eliminar secções "Observações preliminares", "O que é DVF?", e box DVF (pontos A.1, A.2, A.3).
+2. **Corrigir estado de publicação**: Mostrar Pill "Rascunho"/"Arquivado" condicionalmente com base em `dataset.private`/`dataset.archived` (ponto B.4).
+3. **Usar licença da API**: Substituir texto e link fixo pela licença real do dataset (ponto B.5).
+4. **Corrigir métricas**: Remover deltas falsos, usar apenas valores reais da API; calcular qualidade dos metadados dinamicamente (pontos B.6, B.7, B.8).
+5. **Remover links mortos**: Eliminar `href="#"` — usar URLs reais ou remover (ponto C.9).
+6. **Popular tabs com dados reais**: Implementar fetch de discussões (já existe), reutilizações e recursos comunitários nos tabs (pontos D.10, D.11, D.12).
+7. **Persistir favoritos**: Ligar botão de favoritos às funções follow/unfollow da API (ponto E.13).
+
+**Ficheiros a alterar**
+
+| Ficheiro                                          | Alterações                                              |
+| ------------------------------------------------- | ------------------------------------------------------- |
+| `src/components/datasets/DatasetDetailClient.tsx` | Remover conteúdo estático, usar dados da API            |
+| `src/components/datasets/DatasetTabs.tsx`         | Popular tabs com dados reais                            |
+| `src/components/datasets/DatasetsClient.tsx`      | Corrigir métrica hardcoded nos cards                    |
+| `src/types/api.ts`                                | Adicionar/verificar tipo `DatasetQuality` se necessário |
+| `src/services/api.ts`                             | Adicionar funções em falta (community resources, etc.)  |
+
+**Critérios de Aceitação**
+
+- [ ] Nenhum conteúdo francês ou placeholder estático visível na página.
+- [ ] Pill de estado ("Rascunho"/"Arquivado") aparece condicionalmente.
+- [ ] Licença exibida vem de `dataset.license`.
+- [ ] Métricas (views, downloads) mostram valores reais sem deltas inventados.
+- [ ] Qualidade dos metadados calculada dinamicamente.
+- [ ] Tab "Discussões" carrega discussões reais via API.
+- [ ] Tab "Reutilizações" carrega reutilizações associadas ao dataset.
+- [ ] Nenhum link `href="#"` restante na página.
+- [ ] Botão favoritos persiste estado via API.
+- [ ] "Metadados: 35%" na listagem corrigido ou removido.
+
+---
+
+## TICKET-41: Legacy Account Migration to CMD/eIDAS ✅✅
+
+**Descrição**
+Migrar utilizadores legados (email/password) para CMD (Chave Móvel Digital) ou eIDAS como único método de autenticação, sem perda de dados. Inclui wizard de migração, bloqueio de login legado, remoção da página de registo, e criação automática de conta via SAML.
+
+**Contexto Arquitetural**
+
+- Depende de TICKET-37 (autenticação SAML já implementada).
+- Abordagem MERGE: manter o utilizador existente, adicionar NIC a `extras`, anular `password` → todos os `ReferenceField` (datasets, orgs, reuses, discussions, follows) mantêm-se válidos.
+- Plano detalhado em `docs/ticket-37-legacy-account-migration-cmd.md`.
+
+**Fluxos implementados**
+
+- **Fluxo A — Migração via CMD/eIDAS**: utilizador autentica-se via SAML → backend deteta conta legada (password + sem NIC) → redirect para wizard de migração → confirmação visual → verificação por código ou password → merge.
+- **Fluxo B — Bloqueio de login legado**: utilizador legado faz login por email/password → route handler verifica migração pendente → faz logout → mostra aviso de migração obrigatória com botões CMD e eIDAS.
+- **Criação de conta**: CMD/eIDAS → SAML → backend não encontra utilizador → cria automaticamente. Sem página de registo separada.
+
+**O que foi feito**
+
+### Backend (`udata/auth/saml/saml_plugin/saml_govpt.py`)
+
+1. **`_find_or_create_saml_user()`** — retorna tuple `(user, status)`: `"existing_saml"`, `"migration_candidate"`, `"new"`, `"error"`.
+2. **`idp_initiated()` + `idp_eidas_initiated()`** — detetam candidatos a migração e redirecionam para wizard.
+3. **Helpers**: `_handle_migration_redirect()`, `_mask_email()`, `_send_migration_code()`, `_find_legacy_user()`.
+4. **Endpoints de migração** (`/saml/migration/*`):
+   - `GET /check` — verifica se utilizador autenticado precisa de migração.
+   - `GET /pending` — estado da migração (email mascarado, nome, apelido).
+   - `POST /search` — procura conta legada por email ou nome.
+   - `POST /send-code` — gera e envia código de 6 dígitos (10 min expiração, máx 5 tentativas, máx 3 envios).
+   - `POST /confirm` — verifica código ou password, faz merge (`password = None`, adiciona NIC), login.
+   - `POST /skip` — cria conta nova sem migrar.
+
+### Frontend
+
+5. **Wizard de migração** (`MigrateAccountClient.tsx`):
+   - Step 1: Deteção → Step 2: Pesquisa manual (se sem email) → Step 3: Confirmação visual (nome + email mascarado) → Step 4: Escolha de método → Step 5: Verificação (código ou password) → Step 6: Sucesso.
+6. **Bloqueio de login legado** (`login/route.ts`): após login, chama `/saml/migration/check`; se legado, faz logout e devolve 403.
+7. **LoginClient.tsx**: tabs CMD/eIDAS com "conta criada automaticamente"; tab legada com aviso de migração e botões "Migrar com CMD" / "Migrar com eIDAS".
+8. **Remoção da página de registo**: `RegisterClient.tsx`, `LoginRegisterClient.tsx`, `register/route.ts` removidos; `/pages/register` e `/pages/loginregister` → redirect para `/pages/login`; `register()` removida de `api.ts`; Header atualizado.
+9. **Rewrites**: `/saml/migration/:path*` → backend.
+10. **Funções API**: `fetchMigrationPending()`, `searchMigrationAccount()`, `sendMigrationCode()`, `confirmMigration()`, `skipMigration()`.
+
+**Ficheiros criados**
+
+| Ficheiro                                                 | Descrição                     |
+| -------------------------------------------------------- | ----------------------------- |
+| `frontend/src/app/pages/migrate-account/page.tsx`        | Rota da página de migração    |
+| `frontend/src/components/login/MigrateAccountClient.tsx` | Wizard de migração multi-step |
+
+**Ficheiros removidos**
+
+| Ficheiro                                                | Motivo                               |
+| ------------------------------------------------------- | ------------------------------------ |
+| `frontend/src/components/login/RegisterClient.tsx`      | Registo por email/password eliminado |
+| `frontend/src/components/login/LoginRegisterClient.tsx` | Duplicado — redirecionado para login |
+| `frontend/src/app/register/route.ts`                    | Proxy de registo desnecessário       |
+
+**Ficheiros modificados**
+
+| Ficheiro                                            | Alterações                                                                                                             |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `backend/udata/auth/saml/saml_plugin/saml_govpt.py` | `_find_or_create_saml_user()` → tuple; redirect migração em ambos os callbacks; endpoints `/saml/migration/*`; helpers |
+| `frontend/next.config.ts`                           | Rewrite `/saml/migration/:path*`                                                                                       |
+| `frontend/src/app/login/route.ts`                   | Interceção login legado: `/saml/migration/check` → logout → 403                                                        |
+| `frontend/src/services/api.ts`                      | 5 funções de migração; `register()` removida                                                                           |
+| `frontend/src/components/login/LoginClient.tsx`     | Mensagem "criar conta automaticamente"; estado `migrationRequired` com aviso e botões CMD/eIDAS                        |
+| `frontend/src/components/Header.tsx`                | `/pages/loginregister` → `/pages/login`                                                                                |
+| `frontend/src/app/pages/register/page.tsx`          | Redirect para `/pages/login`                                                                                           |
+| `frontend/src/app/pages/loginregister/page.tsx`     | Redirect para `/pages/login`                                                                                           |
+
+**Dependências**
+
+- Depende de: TICKET-37 (SAML/CMD/eIDAS), TICKET-01 (login básico), TICKET-03 (AuthContext).
+
+**Critérios de Aceitação**
+
+- [x] Utilizador legado (password + sem NIC) detetado como candidato a migração ao autenticar via CMD/eIDAS.
+- [x] Wizard de migração com confirmação visual (nome + email mascarado) e verificação por código ou password.
+- [x] Código de verificação: 6 dígitos, expiração 10 min, máx 5 tentativas, máx 3 envios.
+- [x] Após migração: `extras.auth_nic` definido, `password = None`, dados (datasets, orgs, reuses) mantidos.
+- [x] Login legado bloqueado para utilizadores não migrados — aviso com botões CMD e eIDAS.
+- [x] Após migração: login por email/password falha permanentemente.
+- [x] Re-login via CMD/eIDAS funciona diretamente sem wizard.
+- [x] Fallback sem email: pesquisa manual por email ou nome → mesmo fluxo.
+- [x] Página de registo eliminada — `/pages/register` e `/pages/loginregister` redirecionam para `/pages/login`.
+- [x] Tabs CMD e eIDAS informam que conta é criada automaticamente.
+- [x] Utilizador novo criado automaticamente ao autenticar via CMD/eIDAS sem conta existente.
+- [x] Endpoints de migração: `/saml/migration/check`, `/pending`, `/search`, `/send-code`, `/confirm`, `/skip`.
+- [x] Rewrite `/saml/migration/:path*` configurado no `next.config.ts`.
+- [x] `npm run lint` sem novos erros.
 
 ---
 
@@ -2410,6 +2401,9 @@ Remediação de vulnerabilidades de segurança identificadas nos relatórios de 
 **Configuração necessária para produção**
 
 ```python
+
+---
+
 # udata.cfg
 CORS_ALLOWED_ORIGINS = ["https://dados.gov.pt", "https://preprod.dados.gov.pt"]
 RATELIMIT_STORAGE_URI = "redis://localhost:6379"
@@ -2468,12 +2462,6 @@ Browser (localhost:3000)
 ```
 
 **Ficheiros alterados**
-
-| Ficheiro | Alteração |
-|---|---|
-| `frontend/.env.local` | `NEXT_PUBLIC_API_BASE=/api/1`, `NEXT_PUBLIC_API_V2_BASE=/api/2`, adicionado `BACKEND_URL=http://localhost:7000` |
-| `frontend/.env.example` | Idem (template actualizado) |
-| `frontend/next.config.ts` | `BACKEND_URL` lê de `process.env.BACKEND_URL` em vez de derivar de `NEXT_PUBLIC_API_BASE` |
 
 **Nota**: Após alterar variáveis `NEXT_PUBLIC_*`, é necessário limpar o cache do Next.js (`rm -rf .next/`) e reiniciar o dev server, pois estas variáveis são embebidas no bundle JS no momento da compilação.
 
@@ -2542,18 +2530,9 @@ Client Component (Browser):
 
 **Ficheiros alterados**
 
-| Ficheiro | Alteração |
-|---|---|
-| `frontend/src/services/api.ts` | `API_BASE_URL` e `API_V2_BASE_URL` agora usam URL absoluto (`BACKEND_URL`) em server-side e relativo em client-side |
-
 **Relação com TICKET-52**
 
 O TICKET-52 corrigiu os fetches **client-side** (homepage) mudando para URLs relativos. Este ticket completa a correção garantindo que os fetches **server-side** (SSR) continuam a funcionar com URLs absolutos.
-
-| Cenário | TICKET-52 (antes) | TICKET-52 (depois) | TICKET-53 (depois) |
-|---|---|---|---|
-| Client Component (browser) | ❌ CORS blocked | ✅ Relativo `/api/1` | ✅ Relativo `/api/1` |
-| Server Component (Node.js) | ✅ Absoluto `localhost:7000` | ❌ Relativo falha | ✅ Absoluto `localhost:7000` |
 
 **Critérios de Aceitação**
 
@@ -2644,9 +2623,21 @@ Conectar à API real as secções de backoffice da organização que estavam com
 
 ## Summary Table
 
+| Ficheiro | Alteração |
+|---|---|
+| `frontend/.env.local` | `NEXT_PUBLIC_API_BASE=/api/1`, `NEXT_PUBLIC_API_V2_BASE=/api/2`, adicionado `BACKEND_URL=http://localhost:7000` |
+| `frontend/.env.example` | Idem (template actualizado) |
+| `frontend/next.config.ts` | `BACKEND_URL` lê de `process.env.BACKEND_URL` em vez de derivar de `NEXT_PUBLIC_API_BASE` |
+| Ficheiro | Alteração |
+|---|---|
+| `frontend/src/services/api.ts` | `API_BASE_URL` e `API_V2_BASE_URL` agora usam URL absoluto (`BACKEND_URL`) em server-side e relativo em client-side |
+| Cenário | TICKET-52 (antes) | TICKET-52 (depois) | TICKET-53 (depois) |
+|---|---|---|---|
+| Client Component (browser) | ❌ CORS blocked | ✅ Relativo `/api/1` | ✅ Relativo `/api/1` |
+| Server Component (Node.js) | ✅ Absoluto `localhost:7000` | ❌ Relativo falha | ✅ Absoluto `localhost:7000` |
 | #                                     | Ticket                                                   | Area   | Priority | Status                             |
 | ------------------------------------- | -------------------------------------------------------- | ------ | -------- | ---------------------------------- |
-| **PÁGINAS PÚBLICAS — Conexões API**   |                                                          |        |          |                                    |
+| **QUALIDADE & SEGURANÇA** | | | | |
 | 01                                    | Auth — Login (CSRF + session)                            | Auth   | High     | Route handler existe, falta wiring |
 | 02                                    | Auth — Registration (proxy + form)                       | Auth   | High     | UI existe, falta wiring            |
 | 03                                    | Auth — Current User (`/me/` + context)                   | Auth   | High     | Not started                        |
@@ -2672,7 +2663,6 @@ Conectar à API real as secções de backoffice da organização que estavam com
 | 23                                    | Reports — Submissão (reasons + create)                   | Public | Low      | Not started                        |
 | 24                                    | Organization Membership (request, accept, members)       | Public | Low      | Not started                        |
 | 25                                    | CSV/Data Export (URL generators)                         | Public | Low      | Not started                        |
-| **BACKOFFICE / ADMIN — Conexões API** |                                                          |        |          |                                    |
 | 26                                    | Admin — Datasets CRUD (tipos TS + fetch/mutate)          | Admin  | High     | Concluído                          |
 | 27                                    | Admin — Reuses CRUD (tipos TS + fetch/mutate)            | Admin  | High     | Not started                        |
 | 28                                    | Admin — Dataservices CRUD (wiring form existente)        | Admin  | Medium   | UI exists, needs wiring            |
@@ -2684,29 +2674,20 @@ Conectar à API real as secções de backoffice da organização que estavam com
 | 34                                    | Admin — Posts CRUD                                       | Admin  | Medium   | Not started                        |
 | 35                                    | Admin — User Management (Sysadmin)                       | Admin  | Low      | Not started                        |
 | 36                                    | Admin — Site Management & Moderation (Sysadmin)          | Admin  | Medium   | Not started                        |
-| 42                                    | Admin — Organization Content Pages (`org/*`)             | Admin  | High     | Concluído                          |
-| 43                                    | Admin — Editorial Page (Sysadmin)                        | Admin  | Medium   | Concluído                          |
-| 44                                    | Admin — Permission Guards & Role-Based Navigation        | Admin  | High     | Concluído                          |
-| **AUTENTICAÇÃO EXTERNA**              |                                                          |        |          |                                    |
 | 37                                    | Auth — Autenticação.gov / SAML (plugin + frontend)       | Auth   | High     | Concluído                          |
 | 38                                    | Maintenance — Sync Login branches & resolution           | Repo   | High     | Concluído                          |
 | 40                                    | Dataset Detail — Fix hardcoded content & UI bugs         | Public | High     | Not started                        |
 | 41                                    | Legacy Account Migration to CMD/eIDAS                    | Auth   | High     | Concluído                          |
-| **PESQUISA GLOBAL**                   |                                                          |        |          |                                    |
-
+| 42                                    | Admin — Organization Content Pages (`org/*`)             | Admin  | High     | Concluído                          |
+| 43                                    | Admin — Editorial Page (Sysadmin)                        | Admin  | Medium   | Concluído                          |
+| 44                                    | Admin — Permission Guards & Role-Based Navigation        | Admin  | High     | Concluído                          |
 | 45 | Global Search — Unify Local Searches + CategoryToggles | Public | High | Concluído |
 | 46 | Explorar — Redirecionar HVDs para Datasets com tag=hvd | Public | Medium | Concluído |
-| **QUALIDADE & SEGURANÇA** | | | | |
 | 47 | Vulnerability Testing — Frontend (TestSprite MCP) | Security | High | Not started |
 | 48 | Vulnerability Testing — Backend API (TestSprite MCP) | Security | High | Not started |
-| **UX & NAVEGAÇÃO** | | | | |
 | 49 | Datasets Listing — Organization Link in Dataset Card | Public | Medium | Not started |
-| **TESTING & QA** | | | | |
 | 50 | Frontend — Functional Testing with TestSprite MCP | QA | Medium | Concluído |
-| **SEGURANÇA — Remediação** | | | | |
 | 51 | Vulnerability Remediation — Backend (KITS24 Audit) | Security | Critical | Concluído |
-| **INFRAESTRUTURA & CONFIG** | | | | |
 | 52 | Homepage — Fix CORS Blocking All Client-Side API Calls | Frontend | High | Concluído |
 | 53 | Fix Server-Side Fetches Failing with Relative API URLs | Frontend | High | Concluído |
-| **BACKOFFICE — Wiring pendente** | | | | |
 | 54 | Admin — Organization Discussions & Members (Backend Wiring) | Admin | High | Not started |

@@ -66,3 +66,6 @@ celerybeat.pid
 docs/testsprite-frontend-report.md
 docs/testsprite-vulnerability-frontend-report.md
 docs/testsprite-vulnerability-backend-report.md
+
+# Files
+udata-fs/

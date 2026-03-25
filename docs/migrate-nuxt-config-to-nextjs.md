@@ -12,12 +12,12 @@ The frontend is **Next.js 16** (App Router), but a `nuxt.config.ts` was copied f
 
 Nuxt's `runtimeConfig` has no single Next.js equivalent. The configuration splits into **4 locations**:
 
-| Destination | What goes here |
-|---|---|
-| `.env.local` / `.env.example` | API URLs, secrets, feature flags that change per environment |
-| `next.config.ts` | Rewrites (API proxy), image optimization, webpack, compression |
-| `src/config/site.ts` | Static constants: metadata, licenses, UI limits, guide URLs, homepage config |
-| `src/app/layout.tsx` | SEO metadata via Next.js Metadata API |
+| Destination                   | What goes here                                                               |
+| ----------------------------- | ---------------------------------------------------------------------------- |
+| `.env.local` / `.env.example` | API URLs, secrets, feature flags that change per environment                 |
+| `next.config.ts`              | Rewrites (API proxy), image optimization, webpack, compression               |
+| `src/config/site.ts`          | Static constants: metadata, licenses, UI limits, guide URLs, homepage config |
+| `src/app/layout.tsx`          | SEO metadata via Next.js Metadata API                                        |
 
 ---
 
@@ -35,7 +35,7 @@ NEXT_PUBLIC_API_BASE=http://localhost:7000/api/1
 NEXT_PUBLIC_API_V2_BASE=http://localhost:7000/api/2
 NEXT_PUBLIC_FRONT_BASE=http://localhost:3000
 NEXT_PUBLIC_BASE_URL=https://dados.gov.pt/
-NEXT_PUBLIC_STATIC_URL=https://static.data.gouv.fr/static/
+NEXT_PUBLIC_STATIC_URL=https://dados.gov.pt/static/
 
 # Feature flags
 NEXT_PUBLIC_READ_ONLY_MODE=false
@@ -86,10 +86,11 @@ Typed helper that replaces Nuxt's `useRuntimeConfig()`:
 
 ```typescript
 export const env = {
-  apiBase: process.env.NEXT_PUBLIC_API_BASE || "https://dados.gov.pt/api/1",
-  apiV2Base: process.env.NEXT_PUBLIC_API_V2_BASE || "https://dados.gov.pt/api/2",
-  frontBase: process.env.NEXT_PUBLIC_FRONT_BASE || "http://localhost:3000",
-  baseUrl: process.env.NEXT_PUBLIC_BASE_URL || "https://dados.gov.pt/",
+  apiBase: process.env.NEXT_PUBLIC_API_BASE || 'https://dados.gov.pt/api/1',
+  apiV2Base:
+    process.env.NEXT_PUBLIC_API_V2_BASE || 'https://dados.gov.pt/api/2',
+  frontBase: process.env.NEXT_PUBLIC_FRONT_BASE || 'http://localhost:3000',
+  baseUrl: process.env.NEXT_PUBLIC_BASE_URL || 'https://dados.gov.pt/',
   // ... feature flags, analytics, etc.
 } as const;
 ```
@@ -100,22 +101,22 @@ export const env = {
 
 Migrate applicable Nuxt settings to Next.js equivalents:
 
-| Nuxt setting | Next.js equivalent |
-|---|---|
-| `devServer.port/host` | Not needed (Next.js defaults to 3000) |
-| `nitro.compressPublicAssets` | `compress: true` |
-| `sourcemap.client: "hidden"` | `productionBrowserSourceMaps: false` |
-| `vite.assetsInclude: ["**/*.md"]` | `webpack` rule for `.md` files |
-| `image.screens` | `images.deviceSizes: [320, 576, 768, 992, 1248]` |
-| — | `images.remotePatterns` for dados.gov.pt and static CDN |
-| `routeRules` (SSR) | Not needed — App Router is SSR by default |
-| `modules (@sentry/nuxt)` | `// TODO: Install @sentry/nextjs` |
-| `modules (@nuxtjs/sitemap)` | `// TODO: Implement via app/sitemap.ts or next-sitemap` |
-| `hooks.pages:extend` | `// TODO: Create shared search route files` |
-| `vue.runtimeCompiler` | Not applicable (Vue-specific) |
-| `vite.optimizeDeps` | Not applicable (Vite-specific) |
-| `vite.css.scss` | Not applicable (uses Tailwind, not SCSS) |
-| `eslint` config | Already in `eslint.config.mjs` |
+| Nuxt setting                      | Next.js equivalent                                      |
+| --------------------------------- | ------------------------------------------------------- |
+| `devServer.port/host`             | Not needed (Next.js defaults to 3000)                   |
+| `nitro.compressPublicAssets`      | `compress: true`                                        |
+| `sourcemap.client: "hidden"`      | `productionBrowserSourceMaps: false`                    |
+| `vite.assetsInclude: ["**/*.md"]` | `webpack` rule for `.md` files                          |
+| `image.screens`                   | `images.deviceSizes: [320, 576, 768, 992, 1248]`        |
+| —                                 | `images.remotePatterns` for dados.gov.pt and static CDN |
+| `routeRules` (SSR)                | Not needed — App Router is SSR by default               |
+| `modules (@sentry/nuxt)`          | `// TODO: Install @sentry/nextjs`                       |
+| `modules (@nuxtjs/sitemap)`       | `// TODO: Implement via app/sitemap.ts or next-sitemap` |
+| `hooks.pages:extend`              | `// TODO: Create shared search route files`             |
+| `vue.runtimeCompiler`             | Not applicable (Vue-specific)                           |
+| `vite.optimizeDeps`               | Not applicable (Vite-specific)                          |
+| `vite.css.scss`                   | Not applicable (uses Tailwind, not SCSS)                |
+| `eslint` config                   | Already in `eslint.config.mjs`                          |
 
 **No API proxy rewrites** — the backend already has full CORS support (`cors.py` allows any origin for `/api/*`), so direct cross-origin calls work fine. The `NEXT_PUBLIC_API_BASE` env var is sufficient.
 
@@ -130,7 +131,8 @@ Single-line change — replace hardcoded URL with env variable:
 const API_BASE_URL = 'https://dados.gov.pt/api/1';
 
 // After:
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || 'https://dados.gov.pt/api/1';
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE || 'https://dados.gov.pt/api/1';
 ```
 
 Also remove the `console.log` debug statements.
@@ -154,17 +156,17 @@ Also remove `frontend/rollup-plugin-smol-toml` if it exists (referenced by nuxt.
 
 ## Files Modified/Created
 
-| Action | File |
-|---|---|
-| **Create** | `frontend/.env.example` |
-| **Create** | `frontend/.env.local` |
-| **Create** | `frontend/src/config/site.ts` |
-| **Create** | `frontend/src/config/env.ts` |
-| **Edit** | `frontend/next.config.ts` |
-| **Edit** | `frontend/src/services/api.ts` |
-| **Edit** | `frontend/src/app/layout.tsx` |
-| **Edit** | `frontend/.gitignore` |
-| **Delete** | `frontend/nuxt.config.ts` |
+| Action     | File                                           |
+| ---------- | ---------------------------------------------- |
+| **Create** | `frontend/.env.example`                        |
+| **Create** | `frontend/.env.local`                          |
+| **Create** | `frontend/src/config/site.ts`                  |
+| **Create** | `frontend/src/config/env.ts`                   |
+| **Edit**   | `frontend/next.config.ts`                      |
+| **Edit**   | `frontend/src/services/api.ts`                 |
+| **Edit**   | `frontend/src/app/layout.tsx`                  |
+| **Edit**   | `frontend/.gitignore`                          |
+| **Delete** | `frontend/nuxt.config.ts`                      |
 | **Delete** | `frontend/rollup-plugin-smol-toml` (if exists) |
 
 ---

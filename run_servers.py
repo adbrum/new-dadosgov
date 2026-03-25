@@ -81,9 +81,9 @@ def run_servers_normal(mode="dev"):
     modo_nome = "DESENVOLVIMENTO" if mode == "dev" else "PRODUÇÃO"
     print(f"\n=== Iniciando servidores em MODO {modo_nome} ===\n")
 
-    print("Iniciando o servidor backend...")
+    print("Iniciando o servidor backend (API + Celery worker)...")
     backend_process = subprocess.Popen(
-        ["uv", "run", "udata", "serve"],
+        ["uv", "run", "inv", "dev"],
         cwd="backend",
         stdout=sys.stdout,
         stderr=sys.stderr,

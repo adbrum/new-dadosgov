@@ -2623,6 +2623,98 @@ Conectar à API real as secções de backoffice da organização que estavam com
 
 ---
 
+## TICKET-55: Admin Sistema — Fix Mock Data, Broken Search/Filters & Missing API Wiring
+
+**Descrição**
+Corrigir os bugs e lacunas nas páginas de administração do sistema (`/pages/admin/system/`). Cinco componentes usam dados mock hardcoded em vez da API real, três componentes com API real têm pesquisa/filtros e paginação não funcionais, e o formulário de criação de posts não guarda dados.
+
+**Contexto Arquitetural**
+
+- Páginas admin sistema: `frontend/src/app/pages/admin/system/`
+- Componentes: `frontend/src/components/admin/`
+- API functions: `frontend/src/services/api.ts`
+- Componentes funcionais (referência): `SystemDatasetsClient.tsx`, `SystemEditorialClient.tsx`
+- Backend endpoints relevantes:
+  - Organizações: `GET /api/1/organizations/` (paginado, `?q=` para pesquisa)
+  - Users: `GET /api/1/users/` (paginado, `?q=` para pesquisa)
+  - Tópicos: `GET /api/2/topics/` (paginado)
+  - Posts: `GET /api/1/posts/` (paginado) / `POST /api/1/posts/` (criar)
+  - Community Resources: `GET /api/1/datasets/community_resources/` (paginado)
+  - Reuses: `GET /api/1/reuses/` (`?q=` para pesquisa)
+  - Harvesters: `GET /api/1/harvest/sources/`
+  - Dataservices: `GET /api/1/dataservices/`
+
+**O que deve ser feito**
+
+### A. Substituir mock data por API real (5 componentes)
+
+1. **SystemOrganizationsClient.tsx** — Remover mock array (linhas ~29-84):
+   - Usar `fetchOrganizations(page, pageSize, { q })` para listar organizações.
+   - Wiring pesquisa (`q` param) e paginação.
+   - Corrigir link de edição que usa `org.id` (mock não tem `id`).
+
+2. **SystemUsersClient.tsx** — Remover mock array (linhas ~28-61):
+   - Criar/usar `fetchUsers(page, pageSize, { q })` para listar utilizadores.
+   - Wiring pesquisa e paginação.
+
+3. **SystemTopicsClient.tsx** — Remover mock array (linhas ~27-84):
+   - Usar `fetchTopics()` (API v2) para listar tópicos.
+   - Wiring pesquisa e paginação.
+
+4. **SystemPostsClient.tsx** — Remover mock array (linhas ~31-93):
+   - Usar `fetchPosts(page, pageSize)` para listar posts.
+   - Wiring pesquisa e paginação.
+   - Status deve refletir o campo `private` ou similar do backend.
+
+5. **SystemCommunityResourcesClient.tsx** — Remover mock array (linhas ~40-131):
+   - Usar `fetchCommunityResources(page, pageSize)` ou endpoint equivalente para listar.
+   - Corrigir links de edição (apontam para `#`).
+   - Mostrar dataset associado como link.
+
+### B. Corrigir pesquisa, filtros e paginação (3 componentes com API real)
+
+6. **SystemReusesClient.tsx**:
+   - Wiring pesquisa com `?q=` param na API.
+   - Wiring filtro de status.
+   - Remover `fetch limit 9999` — usar paginação server-side.
+   - Status dinâmico em vez de hardcoded "Público".
+
+7. **SystemHarvestersClient.tsx**:
+   - Wiring pesquisa com `?q=` param.
+   - Wiring filtro de status.
+   - Separar links de "ver" e "editar" (ambos apontam para o mesmo URL).
+
+8. **SystemDataservicesClient.tsx**:
+   - Wiring pesquisa com `?q=` param.
+   - Wiring filtro de status.
+   - Corrigir paginação presa na página 1 (`currentPage` hardcoded).
+   - Remover `fetch limit 9999` — usar paginação server-side.
+
+### C. Corrigir formulário de criação de posts
+
+9. **PostsNewClient.tsx**:
+   - Implementar `POST /api/1/posts/` no botão "Guardar" (atualmente só navega de volta sem guardar).
+   - Corrigir typo no label: "Contente" → "Conteúdo" (linha ~239).
+   - Adicionar tratamento de erros e feedback ao utilizador.
+
+**Critérios de Aceitação**
+
+- [ ] `SystemOrganizationsClient` lista organizações reais da API com pesquisa e paginação.
+- [ ] `SystemUsersClient` lista utilizadores reais da API com pesquisa e paginação.
+- [ ] `SystemTopicsClient` lista tópicos reais da API v2 com paginação.
+- [ ] `SystemPostsClient` lista posts reais da API com pesquisa e paginação.
+- [ ] `SystemCommunityResourcesClient` lista recursos comunitários reais com links de edição funcionais.
+- [ ] Sem dados mock/hardcoded restantes nos 5 componentes acima.
+- [ ] `SystemReusesClient` pesquisa funcional, status dinâmico, paginação server-side.
+- [ ] `SystemHarvestersClient` pesquisa funcional, links de ver/editar separados.
+- [ ] `SystemDataservicesClient` paginação funcional (não presa na página 1), pesquisa funcional.
+- [ ] `PostsNewClient` guarda o post via API ao clicar "Guardar".
+- [ ] Typo "Contente" corrigido para "Conteúdo" no formulário de posts.
+- [ ] Todos os componentes tratam estados de erro e loading adequadamente.
+- [ ] Empty states adequados quando não há dados.
+
+---
+
 ## Summary Table
 
 | Ficheiro                              | Alteração                                                                                                           |
@@ -2693,3 +2785,4 @@ Conectar à API real as secções de backoffice da organização que estavam com
 | 52                                    | Homepage — Fix CORS Blocking All Client-Side API Calls                                                              | Frontend             | High                         | Concluído                          |
 | 53                                    | Fix Server-Side Fetches Failing with Relative API URLs                                                              | Frontend             | High                         | Concluído                          |
 | 54                                    | Admin — Organization Discussions & Members (Backend Wiring)                                                         | Admin                | High                         | Not started                        |
+| 55                                    | Admin Sistema — Fix Mock Data, Broken Search/Filters & Missing API Wiring                                           | Admin                | High                         | Not started                        |

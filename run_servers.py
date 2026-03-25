@@ -219,6 +219,45 @@ def run_servers_pm2():
     subprocess.run(["pm2", "list"])
 
 
+def run_servers_docker():
+    """Inicia os servidores via Docker Compose (backend + frontend)"""
+    print("\n=== Iniciando servidores em MODO DOCKER ===\n")
+
+    print("A construir e iniciar o backend (app + worker + beat + mailpit)...")
+    backend_result = subprocess.run(
+        ["docker", "compose", "up", "-d", "--build"],
+        cwd="backend",
+        stdout=sys.stdout,
+        stderr=sys.stderr,
+    )
+
+    if backend_result.returncode != 0:
+        print("\n❌ Falha ao iniciar o backend via Docker!")
+        return
+
+    print("\nA construir e iniciar o frontend...")
+    frontend_result = subprocess.run(
+        ["docker", "compose", "up", "-d", "--build"],
+        cwd="frontend",
+        stdout=sys.stdout,
+        stderr=sys.stderr,
+    )
+
+    if frontend_result.returncode != 0:
+        print("\n❌ Falha ao iniciar o frontend via Docker!")
+        return
+
+    print("\n✓ Servidores Docker iniciados com sucesso!")
+    print("  Backend:  http://localhost:7000")
+    print("  Frontend: http://localhost:3000")
+    print("  Mailpit:  http://localhost:8025")
+    print("\nComandos úteis:")
+    print("  docker compose -f backend/docker-compose.yml logs -f     - Logs do backend")
+    print("  docker compose -f frontend/docker-compose.yml logs -f    - Logs do frontend")
+    print("  docker compose -f backend/docker-compose.yml down        - Parar backend")
+    print("  docker compose -f frontend/docker-compose.yml down       - Parar frontend")
+
+
 def show_menu():
     """Mostra o menu de opções"""
     print("\n" + "=" * 50)
@@ -234,6 +273,9 @@ def show_menu():
     print("\n  3. Modo de Produção (foreground)")
     print("     - Servidores rodam no terminal atual")
     print("     - Frontend em modo de produção (npm run start)")
+    print("\n  4. Modo Docker")
+    print("     - Backend e frontend via Docker Compose")
+    print("     - Inclui Celery worker, beat e Mailpit")
     print("\n  0. Sair")
     print("\n" + "=" * 50)
 
@@ -244,7 +286,7 @@ def main():
         show_menu()
 
         try:
-            choice = input("\nDigite sua opção (0-3): ").strip()
+            choice = input("\nDigite sua opção (0-4): ").strip()
 
             if choice == "0":
                 print("\nSaindo...")
@@ -274,8 +316,12 @@ def main():
                 run_servers_normal("start")
                 break
 
+            elif choice == "4":
+                run_servers_docker()
+                break
+
             else:
-                print("\n❌ Opção inválida! Por favor, escolha 0, 1, 2 ou 3.")
+                print("\n❌ Opção inválida! Por favor, escolha 0, 1, 2, 3 ou 4.")
                 time.sleep(1)
 
         except KeyboardInterrupt:

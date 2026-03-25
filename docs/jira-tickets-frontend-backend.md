@@ -1824,7 +1824,7 @@ Migrar utilizadores legados (email/password) para CMD (Chave Móvel Digital) ou 
 
 ---
 
-## TICKET-42: Admin — Organization Content Pages (Conexões API — `org/*`) ✅
+## TICKET-42: Admin — Organization Content Pages (Conexões API — `org/*`) ✅✅
 
 **Descrição**
 Implementar as páginas de conteúdo da organização no admin (`/admin/org/`): listagens de dataservices, reuses, harvesters, community resources, perfil da organização e estatísticas — tudo no contexto da organização do utilizador autenticado.
@@ -1874,7 +1874,7 @@ Implementar as páginas de conteúdo da organização no admin (`/admin/org/`): 
 
 ---
 
-## TICKET-43: Admin — Editorial Page (Conexões API — Sysadmin) ✅
+## TICKET-43: Admin — Editorial Page (Conexões API — Sysadmin) ✅✅
 
 **Descrição**
 Implementar a camada de conexão para a página editorial do admin (`/admin/system/editorial`): gestão de conteúdo destacado na homepage (datasets, reuses e organizações em destaque).
@@ -1918,7 +1918,7 @@ Implementar a camada de conexão para a página editorial do admin (`/admin/syst
 
 ---
 
-## TICKET-44: Admin — Permission Guards & Role-Based Navigation ✅
+## TICKET-44: Admin — Permission Guards & Role-Based Navigation ✅✅
 
 **Descrição**
 Implementar controlo de permissões no frontend do admin: esconder secções da navegação lateral com base nos roles do utilizador, proteger rotas com guards, e garantir que apenas sysadmins acedem a "Sistema" e que "Minha organização" só aparece para utilizadores com organização.
@@ -1958,7 +1958,7 @@ Implementar controlo de permissões no frontend do admin: esconder secções da 
 
 ---
 
-## TICKET-45: Global Search — Unify Local Searches with CategoryToggles Navigation ✅
+## TICKET-45: Global Search — Unify Local Searches with CategoryToggles Navigation ✅✅
 
 **Descrição**
 Unificar as pesquisas locais das páginas de listagem (datasets, organizations, reuses, dataservices) numa pesquisa global integrada, seguindo o workflow do CDATA (`cdata-pt`). Cada página de listagem mantém o seu próprio `InputSearchBar` que atualiza os resultados à medida que o utilizador escreve. O componente `CategoryToggles` na sidebar deve mostrar os totais de resultados da pesquisa atual para todas as categorias, e ao clicar numa categoria, navegar para a respetiva página com `?q=` preservado, onde os resultados já aparecem filtrados.
@@ -2095,11 +2095,11 @@ Executar testes de vulnerabilidades no frontend Next.js do projeto dados.gov.pt 
 
 **Ferramentas utilizadas**
 
-| Ferramenta | Objetivo | Método |
-|-----------|----------|--------|
-| `npm audit` | Vulnerabilidades em dependências npm | Análise estática de CVEs conhecidos |
-| `curl` manual | Security headers, XSS, open redirect, path traversal, CORS, access control, file exposure | Testes HTTP manuais contra endpoints |
-| OWASP ZAP (Docker) | Scan automático OWASP Top 10 — 183 URLs, 57 regras de segurança | `zap-baseline.py` via `ghcr.io/zaproxy/zaproxy:stable` |
+| Ferramenta         | Objetivo                                                                                  | Método                                                 |
+| ------------------ | ----------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `npm audit`        | Vulnerabilidades em dependências npm                                                      | Análise estática de CVEs conhecidos                    |
+| `curl` manual      | Security headers, XSS, open redirect, path traversal, CORS, access control, file exposure | Testes HTTP manuais contra endpoints                   |
+| OWASP ZAP (Docker) | Scan automático OWASP Top 10 — 183 URLs, 57 regras de segurança                           | `zap-baseline.py` via `ghcr.io/zaproxy/zaproxy:stable` |
 
 **O que deve ser feito**
 
@@ -2384,19 +2384,19 @@ Remediação de vulnerabilidades de segurança identificadas nos relatórios de 
 
 **Ficheiros alterados**
 
-| Ficheiro | Fix |
-|---|---|
-| `udata/settings.py` | FIX 1, FIX 2, FIX 7 |
-| `udata/cors.py` | FIX 2 |
-| `udata/app.py` | FIX 2, FIX 4, FIX 7 |
-| `udata/core/storages/validation.py` | FIX 3 (NEW) |
-| `udata/core/storages/api.py` | FIX 3 |
-| `udata/core/dataset/api.py` | FIX 3 |
-| `udata/core/discussions/forms.py` | FIX 5 |
-| `udata/auth/forms.py` | FIX 6 |
-| `udata/auth/mails.py` | FIX 1 |
-| `udata/auth/views.py` | FIX 7 |
-| `pyproject.toml` | FIX 7 |
+| Ficheiro                            | Fix                 |
+| ----------------------------------- | ------------------- |
+| `udata/settings.py`                 | FIX 1, FIX 2, FIX 7 |
+| `udata/cors.py`                     | FIX 2               |
+| `udata/app.py`                      | FIX 2, FIX 4, FIX 7 |
+| `udata/core/storages/validation.py` | FIX 3 (NEW)         |
+| `udata/core/storages/api.py`        | FIX 3               |
+| `udata/core/dataset/api.py`         | FIX 3               |
+| `udata/core/discussions/forms.py`   | FIX 5               |
+| `udata/auth/forms.py`               | FIX 6               |
+| `udata/auth/mails.py`               | FIX 1               |
+| `udata/auth/views.py`               | FIX 7               |
+| `pyproject.toml`                    | FIX 7               |
 
 **Configuração necessária para produção**
 
@@ -2494,8 +2494,10 @@ Corrigir o problema em que páginas com Server Components (SSR) — como `/pages
 **Causa Raiz**
 
 `API_BASE_URL` em `src/services/api.ts` era uma constante simples:
+
 ```typescript
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || "https://dados.gov.pt/api/1";
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE || 'https://dados.gov.pt/api/1';
 // Resolvia para "/api/1" — funciona no browser, falha no Node.js
 ```
 
@@ -2506,14 +2508,14 @@ Server Components chamavam `fetch("/api/1/datasets/")` no Node.js → URL invál
 Alterado `src/services/api.ts` para detectar o ambiente de execução e usar o URL adequado:
 
 ```typescript
-const isServer = typeof window === "undefined";
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:7000";
+const isServer = typeof window === 'undefined';
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:7000';
 const API_BASE_URL = isServer
   ? `${BACKEND_URL}/api/1`
-  : (process.env.NEXT_PUBLIC_API_BASE || "/api/1");
+  : process.env.NEXT_PUBLIC_API_BASE || '/api/1';
 const API_V2_BASE_URL = isServer
   ? `${BACKEND_URL}/api/2`
-  : (process.env.NEXT_PUBLIC_API_V2_BASE || "/api/2");
+  : process.env.NEXT_PUBLIC_API_V2_BASE || '/api/2';
 ```
 
 **Fluxo após a correção**
@@ -2623,71 +2625,71 @@ Conectar à API real as secções de backoffice da organização que estavam com
 
 ## Summary Table
 
-| Ficheiro | Alteração |
-|---|---|
-| `frontend/.env.local` | `NEXT_PUBLIC_API_BASE=/api/1`, `NEXT_PUBLIC_API_V2_BASE=/api/2`, adicionado `BACKEND_URL=http://localhost:7000` |
-| `frontend/.env.example` | Idem (template actualizado) |
-| `frontend/next.config.ts` | `BACKEND_URL` lê de `process.env.BACKEND_URL` em vez de derivar de `NEXT_PUBLIC_API_BASE` |
-| Ficheiro | Alteração |
-|---|---|
-| `frontend/src/services/api.ts` | `API_BASE_URL` e `API_V2_BASE_URL` agora usam URL absoluto (`BACKEND_URL`) em server-side e relativo em client-side |
-| Cenário | TICKET-52 (antes) | TICKET-52 (depois) | TICKET-53 (depois) |
-|---|---|---|---|
-| Client Component (browser) | ❌ CORS blocked | ✅ Relativo `/api/1` | ✅ Relativo `/api/1` |
-| Server Component (Node.js) | ✅ Absoluto `localhost:7000` | ❌ Relativo falha | ✅ Absoluto `localhost:7000` |
-| #                                     | Ticket                                                   | Area   | Priority | Status                             |
-| ------------------------------------- | -------------------------------------------------------- | ------ | -------- | ---------------------------------- |
-| **QUALIDADE & SEGURANÇA** | | | | |
-| 01                                    | Auth — Login (CSRF + session)                            | Auth   | High     | Route handler existe, falta wiring |
-| 02                                    | Auth — Registration (proxy + form)                       | Auth   | High     | UI existe, falta wiring            |
-| 03                                    | Auth — Current User (`/me/` + context)                   | Auth   | High     | Not started                        |
-| 04                                    | Homepage — Dados Dinâmicos (site, featured, posts)       | Public | High     | Concluído (CORS fix: TICKET-52)    |
-| 05                                    | Datasets — Search (q param + suggest)                    | Public | High     | fetchDatasets sem q                |
-| 06                                    | Datasets — Filtros (licenses, schemas, tags, etc.)       | Public | Medium   | Parcialmente dinâmico              |
-| 07                                    | Discussions CRUD                                         | Public | Medium   | Placeholder                        |
-| 08                                    | Followers (follow/unfollow genérico)                     | Public | Medium   | Local state only                   |
-| 09                                    | Organization Detail (fetch + org datasets/reuses)        | Public | High     | Página em falta                    |
-| 10                                    | Organizations — Search + Filtros (q, badges, suggest)    | Public | Medium   | fetchOrganizations sem q           |
-| 11                                    | Reuses — Search + Detail (q, types, datasets associados) | Public | Medium   | Parcial                            |
-| 12                                    | Topics/Themes — Leitura API v2                           | Public | Medium   | Tudo estático                      |
-| 13                                    | User Profile (fetch /me/datasets, /users/)               | Public | High     | Not started                        |
-| 14                                    | Dataset Create & Edit                                    | Admin  | —        | → TICKET-26                        |
-| 15                                    | Reuse Create & Edit                                      | Admin  | —        | → TICKET-27                        |
-| 16                                    | Dataservices Wiring                                      | Admin  | —        | → TICKET-28                        |
-| 17                                    | Posts/News — Leitura (fetch posts)                       | Public | Medium   | Placeholder                        |
-| 18                                    | Notifications (fetch /notifications/)                    | Public | Low      | Not started                        |
-| 19                                    | Global Search — Suggest Multi-Entidade                   | Public | High     | Nenhuma lógica                     |
-| 20                                    | Mini-Courses — Fonte de Dados                            | Public | Low      | Tudo hardcoded                     |
-| 21                                    | Password Reset (route handler + functions)               | Auth   | Medium   | Rewrites existem                   |
-| 22                                    | Spatial (zones suggest, granularities, levels)           | Public | Low      | Filtros estáticos                  |
-| 23                                    | Reports — Submissão (reasons + create)                   | Public | Low      | Not started                        |
-| 24                                    | Organization Membership (request, accept, members)       | Public | Low      | Not started                        |
-| 25                                    | CSV/Data Export (URL generators)                         | Public | Low      | Not started                        |
-| 26                                    | Admin — Datasets CRUD (tipos TS + fetch/mutate)          | Admin  | High     | Concluído                          |
-| 27                                    | Admin — Reuses CRUD (tipos TS + fetch/mutate)            | Admin  | High     | Not started                        |
-| 28                                    | Admin — Dataservices CRUD (wiring form existente)        | Admin  | Medium   | UI exists, needs wiring            |
-| 29                                    | Admin — Organizations CRUD + Members                     | Admin  | High     | Not started                        |
-| 30                                    | Admin — User Profile & Metrics                           | Admin  | High     | Not started                        |
-| 31                                    | Admin — Community Resources CRUD                         | Admin  | Low      | Not started                        |
-| 32                                    | Admin — Harvesters CRUD + Jobs                           | Admin  | Medium   | Not started                        |
-| 33                                    | Admin — Topics CRUD (API v2)                             | Admin  | Medium   | Not started                        |
-| 34                                    | Admin — Posts CRUD                                       | Admin  | Medium   | Not started                        |
-| 35                                    | Admin — User Management (Sysadmin)                       | Admin  | Low      | Not started                        |
-| 36                                    | Admin — Site Management & Moderation (Sysadmin)          | Admin  | Medium   | Not started                        |
-| 37                                    | Auth — Autenticação.gov / SAML (plugin + frontend)       | Auth   | High     | Concluído                          |
-| 38                                    | Maintenance — Sync Login branches & resolution           | Repo   | High     | Concluído                          |
-| 40                                    | Dataset Detail — Fix hardcoded content & UI bugs         | Public | High     | Not started                        |
-| 41                                    | Legacy Account Migration to CMD/eIDAS                    | Auth   | High     | Concluído                          |
-| 42                                    | Admin — Organization Content Pages (`org/*`)             | Admin  | High     | Concluído                          |
-| 43                                    | Admin — Editorial Page (Sysadmin)                        | Admin  | Medium   | Concluído                          |
-| 44                                    | Admin — Permission Guards & Role-Based Navigation        | Admin  | High     | Concluído                          |
-| 45 | Global Search — Unify Local Searches + CategoryToggles | Public | High | Concluído |
-| 46 | Explorar — Redirecionar HVDs para Datasets com tag=hvd | Public | Medium | Concluído |
-| 47 | Vulnerability Testing — Frontend (TestSprite MCP) | Security | High | Not started |
-| 48 | Vulnerability Testing — Backend API (TestSprite MCP) | Security | High | Not started |
-| 49 | Datasets Listing — Organization Link in Dataset Card | Public | Medium | Not started |
-| 50 | Frontend — Functional Testing with TestSprite MCP | QA | Medium | Concluído |
-| 51 | Vulnerability Remediation — Backend (KITS24 Audit) | Security | Critical | Concluído |
-| 52 | Homepage — Fix CORS Blocking All Client-Side API Calls | Frontend | High | Concluído |
-| 53 | Fix Server-Side Fetches Failing with Relative API URLs | Frontend | High | Concluído |
-| 54 | Admin — Organization Discussions & Members (Backend Wiring) | Admin | High | Not started |
+| Ficheiro                              | Alteração                                                                                                           |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | -------------------- | ---------------------------- | ---------------------------------- |
+| `frontend/.env.local`                 | `NEXT_PUBLIC_API_BASE=/api/1`, `NEXT_PUBLIC_API_V2_BASE=/api/2`, adicionado `BACKEND_URL=http://localhost:7000`     |
+| `frontend/.env.example`               | Idem (template actualizado)                                                                                         |
+| `frontend/next.config.ts`             | `BACKEND_URL` lê de `process.env.BACKEND_URL` em vez de derivar de `NEXT_PUBLIC_API_BASE`                           |
+| Ficheiro                              | Alteração                                                                                                           |
+| ---                                   | ---                                                                                                                 |
+| `frontend/src/services/api.ts`        | `API_BASE_URL` e `API_V2_BASE_URL` agora usam URL absoluto (`BACKEND_URL`) em server-side e relativo em client-side |
+| Cenário                               | TICKET-52 (antes)                                                                                                   | TICKET-52 (depois)   | TICKET-53 (depois)           |
+| ---                                   | ---                                                                                                                 | ---                  | ---                          |
+| Client Component (browser)            | ❌ CORS blocked                                                                                                     | ✅ Relativo `/api/1` | ✅ Relativo `/api/1`         |
+| Server Component (Node.js)            | ✅ Absoluto `localhost:7000`                                                                                        | ❌ Relativo falha    | ✅ Absoluto `localhost:7000` |
+| #                                     | Ticket                                                                                                              | Area                 | Priority                     | Status                             |
+| ------------------------------------- | --------------------------------------------------------                                                            | ------               | --------                     | ---------------------------------- |
+| **QUALIDADE & SEGURANÇA**             |                                                                                                                     |                      |                              |                                    |
+| 01                                    | Auth — Login (CSRF + session)                                                                                       | Auth                 | High                         | Route handler existe, falta wiring |
+| 02                                    | Auth — Registration (proxy + form)                                                                                  | Auth                 | High                         | UI existe, falta wiring            |
+| 03                                    | Auth — Current User (`/me/` + context)                                                                              | Auth                 | High                         | Not started                        |
+| 04                                    | Homepage — Dados Dinâmicos (site, featured, posts)                                                                  | Public               | High                         | Concluído (CORS fix: TICKET-52)    |
+| 05                                    | Datasets — Search (q param + suggest)                                                                               | Public               | High                         | fetchDatasets sem q                |
+| 06                                    | Datasets — Filtros (licenses, schemas, tags, etc.)                                                                  | Public               | Medium                       | Parcialmente dinâmico              |
+| 07                                    | Discussions CRUD                                                                                                    | Public               | Medium                       | Placeholder                        |
+| 08                                    | Followers (follow/unfollow genérico)                                                                                | Public               | Medium                       | Local state only                   |
+| 09                                    | Organization Detail (fetch + org datasets/reuses)                                                                   | Public               | High                         | Página em falta                    |
+| 10                                    | Organizations — Search + Filtros (q, badges, suggest)                                                               | Public               | Medium                       | fetchOrganizations sem q           |
+| 11                                    | Reuses — Search + Detail (q, types, datasets associados)                                                            | Public               | Medium                       | Parcial                            |
+| 12                                    | Topics/Themes — Leitura API v2                                                                                      | Public               | Medium                       | Tudo estático                      |
+| 13                                    | User Profile (fetch /me/datasets, /users/)                                                                          | Public               | High                         | Not started                        |
+| 14                                    | Dataset Create & Edit                                                                                               | Admin                | —                            | → TICKET-26                        |
+| 15                                    | Reuse Create & Edit                                                                                                 | Admin                | —                            | → TICKET-27                        |
+| 16                                    | Dataservices Wiring                                                                                                 | Admin                | —                            | → TICKET-28                        |
+| 17                                    | Posts/News — Leitura (fetch posts)                                                                                  | Public               | Medium                       | Placeholder                        |
+| 18                                    | Notifications (fetch /notifications/)                                                                               | Public               | Low                          | Not started                        |
+| 19                                    | Global Search — Suggest Multi-Entidade                                                                              | Public               | High                         | Nenhuma lógica                     |
+| 20                                    | Mini-Courses — Fonte de Dados                                                                                       | Public               | Low                          | Tudo hardcoded                     |
+| 21                                    | Password Reset (route handler + functions)                                                                          | Auth                 | Medium                       | Rewrites existem                   |
+| 22                                    | Spatial (zones suggest, granularities, levels)                                                                      | Public               | Low                          | Filtros estáticos                  |
+| 23                                    | Reports — Submissão (reasons + create)                                                                              | Public               | Low                          | Not started                        |
+| 24                                    | Organization Membership (request, accept, members)                                                                  | Public               | Low                          | Not started                        |
+| 25                                    | CSV/Data Export (URL generators)                                                                                    | Public               | Low                          | Not started                        |
+| 26                                    | Admin — Datasets CRUD (tipos TS + fetch/mutate)                                                                     | Admin                | High                         | Concluído                          |
+| 27                                    | Admin — Reuses CRUD (tipos TS + fetch/mutate)                                                                       | Admin                | High                         | Not started                        |
+| 28                                    | Admin — Dataservices CRUD (wiring form existente)                                                                   | Admin                | Medium                       | UI exists, needs wiring            |
+| 29                                    | Admin — Organizations CRUD + Members                                                                                | Admin                | High                         | Not started                        |
+| 30                                    | Admin — User Profile & Metrics                                                                                      | Admin                | High                         | Not started                        |
+| 31                                    | Admin — Community Resources CRUD                                                                                    | Admin                | Low                          | Not started                        |
+| 32                                    | Admin — Harvesters CRUD + Jobs                                                                                      | Admin                | Medium                       | Not started                        |
+| 33                                    | Admin — Topics CRUD (API v2)                                                                                        | Admin                | Medium                       | Not started                        |
+| 34                                    | Admin — Posts CRUD                                                                                                  | Admin                | Medium                       | Not started                        |
+| 35                                    | Admin — User Management (Sysadmin)                                                                                  | Admin                | Low                          | Not started                        |
+| 36                                    | Admin — Site Management & Moderation (Sysadmin)                                                                     | Admin                | Medium                       | Not started                        |
+| 37                                    | Auth — Autenticação.gov / SAML (plugin + frontend)                                                                  | Auth                 | High                         | Concluído                          |
+| 38                                    | Maintenance — Sync Login branches & resolution                                                                      | Repo                 | High                         | Concluído                          |
+| 40                                    | Dataset Detail — Fix hardcoded content & UI bugs                                                                    | Public               | High                         | Not started                        |
+| 41                                    | Legacy Account Migration to CMD/eIDAS                                                                               | Auth                 | High                         | Concluído                          |
+| 42                                    | Admin — Organization Content Pages (`org/*`)                                                                        | Admin                | High                         | Concluído                          |
+| 43                                    | Admin — Editorial Page (Sysadmin)                                                                                   | Admin                | Medium                       | Concluído                          |
+| 44                                    | Admin — Permission Guards & Role-Based Navigation                                                                   | Admin                | High                         | Concluído                          |
+| 45                                    | Global Search — Unify Local Searches + CategoryToggles                                                              | Public               | High                         | Concluído                          |
+| 46                                    | Explorar — Redirecionar HVDs para Datasets com tag=hvd                                                              | Public               | Medium                       | Concluído                          |
+| 47                                    | Vulnerability Testing — Frontend (TestSprite MCP)                                                                   | Security             | High                         | Not started                        |
+| 48                                    | Vulnerability Testing — Backend API (TestSprite MCP)                                                                | Security             | High                         | Not started                        |
+| 49                                    | Datasets Listing — Organization Link in Dataset Card                                                                | Public               | Medium                       | Not started                        |
+| 50                                    | Frontend — Functional Testing with TestSprite MCP                                                                   | QA                   | Medium                       | Concluído                          |
+| 51                                    | Vulnerability Remediation — Backend (KITS24 Audit)                                                                  | Security             | Critical                     | Concluído                          |
+| 52                                    | Homepage — Fix CORS Blocking All Client-Side API Calls                                                              | Frontend             | High                         | Concluído                          |
+| 53                                    | Fix Server-Side Fetches Failing with Relative API URLs                                                              | Frontend             | High                         | Concluído                          |
+| 54                                    | Admin — Organization Discussions & Members (Backend Wiring)                                                         | Admin                | High                         | Not started                        |

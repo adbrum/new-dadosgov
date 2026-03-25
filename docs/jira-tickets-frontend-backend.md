@@ -6,10 +6,6 @@
 
 ---
 
-# PÁGINAS PÚBLICAS — Tickets
-
----
-
 ## TICKET-01: Authentication — Login (Conexão API) ✅
 
 **Descrição**
@@ -903,6 +899,556 @@ Implementar funções utilitárias para gerar URLs de export CSV dos endpoints d
 
 ---
 
+## TICKET-26: Admin — Datasets CRUD (Conexões API) ✅
+
+**Descrição**
+Implementar toda a camada de conexão (tipos TS + funções API) necessária para as páginas admin de datasets: listagem pessoal, criação, edição, eliminação, e gestão de resources.
+
+**Contexto Arquitetural**
+
+- Ref. original: `pages/admin/me/datasets.vue`, `pages/admin/datasets/new.vue`, `pages/admin/datasets/[id].vue`, `pages/admin/datasets/structured.vue`.
+- O fluxo de criação no original é um wizard de 4 steps: (1) tipo de publicação, (2) metadados, (3) upload de resources, (4) publicação (toggle private→public).
+- O fluxo de edição tem 4 tabs: Metadata, Resources, Discussions, Activities.
+- Backend endpoints necessários:
+  - `GET /api/1/me/datasets/` — datasets do utilizador autenticado.
+  - `GET /api/1/me/org_datasets/` — datasets das organizações do utilizador.
+  - `POST /api/1/datasets/` — criar dataset (body: title, description, tags, license, frequency, temporal_coverage, spatial, organization, private).
+  - `PUT /api/1/datasets/<id>/` — atualizar dataset.
+  - `DELETE /api/1/datasets/<id>/` — eliminar dataset.
+  - `GET /api/2/datasets/<id>/` — detalhes do dataset (v2, inclui extras e quality score).
+  - `POST /api/1/datasets/<id>/resources/` — criar resource (body: title, type, url, filetype, format, description).
+  - `POST /api/1/datasets/<id>/upload/` — upload de ficheiro (multipart/form-data).
+  - `PUT /api/1/datasets/<id>/resources/<rid>/` — atualizar resource.
+  - `DELETE /api/1/datasets/<id>/resources/<rid>/` — eliminar resource.
+  - `PUT /api/1/datasets/<id>/resources/` — reordenar resources (body: array de resource IDs).
+  - `POST /api/1/datasets/<id>/featured/` — marcar como destaque (admin).
+  - `DELETE /api/1/datasets/<id>/featured/` — remover destaque (admin).
+  - `GET /api/1/activity/?related_to=<id>&sort=-created_at` — log de atividade.
+  - Endpoints auxiliares para dropdowns:
+    - `GET /api/1/datasets/licenses/` — lista de licenças.
+    - `GET /api/1/datasets/frequencies/` — frequências de atualização.
+    - `GET /api/1/datasets/schemas/` — schemas disponíveis.
+    - `GET /api/1/datasets/resource_types/` — tipos de resource.
+    - `GET /api/1/datasets/extensions/` — extensões de ficheiro permitidas.
+
+**O que foi feito**
+
+1. **Tipos TS** em `types/api.ts`:
+   - `Dataset` estendido com: `acronym`, `private`, `featured`, `archived`, `frequency`, `frequency_date`, `temporal_coverage`, `spatial`, `quality`, `badges[]`, `owner`, `uri`, `permissions`, `description_short`, `schema`, `harvest`, `extras`, `community_resources`, `deleted`, `last_update`.
+   - `Resource` estendido com: `description`, `filetype`, `mime`, `checksum`, `last_modified`, `schema`, `extras`, `preview_url`, `latest`.
+   - Payloads criados: `DatasetCreatePayload`, `DatasetUpdatePayload`, `ResourceCreatePayload`, `ResourceUpdatePayload`.
+   - Tipos auxiliares: `SchemaRef`, `TemporalCoverage`, `SpatialCoverage`, `Checksum`, `DatasetPermissions`, `ResourceType`, `Activity`.
+   - `License`, `Frequency`, `Badge`, `DatasetBadges` — já existiam.
+2. **Funções em `services/api.ts`**:
+   - Leitura: `fetchMyDatasets()` (flat array → APIResponse wrapper, filtra datasets pessoais), `fetchMyOrgDatasets()`, `fetchLicenses()`, `fetchFrequencies()`, `fetchSchemas()`, `fetchDatasetBadges()`, `fetchResourceTypes()`, `fetchActivity()`.
+   - Mutações: `createDataset()`, `updateDataset()`, `deleteDataset()`, `uploadResource()` (multipart), `createResource()`, `updateResource()`, `deleteResource()`, `reorderResources()`, `toggleDatasetFeatured()`.
+   - Erros de validação do backend retornados como objetos estruturados.
+3. **Wizard de criação** (`DatasetsAdminClient.tsx`) integrado com API:
+   - Step 2: POST `createDataset()` com `private: true` + metadados → dataset pessoal (owner = current user, sem organization).
+   - Step 3: Upload ficheiros via `uploadResource()` (multipart/form-data).
+   - Step 4: "Publicar" → `updateDataset(private: false)`; "Salvar rascunho" → redirige para listagem.
+   - Dropdowns de licenças e frequências carregados da API.
+   - Loading states e erros de validação exibidos.
+4. **Página de edição** (`app/pages/admin/me/datasets/edit/page.tsx` + `DatasetsEditClient.tsx`):
+   - 4 tabs via Agora `Tabs` component: Metadados, Ficheiros, Discussões, Atividades.
+   - Tab Metadados: edição de título, acrónimo, descrição, licença, frequência, cobertura temporal + botão eliminar.
+   - Tab Ficheiros: listagem de resources com upload e delete.
+   - Tab Atividades: lazy-load de `fetchActivity()`.
+   - Erros de validação do backend exibidos.
+5. **Listagem admin** (`DatasetsClient.tsx` + `SystemDatasetsClient.tsx`):
+   - Mock data removido, dados reais da API.
+   - Pesquisa client-side por título, acrónimo e slug.
+   - Filtro por estado: Público, Rascunho, Arquivo, Excluído.
+   - Ordenação controlada por: título (string), criado em (date), última modificação (date), ficheiros (numeric).
+   - Paginação client-side com `onPageChange` / `onPageSizeChange`.
+   - `DatasetsClient` filtra apenas datasets pessoais (`owner` presente, `organization` ausente).
+   - `SystemDatasetsClient` mostra todos os datasets do sistema.
+
+**Critérios de Aceitação**
+
+- [x] `fetchMyDatasets()` retorna a lista paginada do utilizador.
+- [x] Funções auxiliares (licenses, frequencies, schemas) retornam dados corretos.
+- [x] Todos os tipos TS estão definidos e espelham os campos do backend (Dataset extensions, payloads, Schema, Activity).
+- [x] Todas as funções fetch/mutate estão em `services/api.ts` e funcionam.
+- [x] `createDataset()` envia o payload correto e retorna o dataset criado.
+- [x] Upload de ficheiros funciona com `multipart/form-data`.
+- [x] `updateDataset()` e `deleteDataset()` funcionam.
+- [x] Resource CRUD (create, update, delete, reorder) funciona.
+- [x] Listagem admin usa dados reais da API (mock data removido).
+- [x] Wizard de criação integrado com API (POST dataset → upload resources → publicar).
+- [x] Página de edição de dataset implementada e funcional.
+- [x] Erros de validação do backend são retornados em formato utilizável pelo frontend.
+
+---
+
+## TICKET-27: Admin — Reuses CRUD (Conexões API) ✅✅
+
+**Descrição**
+Implementar a camada de conexão para as páginas admin de reuses: listagem pessoal, criação, edição, eliminação, e gestão de datasets/dataservices associados.
+
+**Contexto Arquitetural**
+
+- Ref. original: `pages/admin/me/reuses.vue`, `pages/admin/reuses/new.vue`, `pages/admin/reuses/[id].vue`.
+- Criação no original é um wizard de 3 steps: (1) descrever reuse, (2) associar datasets/dataservices, (3) publicar.
+- Backend endpoints necessários:
+  - `GET /api/1/me/reuses/` — reuses do utilizador.
+  - `POST /api/1/reuses/` — criar reuse (body: title, description, url, type, topic, tags, organization, private).
+  - `PUT /api/1/reuses/<id>/` — atualizar reuse.
+  - `DELETE /api/1/reuses/<id>/` — eliminar reuse.
+  - `POST /api/1/reuses/<id>/image/` — upload de imagem (multipart/form-data).
+  - `POST /api/1/reuses/<id>/datasets/` — associar dataset.
+  - `POST /api/1/reuses/<id>/dataservices/` — associar dataservice.
+  - `GET /api/1/reuses/types/` — tipos de reuse disponíveis.
+  - `GET /api/1/reuses/topics/` — tópicos de reuse.
+  - `POST /api/1/reuses/<id>/featured/` — marcar como destaque.
+  - `DELETE /api/1/reuses/<id>/featured/` — remover destaque.
+
+**O que deve ser feito**
+
+1. **Tipos TS** em `types/api.ts`:
+   - Estender `Reuse` com: `private`, `featured`, `archived`, `topic`, `owner`, `datasets[]`, `dataservices[]`.
+   - Criar `ReuseCreatePayload`, `ReuseUpdatePayload`.
+   - Criar `ReuseType`, `ReuseTopic` types.
+2. **Funções em `services/api.ts`**:
+   - `fetchMyReuses(page?, pageSize?)` → `GET /api/1/me/reuses/`
+   - `createReuse(payload)` → `POST /api/1/reuses/`
+   - `updateReuse(id, payload)` → `PUT /api/1/reuses/<id>/`
+   - `deleteReuse(id)` → `DELETE /api/1/reuses/<id>/`
+   - `uploadReuseImage(id, file)` → `POST /api/1/reuses/<id>/image/` (multipart)
+   - `linkDatasetToReuse(reuseId, datasetId)` → `POST /api/1/reuses/<id>/datasets/`
+   - `linkDataserviceToReuse(reuseId, dataserviceId)` → `POST /api/1/reuses/<id>/dataservices/`
+   - `fetchReuseTypes()` → `GET /api/1/reuses/types/`
+   - `fetchReuseTopics()` → `GET /api/1/reuses/topics/`
+3. **Fluxo de criação**:
+   - Step 1: POST reuse com `private: true` → backend retorna reuse com `id`.
+   - Step 1.5: POST image (se fornecida).
+   - Step 2: POST datasets e dataservices associados.
+   - Step 3: PUT reuse com `private: false` para publicar.
+
+**Critérios de Aceitação**
+
+- [x] Tipos TS espelham os campos do backend.
+- [x] `fetchMyReuses()` retorna lista paginada.
+- [x] `createReuse()` + `uploadReuseImage()` + `linkDatasetToReuse()` funcionam em sequência.
+- [x] `updateReuse()` e `deleteReuse()` funcionam.
+- [x] Tipos e tópicos de reuse são carregados do backend.
+- [x] Erros de validação são retornados em formato utilizável.
+
+---
+
+## TICKET-28: Admin — Dataservices CRUD (Conexões API) ✅✅
+
+**Descrição**
+Implementar a camada de conexão para dataservices: listagem, criação (wiring do form existente `ApiRegistrationClient.tsx`), edição e eliminação.
+
+**Contexto Arquitetural**
+
+- Ref. original: `pages/admin/me/dataservices.vue`, `pages/admin/dataservices/new.vue`, `pages/admin/dataservices/[id].vue`.
+- O frontend já tem `ApiRegistrationClient.tsx` com UI completa mas sem submissão ao backend.
+- Backend endpoints necessários:
+  - `GET /api/1/dataservices/` — listar (filtros: owner, organization).
+  - `POST /api/1/dataservices/` — criar (body: title, description, base_api_url, endpoint_description_url, authorization_request_url, rate_limiting, availability, organization, access_type).
+  - `GET /api/1/dataservices/<id>/` — detalhes.
+  - `PUT /api/1/dataservices/<id>/` — atualizar.
+  - `DELETE /api/1/dataservices/<id>/` — eliminar.
+  - `GET /api/1/dataservices/<id>/followers/` — seguidores.
+  - `POST /api/1/dataservices/<id>/followers/` — seguir.
+  - `DELETE /api/1/dataservices/<id>/followers/` — deixar de seguir.
+
+**O que deve ser feito**
+
+1. **Tipos TS** em `types/api.ts`:
+   - Criar `Dataservice`: id, title, description, base_api_url, endpoint_description_url, authorization_request_url, rate_limiting, availability, access_type, organization, created_at, last_modified, metrics, archived.
+   - Criar `DataserviceCreatePayload`, `DataserviceUpdatePayload`.
+2. **Funções em `services/api.ts`**:
+   - `fetchMyDataservices(page?, pageSize?)` → `GET /api/1/dataservices/?owner=me`
+   - `fetchDataservice(id)` → `GET /api/1/dataservices/<id>/`
+   - `createDataservice(payload)` → `POST /api/1/dataservices/`
+   - `updateDataservice(id, payload)` → `PUT /api/1/dataservices/<id>/`
+   - `deleteDataservice(id)` → `DELETE /api/1/dataservices/<id>/`
+3. **Wiring do form existente**:
+   - Mapear os campos do `ApiRegistrationClient.tsx` para `DataserviceCreatePayload`.
+   - No submit, chamar `createDataservice()`.
+
+**Critérios de Aceitação**
+
+- [x] Tipo `Dataservice` definido em `types/api.ts`.
+- [x] Todas as funções CRUD estão em `services/api.ts`.
+- [x] O form existente (`ApiRegistrationClient.tsx`) submete ao backend.
+- [x] Erros de validação são retornados e utilizáveis.
+
+---
+
+## TICKET-29: Admin — Organizations CRUD (Conexões API) ✅✅
+
+**Descrição**
+Implementar a camada de conexão para organizações no admin: criação, edição, eliminação, logo upload, e gestão de membros.
+
+> **Nota:** As páginas de conteúdo da organização (`org/dataservices`, `org/reuses`, `org/harvesters`, `org/community-resources`, `org/profile`, `org/statistics`) estão cobertas pelo **TICKET-41**.
+
+**Contexto Arquitetural**
+
+- Ref. original: `pages/admin/organizations/new.vue`, `pages/admin/organizations/[oid].vue`.
+- Criação no original é wizard de 3 steps: (1) criar ou juntar-se, (2) detalhes, (3) finalizar.
+- Backend endpoints necessários:
+  - `POST /api/1/organizations/` — criar (body: name, acronym, description, url, business_number_id).
+  - `PUT /api/1/organizations/<org>/` — atualizar.
+  - `DELETE /api/1/organizations/<org>/` — eliminar.
+  - `POST /api/1/organizations/<org>/logo/` — upload logo (multipart/form-data).
+  - `PUT /api/1/organizations/<org>/logo/` — atualizar crop do logo.
+  - `GET /api/1/organizations/<org>/membership/` — pedidos de adesão pendentes.
+  - `POST /api/1/organizations/<org>/membership/` — pedir adesão.
+  - `POST /api/1/organizations/<org>/membership/<id>/accept/` — aceitar.
+  - `POST /api/1/organizations/<org>/membership/<id>/refuse/` — recusar.
+  - `POST /api/1/organizations/<org>/member/<user>/` — adicionar membro.
+  - `PUT /api/1/organizations/<org>/member/<user>/` — atualizar role.
+  - `DELETE /api/1/organizations/<org>/member/<user>/` — remover membro.
+  - `GET /api/1/organizations/<org>/datasets/` — datasets da organização.
+  - `GET /api/1/organizations/<org>/reuses/` — reuses da organização.
+  - `GET /api/1/organizations/<org>/contacts/` — contact points.
+  - `GET /api/1/organizations/roles/` — roles disponíveis.
+  - `GET /api/1/organizations/suggest/?q=` — autocomplete de organizações.
+
+**O que deve ser feito**
+
+1. **Tipos TS** em `types/api.ts`:
+   - Estender `Organization` com: `description`, `url`, `business_number_id`, `members[]`, `badges[]`, `metrics`, `created_at`.
+   - Criar `OrganizationCreatePayload`, `OrganizationUpdatePayload`.
+   - Criar `Member` (user, role), `MembershipRequest` (id, user, status, created).
+   - Criar `OrgRole` type.
+2. **Funções em `services/api.ts`**:
+   - `createOrganization(payload)` → `POST /api/1/organizations/`
+   - `updateOrganization(org, payload)` → `PUT /api/1/organizations/<org>/`
+   - `deleteOrganization(org)` → `DELETE /api/1/organizations/<org>/`
+   - `uploadOrgLogo(org, file)` → `POST /api/1/organizations/<org>/logo/`
+   - `fetchMembershipRequests(org)` → `GET /api/1/organizations/<org>/membership/`
+   - `requestMembership(org)` → `POST /api/1/organizations/<org>/membership/`
+   - `acceptMembership(org, requestId)` → `POST /api/1/organizations/<org>/membership/<id>/accept/`
+   - `refuseMembership(org, requestId)` → `POST /api/1/organizations/<org>/membership/<id>/refuse/`
+   - `addMember(org, userId, role)` → `POST /api/1/organizations/<org>/member/<user>/`
+   - `updateMemberRole(org, userId, role)` → `PUT /api/1/organizations/<org>/member/<user>/`
+   - `removeMember(org, userId)` → `DELETE /api/1/organizations/<org>/member/<user>/`
+   - `fetchOrgDatasets(org, page?)` → `GET /api/1/organizations/<org>/datasets/`
+   - `fetchOrgReuses(org, page?)` → `GET /api/1/organizations/<org>/reuses/`
+   - `fetchOrgRoles()` → `GET /api/1/organizations/roles/`
+   - `suggestOrganizations(query)` → `GET /api/1/organizations/suggest/?q=`
+
+**Critérios de Aceitação**
+
+- [x] Tipos completos para Organization, Member, MembershipRequest.
+- [x] CRUD de organização funciona (create, update, delete).
+- [x] Upload de logo funciona com multipart.
+- [x] Gestão de membros: add, update role, remove, accept/refuse request.
+- [x] Autocomplete de organizações funciona.
+
+---
+
+## TICKET-30: Admin — User Profile & Metrics (Conexões API) ✅✅
+
+**Descrição**
+Implementar a camada de conexão para o perfil do utilizador autenticado: edição de perfil, upload de avatar, invitations de organizações, eliminação de conta, e métricas pessoais.
+
+> **Nota:** A extensão do `AuthContext` com `roles[]` e `organizations[]` está coberta pelo **TICKET-43** (Permission Guards).
+
+**Contexto Arquitetural**
+
+- Ref. original: `pages/admin/me/profile.vue`, `pages/admin/me/metrics.vue`.
+- Backend endpoints necessários:
+  - `GET /api/1/me/` — perfil atual (já existe `fetchCurrentUser` do TICKET-03).
+  - `PUT /api/1/me/` — atualizar perfil (body: first_name, last_name, about, website).
+  - `POST /api/1/me/avatar/` — upload avatar (multipart/form-data).
+  - `DELETE /api/1/me/` — eliminar conta.
+  - `GET /api/1/me/org_invitations/` — convites de organizações pendentes.
+  - `GET /api/1/me/metrics/` — métricas agregadas do utilizador.
+  - `GET /api/1/activity/?owner=<userId>` — atividade do utilizador.
+
+**O que foi feito**
+
+1. **Tipos TS** em `types/api.ts`:
+   - `UserPublic` estendido com `apikey: string | null`.
+   - `UserMetrics` estendido com `downloads: number`.
+   - Criado `UserUpdatePayload`: first_name, last_name, about, website (todos opcionais).
+   - Criado `OrgInvitation`: id, organization, status (pending|accepted|refused), created.
+2. **Funções em `services/api.ts`**:
+   - `updateProfile(payload)` → `PUT /api/1/me/` — envia JSON, retorna `UserPublic`.
+   - `uploadAvatar(file)` → `POST /api/1/me/avatar` — multipart/form-data, retorna `UserPublic`.
+   - `deleteAccount()` → `DELETE /api/1/me/` — sem retorno (void).
+   - `fetchOrgInvitations(page?, pageSize?)` → `GET /api/1/me/org_invitations/` — retorna `APIResponse<OrgInvitation>`.
+   - `fetchMyMetrics()` → `GET /api/1/me/metrics/` — retorna `UserMetrics`.
+   - `fetchUserActivity(userId?, page?, pageSize?)` → `GET /api/1/activity/?owner=<id>` — retorna `APIResponse<Activity>`.
+
+**Critérios de Aceitação**
+
+- [x] `updateProfile()` envia os campos corretos e retorna user atualizado.
+- [x] `uploadAvatar()` funciona com multipart.
+- [x] `deleteAccount()` funciona e retorna confirmação.
+- [x] `fetchOrgInvitations()` retorna lista de convites.
+- [x] `fetchMyMetrics()` retorna métricas agregadas.
+- [x] Tipos TS espelham as respostas da API.
+
+---
+
+## TICKET-31: Admin — Community Resources CRUD (Conexões API) ✅✅
+
+**Descrição**
+Implementar a camada de conexão para community resources: listagem pessoal, criação, edição, eliminação.
+
+**Contexto Arquitetural**
+
+- Ref. original: `pages/admin/me/community-resources.vue`, `pages/admin/community-resources/new.vue`.
+- Backend endpoints necessários:
+  - `GET /api/1/datasets/community_resources/` — listar (filtros: owner, organization, dataset).
+  - `POST /api/1/datasets/community_resources/` — criar (body: title, description, url, filetype, format, dataset).
+  - `GET /api/1/datasets/community_resources/<id>/` — detalhes.
+  - `PUT /api/1/datasets/community_resources/<id>/` — atualizar.
+  - `DELETE /api/1/datasets/community_resources/<id>/` — eliminar.
+  - `POST /api/1/datasets/community_resources/<id>/upload/` — upload ficheiro (multipart).
+  - `GET /api/1/me/org_community_resources/` — community resources das organizações do utilizador.
+
+**O que deve ser feito**
+
+1. **Tipos TS** em `types/api.ts`:
+   - Criar `CommunityResource`: id, title, description, url, filetype, format, dataset (ref), organization, owner, created_at, last_modified.
+   - Criar `CommunityResourceCreatePayload`, `CommunityResourceUpdatePayload`.
+2. **Funções em `services/api.ts`**:
+   - `fetchMyCommunityResources(page?)` → `GET /api/1/datasets/community_resources/?owner=me`
+   - `fetchMyOrgCommunityResources(page?)` → `GET /api/1/me/org_community_resources/`
+   - `createCommunityResource(payload)` → `POST /api/1/datasets/community_resources/`
+   - `updateCommunityResource(id, payload)` → `PUT /api/1/datasets/community_resources/<id>/`
+   - `deleteCommunityResource(id)` → `DELETE /api/1/datasets/community_resources/<id>/`
+   - `uploadCommunityResourceFile(id, file)` → `POST /api/1/datasets/community_resources/<id>/upload/`
+
+**Critérios de Aceitação**
+
+- [x] Tipo `CommunityResource` definido.
+- [x] CRUD completo funciona.
+- [x] Upload de ficheiro funciona com multipart.
+- [x] Associação a dataset específico funciona.
+
+---
+
+## TICKET-32: Admin — Harvesters CRUD (Conexões API) ✅✅
+
+**Descrição**
+Implementar a camada de conexão para harvesters: listagem, criação, edição, eliminação, trigger de jobs, e consulta de job history.
+
+**Contexto Arquitetural**
+
+- Ref. original: `pages/admin/harvesters/new.vue`, `pages/admin/harvesters/[id].vue`.
+- Criação no original é wizard de 3 steps: (1) descrever, (2) preview, (3) finalizar.
+- Backend endpoints necessários:
+  - `GET /api/1/harvest/sources/` — listar harvest sources.
+  - `POST /api/1/harvest/sources/` — criar (body: name, description, url, backend, organization, schedule, config, filters, features, active, autoarchive).
+  - `GET /api/1/harvest/sources/<id>/` — detalhes.
+  - `PUT /api/1/harvest/sources/<id>/` — atualizar.
+  - `DELETE /api/1/harvest/sources/<id>/` — eliminar.
+  - `POST /api/1/harvest/sources/<id>/jobs/` — disparar harvest job.
+  - `GET /api/1/harvest/sources/<id>/jobs/` — listar jobs do source.
+  - `GET /api/1/harvest/sources/<id>/jobs/<job>/` — detalhes de um job.
+  - `GET /api/1/harvest/sources/<id>/validation/` — validar source.
+
+**O que deve ser feito**
+
+1. **Tipos TS** em `types/api.ts`:
+   - Criar `HarvestSource`: id, name, description, url, backend, organization, schedule, config, filters, features, active, autoarchive, created_at, last_modified, last_job.
+   - Criar `HarvestJob`: id, status (pending, started, done, failed), started, ended, errors, items.
+   - Criar `HarvestSourceCreatePayload`, `HarvestSourceUpdatePayload`.
+2. **Funções em `services/api.ts`**:
+   - `fetchHarvesters(page?)` → `GET /api/1/harvest/sources/`
+   - `fetchHarvester(id)` → `GET /api/1/harvest/sources/<id>/`
+   - `createHarvester(payload)` → `POST /api/1/harvest/sources/`
+   - `updateHarvester(id, payload)` → `PUT /api/1/harvest/sources/<id>/`
+   - `deleteHarvester(id)` → `DELETE /api/1/harvest/sources/<id>/`
+   - `triggerHarvest(id)` → `POST /api/1/harvest/sources/<id>/jobs/`
+   - `fetchHarvestJobs(sourceId, page?)` → `GET /api/1/harvest/sources/<id>/jobs/`
+   - `validateHarvestSource(id)` → `GET /api/1/harvest/sources/<id>/validation/`
+
+**Critérios de Aceitação**
+
+- [x] Tipos `HarvestSource` e `HarvestJob` definidos.
+- [x] CRUD de harvesters funciona.
+- [x] Trigger de job retorna o job criado.
+- [x] Listagem de jobs mostra status e erros.
+- [x] Validação de source funciona.
+
+---
+
+## TICKET-33: Admin — Topics CRUD (Conexões API v2) ✅✅
+
+**Descrição**
+Implementar a camada de conexão para topics (themes) usando a API v2: listagem, criação, edição, eliminação, e gestão de elementos (datasets/reuses associados).
+
+**Contexto Arquitetural**
+
+- Ref. original: `pages/admin/topics/[id].vue`.
+- Backend endpoints (API v2, base em `NEXT_PUBLIC_API_V2_BASE`):
+  - `GET /api/2/topics/` — listar topics.
+  - `POST /api/2/topics/` — criar topic (body: name, description, tags, featured, private).
+  - `GET /api/2/topics/<id>/` — detalhes.
+  - `PUT /api/2/topics/<id>/` — atualizar.
+  - `DELETE /api/2/topics/<id>/` — eliminar.
+  - `GET /api/2/topics/<id>/elements/` — listar elementos (datasets/reuses associados).
+  - `POST /api/2/topics/<id>/elements/` — adicionar elemento.
+  - `PUT /api/2/topics/<id>/elements/` — atualizar ordem de elementos.
+  - `DELETE /api/2/topics/<id>/elements/<eid>/` — remover elemento.
+
+**O que deve ser feito**
+
+1. **Tipos TS** em `types/api.ts`:
+   - Criar `Topic`: id, name, slug, description, tags[], featured, private, created_at, last_modified, datasets_count, reuses_count.
+   - Criar `TopicElement`: id, type (dataset|reuse), content (ref to Dataset|Reuse), position.
+   - Criar `TopicCreatePayload`, `TopicUpdatePayload`.
+2. **Funções em `services/api.ts`** (usando v2 base):
+   - `fetchTopics(page?)` → `GET /api/2/topics/`
+   - `fetchTopic(id)` → `GET /api/2/topics/<id>/`
+   - `createTopic(payload)` → `POST /api/2/topics/`
+   - `updateTopic(id, payload)` → `PUT /api/2/topics/<id>/`
+   - `deleteTopic(id)` → `DELETE /api/2/topics/<id>/`
+   - `fetchTopicElements(topicId)` → `GET /api/2/topics/<id>/elements/`
+   - `addTopicElement(topicId, payload)` → `POST /api/2/topics/<id>/elements/`
+   - `removeTopicElement(topicId, elementId)` → `DELETE /api/2/topics/<id>/elements/<eid>/`
+
+**Critérios de Aceitação**
+
+- [x] Funções usam `NEXT_PUBLIC_API_V2_BASE` como base URL.
+- [x] CRUD de topics funciona.
+- [x] Gestão de elementos (add/remove datasets e reuses) funciona.
+- [x] Tipos TS definidos e consistentes.
+
+---
+
+## TICKET-34: Admin — Posts CRUD (Conexões API) ✅✅
+
+**Descrição**
+Implementar a camada de conexão para posts/notícias: listagem, criação, edição, eliminação, e upload de imagens.
+
+**Contexto Arquitetural**
+
+- Ref. original: `pages/admin/posts/new.vue`, `pages/admin/posts/[id].vue`.
+- O original suporta dois tipos de conteúdo: markdown e "blocs" (page builder). Para a nossa versão, focar em markdown.
+- Backend endpoints necessários:
+  - `GET /api/1/posts/` — listar posts.
+  - `POST /api/1/posts/` — criar post (body: name, headline, content, body_type, kind, published, owner, tags, credit_to, credit_url).
+  - `GET /api/1/posts/<id>/` — detalhes.
+  - `PUT /api/1/posts/<id>/` — atualizar.
+  - `DELETE /api/1/posts/<id>/` — eliminar.
+  - `POST /api/1/posts/<id>/image/` — upload imagem (multipart/form-data).
+
+**O que deve ser feito**
+
+1. **Tipos TS** em `types/api.ts`:
+   - Criar `Post`: id, name, slug, headline, content, body_type, kind, published, owner, tags[], image, credit_to, credit_url, created_at, last_modified.
+   - Criar `PostCreatePayload`, `PostUpdatePayload`.
+2. **Funções em `services/api.ts`**:
+   - `fetchPosts(page?, pageSize?)` → `GET /api/1/posts/`
+   - `fetchPost(idOrSlug)` → `GET /api/1/posts/<id>/`
+   - `createPost(payload)` → `POST /api/1/posts/`
+   - `updatePost(id, payload)` → `PUT /api/1/posts/<id>/`
+   - `deletePost(id)` → `DELETE /api/1/posts/<id>/`
+   - `uploadPostImage(id, file)` → `POST /api/1/posts/<id>/image/` (multipart)
+
+**Critérios de Aceitação**
+
+- [x] Tipo `Post` definido com todos os campos.
+- [x] CRUD completo funciona.
+- [x] Upload de imagem funciona com multipart.
+- [x] Posts podem ser criados como draft (`published: false`) e publicados depois.
+
+---
+
+## TICKET-35: Admin — User Management (Conexões API — Sysadmin) ✅✅
+
+**Descrição**
+Implementar a camada de conexão para gestão de utilizadores por sysadmins: listagem, consulta de detalhes, edição de roles, e eliminação.
+
+**Contexto Arquitetural**
+
+- Ref. original: `pages/admin/users/[uid].vue`.
+- Backend endpoints necessários:
+  - `GET /api/1/users/` — listar todos os utilizadores (paginado, filtros: q, sort).
+  - `GET /api/1/users/<id>/` — detalhes de um utilizador.
+  - `PUT /api/1/users/<id>/` — atualizar (sysadmin pode alterar roles, active).
+  - `DELETE /api/1/users/<id>/` — eliminar utilizador.
+  - `GET /api/1/users/roles/` — lista de roles disponíveis.
+  - `GET /api/1/users/suggest/?q=` — autocomplete de utilizadores.
+
+**O que deve ser feito**
+
+1. **Tipos TS** em `types/api.ts`:
+   - Criar `UserAdmin` (extends User): roles[], active, datasets_count, reuses_count, last_login.
+   - Criar `UserRole` type.
+2. **Funções em `services/api.ts`**:
+   - `fetchUsers(page?, q?, sort?)` → `GET /api/1/users/`
+   - `fetchUser(id)` → `GET /api/1/users/<id>/`
+   - `updateUser(id, payload)` → `PUT /api/1/users/<id>/`
+   - `deleteUser(id)` → `DELETE /api/1/users/<id>/`
+   - `fetchUserRoles()` → `GET /api/1/users/roles/`
+   - `suggestUsers(query)` → `GET /api/1/users/suggest/?q=`
+
+**Critérios de Aceitação**
+
+- [x] Listagem de utilizadores paginada com pesquisa.
+- [x] Detalhes de utilizador incluem roles e content counts.
+- [x] Atualização de roles funciona.
+- [x] Eliminação funciona.
+- [x] Autocomplete funciona.
+
+---
+
+## TICKET-36: Admin — Site Management & Moderation (Conexões API — Sysadmin) ✅✅
+
+**Descrição**
+Implementar a camada de conexão para gestão global do site e moderação de conteúdo: stats do site, configuração, e gestão de reports.
+
+**Contexto Arquitetural**
+
+- Ref. original: `pages/admin/site/` (10 páginas), incluindo `moderation.vue`.
+- Tipos de conteúdo moderáveis: Datasets, Dataservices, Reuses, Organizations, Discussions.
+- Ações de moderação: Dismiss, Hide (toggle private), Delete.
+- Backend endpoints necessários:
+  - `GET /api/1/site/` — info e stats do site (nb_datasets, nb_organizations, nb_reuses, nb_users).
+  - `PATCH /api/1/site/` — atualizar configuração do site.
+  - `GET /api/1/reports/` — listar reports (filtros: status, page, page_size, sort).
+  - `GET /api/1/reports/<id>/` — detalhes do report.
+  - `PATCH /api/1/reports/<id>/` — dismiss report (body: status).
+  - `GET /api/1/reports/reasons/` — razões de report disponíveis.
+  - CSV exports:
+    - `GET /api/1/site/datasets.csv`
+    - `GET /api/1/site/organizations.csv`
+    - `GET /api/1/site/reuses.csv`
+    - `GET /api/1/site/tags.csv`
+    - `GET /api/1/site/harvest-sources.csv`
+
+**O que deve ser feito**
+
+1. **Tipos TS** em `types/api.ts`:
+   - Criar `SiteInfo`: id, title, metrics (nb_datasets, nb_organizations, nb_reuses, nb_users).
+   - Criar `Report`: id, subject (type + id + ref), reporter, reason, message, status, created_at.
+   - Criar `ReportReason` type.
+2. **Funções em `services/api.ts`**:
+   - `fetchSiteInfo()` → `GET /api/1/site/`
+   - `updateSiteConfig(payload)` → `PATCH /api/1/site/`
+   - `fetchReports(page?, status?, sort?)` → `GET /api/1/reports/`
+   - `dismissReport(id)` → `PATCH /api/1/reports/<id>/`
+   - `fetchReportReasons()` → `GET /api/1/reports/reasons/`
+   - `getSiteExportUrl(type)` → retorna URL para download (`/api/1/site/<type>.csv`)
+3. **Fluxo de moderação**:
+   - GET reports filtrados por status → mostrar lista.
+   - Dismiss: PATCH report com status "handled".
+   - Hide: PUT no endpoint da entidade com `private: true` (usa funções CRUD existentes dos tickets anteriores).
+   - Delete: DELETE no endpoint da entidade (usa funções CRUD existentes).
+
+**Critérios de Aceitação**
+
+- [x] `fetchSiteInfo()` retorna stats do site.
+- [x] `fetchReports()` retorna lista filtrada por status.
+- [x] `dismissReport()` altera status do report.
+- [x] `fetchReportReasons()` retorna lista de razões.
+- [x] URLs de export CSV são geradas corretamente.
+- [x] Tipos TS definidos para SiteInfo, Report, ReportReason.
+
+---
+
 ## TICKET-37: Authentication — Login via Autenticação.gov / SAML (Conexão API) ✅✅
 
 **Descrição**
@@ -1183,6 +1729,8 @@ Corrigir a página de detalhe de dataset que contém múltiplos blocos de conte�
 - [ ] Botão favoritos persiste estado via API.
 - [ ] "Metadados: 35%" na listagem corrigido ou removido.
 
+---
+
 ## TICKET-41: Legacy Account Migration to CMD/eIDAS ✅✅
 
 **Descrição**
@@ -1276,564 +1824,7 @@ Migrar utilizadores legados (email/password) para CMD (Chave Móvel Digital) ou 
 
 ---
 
-# BACKOFFICE / ADMIN — Tickets
-
-> Based on the original project [datagouv/cdata](https://github.com/datagouv/cdata/tree/main/pages/admin) (Vue.js/Nuxt), adapted for our React/Next.js stack.
-> Focus: **lógica de conexão** — tipos TypeScript, funções fetch/mutate em `services/api.ts`, endpoints backend, e fluxo de dados. O layout/UI não faz parte destes tickets.
-
----
-
-## TICKET-26: Admin — Datasets CRUD (Conexões API) ✅
-
-**Descrição**
-Implementar toda a camada de conexão (tipos TS + funções API) necessária para as páginas admin de datasets: listagem pessoal, criação, edição, eliminação, e gestão de resources.
-
-**Contexto Arquitetural**
-
-- Ref. original: `pages/admin/me/datasets.vue`, `pages/admin/datasets/new.vue`, `pages/admin/datasets/[id].vue`, `pages/admin/datasets/structured.vue`.
-- O fluxo de criação no original é um wizard de 4 steps: (1) tipo de publicação, (2) metadados, (3) upload de resources, (4) publicação (toggle private→public).
-- O fluxo de edição tem 4 tabs: Metadata, Resources, Discussions, Activities.
-- Backend endpoints necessários:
-  - `GET /api/1/me/datasets/` — datasets do utilizador autenticado.
-  - `GET /api/1/me/org_datasets/` — datasets das organizações do utilizador.
-  - `POST /api/1/datasets/` — criar dataset (body: title, description, tags, license, frequency, temporal_coverage, spatial, organization, private).
-  - `PUT /api/1/datasets/<id>/` — atualizar dataset.
-  - `DELETE /api/1/datasets/<id>/` — eliminar dataset.
-  - `GET /api/2/datasets/<id>/` — detalhes do dataset (v2, inclui extras e quality score).
-  - `POST /api/1/datasets/<id>/resources/` — criar resource (body: title, type, url, filetype, format, description).
-  - `POST /api/1/datasets/<id>/upload/` — upload de ficheiro (multipart/form-data).
-  - `PUT /api/1/datasets/<id>/resources/<rid>/` — atualizar resource.
-  - `DELETE /api/1/datasets/<id>/resources/<rid>/` — eliminar resource.
-  - `PUT /api/1/datasets/<id>/resources/` — reordenar resources (body: array de resource IDs).
-  - `POST /api/1/datasets/<id>/featured/` — marcar como destaque (admin).
-  - `DELETE /api/1/datasets/<id>/featured/` — remover destaque (admin).
-  - `GET /api/1/activity/?related_to=<id>&sort=-created_at` — log de atividade.
-  - Endpoints auxiliares para dropdowns:
-    - `GET /api/1/datasets/licenses/` — lista de licenças.
-    - `GET /api/1/datasets/frequencies/` — frequências de atualização.
-    - `GET /api/1/datasets/schemas/` — schemas disponíveis.
-    - `GET /api/1/datasets/resource_types/` — tipos de resource.
-    - `GET /api/1/datasets/extensions/` — extensões de ficheiro permitidas.
-
-**O que foi feito**
-
-1. **Tipos TS** em `types/api.ts`:
-   - `Dataset` estendido com: `acronym`, `private`, `featured`, `archived`, `frequency`, `frequency_date`, `temporal_coverage`, `spatial`, `quality`, `badges[]`, `owner`, `uri`, `permissions`, `description_short`, `schema`, `harvest`, `extras`, `community_resources`, `deleted`, `last_update`.
-   - `Resource` estendido com: `description`, `filetype`, `mime`, `checksum`, `last_modified`, `schema`, `extras`, `preview_url`, `latest`.
-   - Payloads criados: `DatasetCreatePayload`, `DatasetUpdatePayload`, `ResourceCreatePayload`, `ResourceUpdatePayload`.
-   - Tipos auxiliares: `SchemaRef`, `TemporalCoverage`, `SpatialCoverage`, `Checksum`, `DatasetPermissions`, `ResourceType`, `Activity`.
-   - `License`, `Frequency`, `Badge`, `DatasetBadges` — já existiam.
-2. **Funções em `services/api.ts`**:
-   - Leitura: `fetchMyDatasets()` (flat array → APIResponse wrapper, filtra datasets pessoais), `fetchMyOrgDatasets()`, `fetchLicenses()`, `fetchFrequencies()`, `fetchSchemas()`, `fetchDatasetBadges()`, `fetchResourceTypes()`, `fetchActivity()`.
-   - Mutações: `createDataset()`, `updateDataset()`, `deleteDataset()`, `uploadResource()` (multipart), `createResource()`, `updateResource()`, `deleteResource()`, `reorderResources()`, `toggleDatasetFeatured()`.
-   - Erros de validação do backend retornados como objetos estruturados.
-3. **Wizard de criação** (`DatasetsAdminClient.tsx`) integrado com API:
-   - Step 2: POST `createDataset()` com `private: true` + metadados → dataset pessoal (owner = current user, sem organization).
-   - Step 3: Upload ficheiros via `uploadResource()` (multipart/form-data).
-   - Step 4: "Publicar" → `updateDataset(private: false)`; "Salvar rascunho" → redirige para listagem.
-   - Dropdowns de licenças e frequências carregados da API.
-   - Loading states e erros de validação exibidos.
-4. **Página de edição** (`app/pages/admin/me/datasets/edit/page.tsx` + `DatasetsEditClient.tsx`):
-   - 4 tabs via Agora `Tabs` component: Metadados, Ficheiros, Discussões, Atividades.
-   - Tab Metadados: edição de título, acrónimo, descrição, licença, frequência, cobertura temporal + botão eliminar.
-   - Tab Ficheiros: listagem de resources com upload e delete.
-   - Tab Atividades: lazy-load de `fetchActivity()`.
-   - Erros de validação do backend exibidos.
-5. **Listagem admin** (`DatasetsClient.tsx` + `SystemDatasetsClient.tsx`):
-   - Mock data removido, dados reais da API.
-   - Pesquisa client-side por título, acrónimo e slug.
-   - Filtro por estado: Público, Rascunho, Arquivo, Excluído.
-   - Ordenação controlada por: título (string), criado em (date), última modificação (date), ficheiros (numeric).
-   - Paginação client-side com `onPageChange` / `onPageSizeChange`.
-   - `DatasetsClient` filtra apenas datasets pessoais (`owner` presente, `organization` ausente).
-   - `SystemDatasetsClient` mostra todos os datasets do sistema.
-
-**Critérios de Aceitação**
-
-- [x] `fetchMyDatasets()` retorna a lista paginada do utilizador.
-- [x] Funções auxiliares (licenses, frequencies, schemas) retornam dados corretos.
-- [x] Todos os tipos TS estão definidos e espelham os campos do backend (Dataset extensions, payloads, Schema, Activity).
-- [x] Todas as funções fetch/mutate estão em `services/api.ts` e funcionam.
-- [x] `createDataset()` envia o payload correto e retorna o dataset criado.
-- [x] Upload de ficheiros funciona com `multipart/form-data`.
-- [x] `updateDataset()` e `deleteDataset()` funcionam.
-- [x] Resource CRUD (create, update, delete, reorder) funciona.
-- [x] Listagem admin usa dados reais da API (mock data removido).
-- [x] Wizard de criação integrado com API (POST dataset → upload resources → publicar).
-- [x] Página de edição de dataset implementada e funcional.
-- [x] Erros de validação do backend são retornados em formato utilizável pelo frontend.
-
----
-
-## TICKET-27: Admin — Reuses CRUD (Conexões API) ✅
-
-**Descrição**
-Implementar a camada de conexão para as páginas admin de reuses: listagem pessoal, criação, edição, eliminação, e gestão de datasets/dataservices associados.
-
-**Contexto Arquitetural**
-
-- Ref. original: `pages/admin/me/reuses.vue`, `pages/admin/reuses/new.vue`, `pages/admin/reuses/[id].vue`.
-- Criação no original é um wizard de 3 steps: (1) descrever reuse, (2) associar datasets/dataservices, (3) publicar.
-- Backend endpoints necessários:
-  - `GET /api/1/me/reuses/` — reuses do utilizador.
-  - `POST /api/1/reuses/` — criar reuse (body: title, description, url, type, topic, tags, organization, private).
-  - `PUT /api/1/reuses/<id>/` — atualizar reuse.
-  - `DELETE /api/1/reuses/<id>/` — eliminar reuse.
-  - `POST /api/1/reuses/<id>/image/` — upload de imagem (multipart/form-data).
-  - `POST /api/1/reuses/<id>/datasets/` — associar dataset.
-  - `POST /api/1/reuses/<id>/dataservices/` — associar dataservice.
-  - `GET /api/1/reuses/types/` — tipos de reuse disponíveis.
-  - `GET /api/1/reuses/topics/` — tópicos de reuse.
-  - `POST /api/1/reuses/<id>/featured/` — marcar como destaque.
-  - `DELETE /api/1/reuses/<id>/featured/` — remover destaque.
-
-**O que deve ser feito**
-
-1. **Tipos TS** em `types/api.ts`:
-   - Estender `Reuse` com: `private`, `featured`, `archived`, `topic`, `owner`, `datasets[]`, `dataservices[]`.
-   - Criar `ReuseCreatePayload`, `ReuseUpdatePayload`.
-   - Criar `ReuseType`, `ReuseTopic` types.
-2. **Funções em `services/api.ts`**:
-   - `fetchMyReuses(page?, pageSize?)` → `GET /api/1/me/reuses/`
-   - `createReuse(payload)` → `POST /api/1/reuses/`
-   - `updateReuse(id, payload)` → `PUT /api/1/reuses/<id>/`
-   - `deleteReuse(id)` → `DELETE /api/1/reuses/<id>/`
-   - `uploadReuseImage(id, file)` → `POST /api/1/reuses/<id>/image/` (multipart)
-   - `linkDatasetToReuse(reuseId, datasetId)` → `POST /api/1/reuses/<id>/datasets/`
-   - `linkDataserviceToReuse(reuseId, dataserviceId)` → `POST /api/1/reuses/<id>/dataservices/`
-   - `fetchReuseTypes()` → `GET /api/1/reuses/types/`
-   - `fetchReuseTopics()` → `GET /api/1/reuses/topics/`
-3. **Fluxo de criação**:
-   - Step 1: POST reuse com `private: true` → backend retorna reuse com `id`.
-   - Step 1.5: POST image (se fornecida).
-   - Step 2: POST datasets e dataservices associados.
-   - Step 3: PUT reuse com `private: false` para publicar.
-
-**Critérios de Aceitação**
-
-- [x] Tipos TS espelham os campos do backend.
-- [x] `fetchMyReuses()` retorna lista paginada.
-- [x] `createReuse()` + `uploadReuseImage()` + `linkDatasetToReuse()` funcionam em sequência.
-- [x] `updateReuse()` e `deleteReuse()` funcionam.
-- [x] Tipos e tópicos de reuse são carregados do backend.
-- [x] Erros de validação são retornados em formato utilizável.
-
----
-
-## TICKET-28: Admin — Dataservices CRUD (Conexões API) ✅
-
-**Descrição**
-Implementar a camada de conexão para dataservices: listagem, criação (wiring do form existente `ApiRegistrationClient.tsx`), edição e eliminação.
-
-**Contexto Arquitetural**
-
-- Ref. original: `pages/admin/me/dataservices.vue`, `pages/admin/dataservices/new.vue`, `pages/admin/dataservices/[id].vue`.
-- O frontend já tem `ApiRegistrationClient.tsx` com UI completa mas sem submissão ao backend.
-- Backend endpoints necessários:
-  - `GET /api/1/dataservices/` — listar (filtros: owner, organization).
-  - `POST /api/1/dataservices/` — criar (body: title, description, base_api_url, endpoint_description_url, authorization_request_url, rate_limiting, availability, organization, access_type).
-  - `GET /api/1/dataservices/<id>/` — detalhes.
-  - `PUT /api/1/dataservices/<id>/` — atualizar.
-  - `DELETE /api/1/dataservices/<id>/` — eliminar.
-  - `GET /api/1/dataservices/<id>/followers/` — seguidores.
-  - `POST /api/1/dataservices/<id>/followers/` — seguir.
-  - `DELETE /api/1/dataservices/<id>/followers/` — deixar de seguir.
-
-**O que deve ser feito**
-
-1. **Tipos TS** em `types/api.ts`:
-   - Criar `Dataservice`: id, title, description, base_api_url, endpoint_description_url, authorization_request_url, rate_limiting, availability, access_type, organization, created_at, last_modified, metrics, archived.
-   - Criar `DataserviceCreatePayload`, `DataserviceUpdatePayload`.
-2. **Funções em `services/api.ts`**:
-   - `fetchMyDataservices(page?, pageSize?)` → `GET /api/1/dataservices/?owner=me`
-   - `fetchDataservice(id)` → `GET /api/1/dataservices/<id>/`
-   - `createDataservice(payload)` → `POST /api/1/dataservices/`
-   - `updateDataservice(id, payload)` → `PUT /api/1/dataservices/<id>/`
-   - `deleteDataservice(id)` → `DELETE /api/1/dataservices/<id>/`
-3. **Wiring do form existente**:
-   - Mapear os campos do `ApiRegistrationClient.tsx` para `DataserviceCreatePayload`.
-   - No submit, chamar `createDataservice()`.
-
-**Critérios de Aceitação**
-
-- [x] Tipo `Dataservice` definido em `types/api.ts`.
-- [x] Todas as funções CRUD estão em `services/api.ts`.
-- [x] O form existente (`ApiRegistrationClient.tsx`) submete ao backend.
-- [x] Erros de validação são retornados e utilizáveis.
-
----
-
-## TICKET-29: Admin — Organizations CRUD (Conexões API) ✅
-
-**Descrição**
-Implementar a camada de conexão para organizações no admin: criação, edição, eliminação, logo upload, e gestão de membros.
-
-> **Nota:** As páginas de conteúdo da organização (`org/dataservices`, `org/reuses`, `org/harvesters`, `org/community-resources`, `org/profile`, `org/statistics`) estão cobertas pelo **TICKET-41**.
-
-**Contexto Arquitetural**
-
-- Ref. original: `pages/admin/organizations/new.vue`, `pages/admin/organizations/[oid].vue`.
-- Criação no original é wizard de 3 steps: (1) criar ou juntar-se, (2) detalhes, (3) finalizar.
-- Backend endpoints necessários:
-  - `POST /api/1/organizations/` — criar (body: name, acronym, description, url, business_number_id).
-  - `PUT /api/1/organizations/<org>/` — atualizar.
-  - `DELETE /api/1/organizations/<org>/` — eliminar.
-  - `POST /api/1/organizations/<org>/logo/` — upload logo (multipart/form-data).
-  - `PUT /api/1/organizations/<org>/logo/` — atualizar crop do logo.
-  - `GET /api/1/organizations/<org>/membership/` — pedidos de adesão pendentes.
-  - `POST /api/1/organizations/<org>/membership/` — pedir adesão.
-  - `POST /api/1/organizations/<org>/membership/<id>/accept/` — aceitar.
-  - `POST /api/1/organizations/<org>/membership/<id>/refuse/` — recusar.
-  - `POST /api/1/organizations/<org>/member/<user>/` — adicionar membro.
-  - `PUT /api/1/organizations/<org>/member/<user>/` — atualizar role.
-  - `DELETE /api/1/organizations/<org>/member/<user>/` — remover membro.
-  - `GET /api/1/organizations/<org>/datasets/` — datasets da organização.
-  - `GET /api/1/organizations/<org>/reuses/` — reuses da organização.
-  - `GET /api/1/organizations/<org>/contacts/` — contact points.
-  - `GET /api/1/organizations/roles/` — roles disponíveis.
-  - `GET /api/1/organizations/suggest/?q=` — autocomplete de organizações.
-
-**O que deve ser feito**
-
-1. **Tipos TS** em `types/api.ts`:
-   - Estender `Organization` com: `description`, `url`, `business_number_id`, `members[]`, `badges[]`, `metrics`, `created_at`.
-   - Criar `OrganizationCreatePayload`, `OrganizationUpdatePayload`.
-   - Criar `Member` (user, role), `MembershipRequest` (id, user, status, created).
-   - Criar `OrgRole` type.
-2. **Funções em `services/api.ts`**:
-   - `createOrganization(payload)` → `POST /api/1/organizations/`
-   - `updateOrganization(org, payload)` → `PUT /api/1/organizations/<org>/`
-   - `deleteOrganization(org)` → `DELETE /api/1/organizations/<org>/`
-   - `uploadOrgLogo(org, file)` → `POST /api/1/organizations/<org>/logo/`
-   - `fetchMembershipRequests(org)` → `GET /api/1/organizations/<org>/membership/`
-   - `requestMembership(org)` → `POST /api/1/organizations/<org>/membership/`
-   - `acceptMembership(org, requestId)` → `POST /api/1/organizations/<org>/membership/<id>/accept/`
-   - `refuseMembership(org, requestId)` → `POST /api/1/organizations/<org>/membership/<id>/refuse/`
-   - `addMember(org, userId, role)` → `POST /api/1/organizations/<org>/member/<user>/`
-   - `updateMemberRole(org, userId, role)` → `PUT /api/1/organizations/<org>/member/<user>/`
-   - `removeMember(org, userId)` → `DELETE /api/1/organizations/<org>/member/<user>/`
-   - `fetchOrgDatasets(org, page?)` → `GET /api/1/organizations/<org>/datasets/`
-   - `fetchOrgReuses(org, page?)` → `GET /api/1/organizations/<org>/reuses/`
-   - `fetchOrgRoles()` → `GET /api/1/organizations/roles/`
-   - `suggestOrganizations(query)` → `GET /api/1/organizations/suggest/?q=`
-
-**Critérios de Aceitação**
-
-- [x] Tipos completos para Organization, Member, MembershipRequest.
-- [x] CRUD de organização funciona (create, update, delete).
-- [x] Upload de logo funciona com multipart.
-- [x] Gestão de membros: add, update role, remove, accept/refuse request.
-- [x] Autocomplete de organizações funciona.
-
----
-
-## TICKET-30: Admin — User Profile & Metrics (Conexões API) ✅
-
-**Descrição**
-Implementar a camada de conexão para o perfil do utilizador autenticado: edição de perfil, upload de avatar, invitations de organizações, eliminação de conta, e métricas pessoais.
-
-> **Nota:** A extensão do `AuthContext` com `roles[]` e `organizations[]` está coberta pelo **TICKET-43** (Permission Guards).
-
-**Contexto Arquitetural**
-
-- Ref. original: `pages/admin/me/profile.vue`, `pages/admin/me/metrics.vue`.
-- Backend endpoints necessários:
-  - `GET /api/1/me/` — perfil atual (já existe `fetchCurrentUser` do TICKET-03).
-  - `PUT /api/1/me/` — atualizar perfil (body: first_name, last_name, about, website).
-  - `POST /api/1/me/avatar/` — upload avatar (multipart/form-data).
-  - `DELETE /api/1/me/` — eliminar conta.
-  - `GET /api/1/me/org_invitations/` — convites de organizações pendentes.
-  - `GET /api/1/me/metrics/` — métricas agregadas do utilizador.
-  - `GET /api/1/activity/?owner=<userId>` — atividade do utilizador.
-
-**O que foi feito**
-
-1. **Tipos TS** em `types/api.ts`:
-   - `UserPublic` estendido com `apikey: string | null`.
-   - `UserMetrics` estendido com `downloads: number`.
-   - Criado `UserUpdatePayload`: first_name, last_name, about, website (todos opcionais).
-   - Criado `OrgInvitation`: id, organization, status (pending|accepted|refused), created.
-2. **Funções em `services/api.ts`**:
-   - `updateProfile(payload)` → `PUT /api/1/me/` — envia JSON, retorna `UserPublic`.
-   - `uploadAvatar(file)` → `POST /api/1/me/avatar` — multipart/form-data, retorna `UserPublic`.
-   - `deleteAccount()` → `DELETE /api/1/me/` — sem retorno (void).
-   - `fetchOrgInvitations(page?, pageSize?)` → `GET /api/1/me/org_invitations/` — retorna `APIResponse<OrgInvitation>`.
-   - `fetchMyMetrics()` → `GET /api/1/me/metrics/` — retorna `UserMetrics`.
-   - `fetchUserActivity(userId?, page?, pageSize?)` → `GET /api/1/activity/?owner=<id>` — retorna `APIResponse<Activity>`.
-
-**Critérios de Aceitação**
-
-- [x] `updateProfile()` envia os campos corretos e retorna user atualizado.
-- [x] `uploadAvatar()` funciona com multipart.
-- [x] `deleteAccount()` funciona e retorna confirmação.
-- [x] `fetchOrgInvitations()` retorna lista de convites.
-- [x] `fetchMyMetrics()` retorna métricas agregadas.
-- [x] Tipos TS espelham as respostas da API.
-
----
-
-## TICKET-31: Admin — Community Resources CRUD (Conexões API) ✅
-
-**Descrição**
-Implementar a camada de conexão para community resources: listagem pessoal, criação, edição, eliminação.
-
-**Contexto Arquitetural**
-
-- Ref. original: `pages/admin/me/community-resources.vue`, `pages/admin/community-resources/new.vue`.
-- Backend endpoints necessários:
-  - `GET /api/1/datasets/community_resources/` — listar (filtros: owner, organization, dataset).
-  - `POST /api/1/datasets/community_resources/` — criar (body: title, description, url, filetype, format, dataset).
-  - `GET /api/1/datasets/community_resources/<id>/` — detalhes.
-  - `PUT /api/1/datasets/community_resources/<id>/` — atualizar.
-  - `DELETE /api/1/datasets/community_resources/<id>/` — eliminar.
-  - `POST /api/1/datasets/community_resources/<id>/upload/` — upload ficheiro (multipart).
-  - `GET /api/1/me/org_community_resources/` — community resources das organizações do utilizador.
-
-**O que deve ser feito**
-
-1. **Tipos TS** em `types/api.ts`:
-   - Criar `CommunityResource`: id, title, description, url, filetype, format, dataset (ref), organization, owner, created_at, last_modified.
-   - Criar `CommunityResourceCreatePayload`, `CommunityResourceUpdatePayload`.
-2. **Funções em `services/api.ts`**:
-   - `fetchMyCommunityResources(page?)` → `GET /api/1/datasets/community_resources/?owner=me`
-   - `fetchMyOrgCommunityResources(page?)` → `GET /api/1/me/org_community_resources/`
-   - `createCommunityResource(payload)` → `POST /api/1/datasets/community_resources/`
-   - `updateCommunityResource(id, payload)` → `PUT /api/1/datasets/community_resources/<id>/`
-   - `deleteCommunityResource(id)` → `DELETE /api/1/datasets/community_resources/<id>/`
-   - `uploadCommunityResourceFile(id, file)` → `POST /api/1/datasets/community_resources/<id>/upload/`
-
-**Critérios de Aceitação**
-
-- [x] Tipo `CommunityResource` definido.
-- [x] CRUD completo funciona.
-- [x] Upload de ficheiro funciona com multipart.
-- [x] Associação a dataset específico funciona.
-
----
-
-## TICKET-32: Admin — Harvesters CRUD (Conexões API) ✅
-
-**Descrição**
-Implementar a camada de conexão para harvesters: listagem, criação, edição, eliminação, trigger de jobs, e consulta de job history.
-
-**Contexto Arquitetural**
-
-- Ref. original: `pages/admin/harvesters/new.vue`, `pages/admin/harvesters/[id].vue`.
-- Criação no original é wizard de 3 steps: (1) descrever, (2) preview, (3) finalizar.
-- Backend endpoints necessários:
-  - `GET /api/1/harvest/sources/` — listar harvest sources.
-  - `POST /api/1/harvest/sources/` — criar (body: name, description, url, backend, organization, schedule, config, filters, features, active, autoarchive).
-  - `GET /api/1/harvest/sources/<id>/` — detalhes.
-  - `PUT /api/1/harvest/sources/<id>/` — atualizar.
-  - `DELETE /api/1/harvest/sources/<id>/` — eliminar.
-  - `POST /api/1/harvest/sources/<id>/jobs/` — disparar harvest job.
-  - `GET /api/1/harvest/sources/<id>/jobs/` — listar jobs do source.
-  - `GET /api/1/harvest/sources/<id>/jobs/<job>/` — detalhes de um job.
-  - `GET /api/1/harvest/sources/<id>/validation/` — validar source.
-
-**O que deve ser feito**
-
-1. **Tipos TS** em `types/api.ts`:
-   - Criar `HarvestSource`: id, name, description, url, backend, organization, schedule, config, filters, features, active, autoarchive, created_at, last_modified, last_job.
-   - Criar `HarvestJob`: id, status (pending, started, done, failed), started, ended, errors, items.
-   - Criar `HarvestSourceCreatePayload`, `HarvestSourceUpdatePayload`.
-2. **Funções em `services/api.ts`**:
-   - `fetchHarvesters(page?)` → `GET /api/1/harvest/sources/`
-   - `fetchHarvester(id)` → `GET /api/1/harvest/sources/<id>/`
-   - `createHarvester(payload)` → `POST /api/1/harvest/sources/`
-   - `updateHarvester(id, payload)` → `PUT /api/1/harvest/sources/<id>/`
-   - `deleteHarvester(id)` → `DELETE /api/1/harvest/sources/<id>/`
-   - `triggerHarvest(id)` → `POST /api/1/harvest/sources/<id>/jobs/`
-   - `fetchHarvestJobs(sourceId, page?)` → `GET /api/1/harvest/sources/<id>/jobs/`
-   - `validateHarvestSource(id)` → `GET /api/1/harvest/sources/<id>/validation/`
-
-**Critérios de Aceitação**
-
-- [x] Tipos `HarvestSource` e `HarvestJob` definidos.
-- [x] CRUD de harvesters funciona.
-- [x] Trigger de job retorna o job criado.
-- [x] Listagem de jobs mostra status e erros.
-- [x] Validação de source funciona.
-
----
-
-## TICKET-33: Admin — Topics CRUD (Conexões API v2) ✅
-
-**Descrição**
-Implementar a camada de conexão para topics (themes) usando a API v2: listagem, criação, edição, eliminação, e gestão de elementos (datasets/reuses associados).
-
-**Contexto Arquitetural**
-
-- Ref. original: `pages/admin/topics/[id].vue`.
-- Backend endpoints (API v2, base em `NEXT_PUBLIC_API_V2_BASE`):
-  - `GET /api/2/topics/` — listar topics.
-  - `POST /api/2/topics/` — criar topic (body: name, description, tags, featured, private).
-  - `GET /api/2/topics/<id>/` — detalhes.
-  - `PUT /api/2/topics/<id>/` — atualizar.
-  - `DELETE /api/2/topics/<id>/` — eliminar.
-  - `GET /api/2/topics/<id>/elements/` — listar elementos (datasets/reuses associados).
-  - `POST /api/2/topics/<id>/elements/` — adicionar elemento.
-  - `PUT /api/2/topics/<id>/elements/` — atualizar ordem de elementos.
-  - `DELETE /api/2/topics/<id>/elements/<eid>/` — remover elemento.
-
-**O que deve ser feito**
-
-1. **Tipos TS** em `types/api.ts`:
-   - Criar `Topic`: id, name, slug, description, tags[], featured, private, created_at, last_modified, datasets_count, reuses_count.
-   - Criar `TopicElement`: id, type (dataset|reuse), content (ref to Dataset|Reuse), position.
-   - Criar `TopicCreatePayload`, `TopicUpdatePayload`.
-2. **Funções em `services/api.ts`** (usando v2 base):
-   - `fetchTopics(page?)` → `GET /api/2/topics/`
-   - `fetchTopic(id)` → `GET /api/2/topics/<id>/`
-   - `createTopic(payload)` → `POST /api/2/topics/`
-   - `updateTopic(id, payload)` → `PUT /api/2/topics/<id>/`
-   - `deleteTopic(id)` → `DELETE /api/2/topics/<id>/`
-   - `fetchTopicElements(topicId)` → `GET /api/2/topics/<id>/elements/`
-   - `addTopicElement(topicId, payload)` → `POST /api/2/topics/<id>/elements/`
-   - `removeTopicElement(topicId, elementId)` → `DELETE /api/2/topics/<id>/elements/<eid>/`
-
-**Critérios de Aceitação**
-
-- [x] Funções usam `NEXT_PUBLIC_API_V2_BASE` como base URL.
-- [x] CRUD de topics funciona.
-- [x] Gestão de elementos (add/remove datasets e reuses) funciona.
-- [x] Tipos TS definidos e consistentes.
-
----
-
-## TICKET-34: Admin — Posts CRUD (Conexões API) ✅
-
-**Descrição**
-Implementar a camada de conexão para posts/notícias: listagem, criação, edição, eliminação, e upload de imagens.
-
-**Contexto Arquitetural**
-
-- Ref. original: `pages/admin/posts/new.vue`, `pages/admin/posts/[id].vue`.
-- O original suporta dois tipos de conteúdo: markdown e "blocs" (page builder). Para a nossa versão, focar em markdown.
-- Backend endpoints necessários:
-  - `GET /api/1/posts/` — listar posts.
-  - `POST /api/1/posts/` — criar post (body: name, headline, content, body_type, kind, published, owner, tags, credit_to, credit_url).
-  - `GET /api/1/posts/<id>/` — detalhes.
-  - `PUT /api/1/posts/<id>/` — atualizar.
-  - `DELETE /api/1/posts/<id>/` — eliminar.
-  - `POST /api/1/posts/<id>/image/` — upload imagem (multipart/form-data).
-
-**O que deve ser feito**
-
-1. **Tipos TS** em `types/api.ts`:
-   - Criar `Post`: id, name, slug, headline, content, body_type, kind, published, owner, tags[], image, credit_to, credit_url, created_at, last_modified.
-   - Criar `PostCreatePayload`, `PostUpdatePayload`.
-2. **Funções em `services/api.ts`**:
-   - `fetchPosts(page?, pageSize?)` → `GET /api/1/posts/`
-   - `fetchPost(idOrSlug)` → `GET /api/1/posts/<id>/`
-   - `createPost(payload)` → `POST /api/1/posts/`
-   - `updatePost(id, payload)` → `PUT /api/1/posts/<id>/`
-   - `deletePost(id)` → `DELETE /api/1/posts/<id>/`
-   - `uploadPostImage(id, file)` → `POST /api/1/posts/<id>/image/` (multipart)
-
-**Critérios de Aceitação**
-
-- [x] Tipo `Post` definido com todos os campos.
-- [x] CRUD completo funciona.
-- [x] Upload de imagem funciona com multipart.
-- [x] Posts podem ser criados como draft (`published: false`) e publicados depois.
-
----
-
-## TICKET-35: Admin — User Management (Conexões API — Sysadmin) ✅
-
-**Descrição**
-Implementar a camada de conexão para gestão de utilizadores por sysadmins: listagem, consulta de detalhes, edição de roles, e eliminação.
-
-**Contexto Arquitetural**
-
-- Ref. original: `pages/admin/users/[uid].vue`.
-- Backend endpoints necessários:
-  - `GET /api/1/users/` — listar todos os utilizadores (paginado, filtros: q, sort).
-  - `GET /api/1/users/<id>/` — detalhes de um utilizador.
-  - `PUT /api/1/users/<id>/` — atualizar (sysadmin pode alterar roles, active).
-  - `DELETE /api/1/users/<id>/` — eliminar utilizador.
-  - `GET /api/1/users/roles/` — lista de roles disponíveis.
-  - `GET /api/1/users/suggest/?q=` — autocomplete de utilizadores.
-
-**O que deve ser feito**
-
-1. **Tipos TS** em `types/api.ts`:
-   - Criar `UserAdmin` (extends User): roles[], active, datasets_count, reuses_count, last_login.
-   - Criar `UserRole` type.
-2. **Funções em `services/api.ts`**:
-   - `fetchUsers(page?, q?, sort?)` → `GET /api/1/users/`
-   - `fetchUser(id)` → `GET /api/1/users/<id>/`
-   - `updateUser(id, payload)` → `PUT /api/1/users/<id>/`
-   - `deleteUser(id)` → `DELETE /api/1/users/<id>/`
-   - `fetchUserRoles()` → `GET /api/1/users/roles/`
-   - `suggestUsers(query)` → `GET /api/1/users/suggest/?q=`
-
-**Critérios de Aceitação**
-
-- [x] Listagem de utilizadores paginada com pesquisa.
-- [x] Detalhes de utilizador incluem roles e content counts.
-- [x] Atualização de roles funciona.
-- [x] Eliminação funciona.
-- [x] Autocomplete funciona.
-
----
-
-## TICKET-36: Admin — Site Management & Moderation (Conexões API — Sysadmin) ✅
-
-**Descrição**
-Implementar a camada de conexão para gestão global do site e moderação de conteúdo: stats do site, configuração, e gestão de reports.
-
-**Contexto Arquitetural**
-
-- Ref. original: `pages/admin/site/` (10 páginas), incluindo `moderation.vue`.
-- Tipos de conteúdo moderáveis: Datasets, Dataservices, Reuses, Organizations, Discussions.
-- Ações de moderação: Dismiss, Hide (toggle private), Delete.
-- Backend endpoints necessários:
-  - `GET /api/1/site/` — info e stats do site (nb_datasets, nb_organizations, nb_reuses, nb_users).
-  - `PATCH /api/1/site/` — atualizar configuração do site.
-  - `GET /api/1/reports/` — listar reports (filtros: status, page, page_size, sort).
-  - `GET /api/1/reports/<id>/` — detalhes do report.
-  - `PATCH /api/1/reports/<id>/` — dismiss report (body: status).
-  - `GET /api/1/reports/reasons/` — razões de report disponíveis.
-  - CSV exports:
-    - `GET /api/1/site/datasets.csv`
-    - `GET /api/1/site/organizations.csv`
-    - `GET /api/1/site/reuses.csv`
-    - `GET /api/1/site/tags.csv`
-    - `GET /api/1/site/harvest-sources.csv`
-
-**O que deve ser feito**
-
-1. **Tipos TS** em `types/api.ts`:
-   - Criar `SiteInfo`: id, title, metrics (nb_datasets, nb_organizations, nb_reuses, nb_users).
-   - Criar `Report`: id, subject (type + id + ref), reporter, reason, message, status, created_at.
-   - Criar `ReportReason` type.
-2. **Funções em `services/api.ts`**:
-   - `fetchSiteInfo()` → `GET /api/1/site/`
-   - `updateSiteConfig(payload)` → `PATCH /api/1/site/`
-   - `fetchReports(page?, status?, sort?)` → `GET /api/1/reports/`
-   - `dismissReport(id)` → `PATCH /api/1/reports/<id>/`
-   - `fetchReportReasons()` → `GET /api/1/reports/reasons/`
-   - `getSiteExportUrl(type)` → retorna URL para download (`/api/1/site/<type>.csv`)
-3. **Fluxo de moderação**:
-   - GET reports filtrados por status → mostrar lista.
-   - Dismiss: PATCH report com status "handled".
-   - Hide: PUT no endpoint da entidade com `private: true` (usa funções CRUD existentes dos tickets anteriores).
-   - Delete: DELETE no endpoint da entidade (usa funções CRUD existentes).
-
-**Critérios de Aceitação**
-
-- [x] `fetchSiteInfo()` retorna stats do site.
-- [x] `fetchReports()` retorna lista filtrada por status.
-- [x] `dismissReport()` altera status do report.
-- [x] `fetchReportReasons()` retorna lista de razões.
-- [x] URLs de export CSV são geradas corretamente.
-- [x] Tipos TS definidos para SiteInfo, Report, ReportReason.
-
----
-
-## TICKET-42: Admin — Organization Content Pages (Conexões API — `org/*`) ✅
+## TICKET-42: Admin — Organization Content Pages (Conexões API — `org/*`) ✅✅
 
 **Descrição**
 Implementar as páginas de conteúdo da organização no admin (`/admin/org/`): listagens de dataservices, reuses, harvesters, community resources, perfil da organização e estatísticas — tudo no contexto da organização do utilizador autenticado.
@@ -1883,7 +1874,7 @@ Implementar as páginas de conteúdo da organização no admin (`/admin/org/`): 
 
 ---
 
-## TICKET-43: Admin — Editorial Page (Conexões API — Sysadmin) ✅
+## TICKET-43: Admin — Editorial Page (Conexões API — Sysadmin) ✅✅
 
 **Descrição**
 Implementar a camada de conexão para a página editorial do admin (`/admin/system/editorial`): gestão de conteúdo destacado na homepage (datasets, reuses e organizações em destaque).
@@ -1927,7 +1918,7 @@ Implementar a camada de conexão para a página editorial do admin (`/admin/syst
 
 ---
 
-## TICKET-44: Admin — Permission Guards & Role-Based Navigation ✅
+## TICKET-44: Admin — Permission Guards & Role-Based Navigation ✅✅
 
 **Descrição**
 Implementar controlo de permissões no frontend do admin: esconder secções da navegação lateral com base nos roles do utilizador, proteger rotas com guards, e garantir que apenas sysadmins acedem a "Sistema" e que "Minha organização" só aparece para utilizadores com organização.
@@ -1967,7 +1958,7 @@ Implementar controlo de permissões no frontend do admin: esconder secções da 
 
 ---
 
-## TICKET-45: Global Search — Unify Local Searches with CategoryToggles Navigation ✅
+## TICKET-45: Global Search — Unify Local Searches with CategoryToggles Navigation ✅✅
 
 **Descrição**
 Unificar as pesquisas locais das páginas de listagem (datasets, organizations, reuses, dataservices) numa pesquisa global integrada, seguindo o workflow do CDATA (`cdata-pt`). Cada página de listagem mantém o seu próprio `InputSearchBar` que atualiza os resultados à medida que o utilizador escreve. O componente `CategoryToggles` na sidebar deve mostrar os totais de resultados da pesquisa atual para todas as categorias, e ao clicar numa categoria, navegar para a respetiva página com `?q=` preservado, onde os resultados já aparecem filtrados.
@@ -2104,11 +2095,11 @@ Executar testes de vulnerabilidades no frontend Next.js do projeto dados.gov.pt 
 
 **Ferramentas utilizadas**
 
-| Ferramenta | Objetivo | Método |
-|-----------|----------|--------|
-| `npm audit` | Vulnerabilidades em dependências npm | Análise estática de CVEs conhecidos |
-| `curl` manual | Security headers, XSS, open redirect, path traversal, CORS, access control, file exposure | Testes HTTP manuais contra endpoints |
-| OWASP ZAP (Docker) | Scan automático OWASP Top 10 — 183 URLs, 57 regras de segurança | `zap-baseline.py` via `ghcr.io/zaproxy/zaproxy:stable` |
+| Ferramenta         | Objetivo                                                                                  | Método                                                 |
+| ------------------ | ----------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `npm audit`        | Vulnerabilidades em dependências npm                                                      | Análise estática de CVEs conhecidos                    |
+| `curl` manual      | Security headers, XSS, open redirect, path traversal, CORS, access control, file exposure | Testes HTTP manuais contra endpoints                   |
+| OWASP ZAP (Docker) | Scan automático OWASP Top 10 — 183 URLs, 57 regras de segurança                           | `zap-baseline.py` via `ghcr.io/zaproxy/zaproxy:stable` |
 
 **O que deve ser feito**
 
@@ -2160,7 +2151,7 @@ Executar testes de vulnerabilidades no frontend Next.js do projeto dados.gov.pt 
 
 ---
 
-## TICKET-48: Vulnerability Testing — Backend API (TestSprite MCP)
+## TICKET-48: Vulnerability Testing — Backend API (TestSprite MCP) ✅
 
 **Descrição**
 Executar testes de vulnerabilidades no backend Flask/udata (API REST) do projeto dados.gov.pt utilizando o TestSprite MCP (Model Context Protocol). O objetivo é identificar vulnerabilidades de segurança nos endpoints públicos e autenticados, seguindo OWASP Top 10 e melhores práticas de segurança para APIs.
@@ -2215,17 +2206,17 @@ Executar testes de vulnerabilidades no backend Flask/udata (API REST) do projeto
 
 **Critérios de Aceitação**
 
-- [ ] TestSprite MCP configurado e funcional para o backend.
-- [ ] Testes executados nos endpoints públicos (datasets, organizations, reuses, spatial).
-- [ ] Testes executados nos endpoints autenticados (CRUD com access control).
-- [ ] Testes executados nos endpoints sysadmin (user management, site config, reports).
-- [ ] CSRF token validation testada em todos os endpoints mutáveis.
-- [ ] Relatório de vulnerabilidades gerado com classificação por severidade.
-- [ ] Plano de remediação documentado para vulnerabilidades Critical e High.
+- [x] TestSprite MCP configurado e funcional para o backend.
+- [x] Testes executados nos endpoints públicos (datasets, organizations, reuses, spatial).
+- [x] Testes executados nos endpoints autenticados (CRUD com access control).
+- [x] Testes executados nos endpoints sysadmin (user management, site config, reports).
+- [x] CSRF token validation testada em todos os endpoints mutáveis.
+- [x] Relatório de vulnerabilidades gerado com classificação por severidade.
+- [x] Plano de remediação documentado para vulnerabilidades Critical e High.
 
 ---
 
-## TICKET-49: Datasets Listing — Organization Link in Dataset Card
+## TICKET-49: Datasets Listing — Organization Link in Dataset Card ✅
 
 **Descrição**
 Na página de listagem de datasets (`/pages/datasets`), cada card de dataset mostra o nome e logo da organização. Atualmente, clicar em qualquer parte do card (incluindo no nome/logo da organização) navega para o detalhe do dataset. O comportamento esperado é que clicar no nome ou logo da organização navegue para a página da organização (`/pages/organizations/<slug>`), enquanto clicar no resto do card continua a navegar para o dataset.
@@ -2257,11 +2248,11 @@ Na página de listagem de datasets (`/pages/datasets`), cada card de dataset mos
 
 **Critérios de Aceitação**
 
-- [ ] Clicar no nome da organização no card navega para `/pages/organizations/<slug>`.
-- [ ] Clicar no logo da organização navega para `/pages/organizations/<slug>` (se suportado pelo componente).
-- [ ] Clicar no resto do card (título, descrição, métricas) continua a navegar para o dataset.
-- [ ] O nome da organização tem estilo visual de link (hover underline, cursor pointer).
-- [ ] Não há conflito entre o click do card e o click da organização (stopPropagation).
+- [x] Clicar no nome da organização no card navega para `/pages/organizations/<slug>`.
+- [x] Clicar no logo da organização navega para `/pages/organizations/<slug>` (se suportado pelo componente).
+- [x] Clicar no resto do card (título, descrição, métricas) continua a navegar para o dataset.
+- [x] O nome da organização tem estilo visual de link (hover underline, cursor pointer).
+- [x] Não há conflito entre o click do card e o click da organização (stopPropagation).
 
 ---
 
@@ -2393,23 +2384,26 @@ Remediação de vulnerabilidades de segurança identificadas nos relatórios de 
 
 **Ficheiros alterados**
 
-| Ficheiro | Fix |
-|---|---|
-| `udata/settings.py` | FIX 1, FIX 2, FIX 7 |
-| `udata/cors.py` | FIX 2 |
-| `udata/app.py` | FIX 2, FIX 4, FIX 7 |
-| `udata/core/storages/validation.py` | FIX 3 (NEW) |
-| `udata/core/storages/api.py` | FIX 3 |
-| `udata/core/dataset/api.py` | FIX 3 |
-| `udata/core/discussions/forms.py` | FIX 5 |
-| `udata/auth/forms.py` | FIX 6 |
-| `udata/auth/mails.py` | FIX 1 |
-| `udata/auth/views.py` | FIX 7 |
-| `pyproject.toml` | FIX 7 |
+| Ficheiro                            | Fix                 |
+| ----------------------------------- | ------------------- |
+| `udata/settings.py`                 | FIX 1, FIX 2, FIX 7 |
+| `udata/cors.py`                     | FIX 2               |
+| `udata/app.py`                      | FIX 2, FIX 4, FIX 7 |
+| `udata/core/storages/validation.py` | FIX 3 (NEW)         |
+| `udata/core/storages/api.py`        | FIX 3               |
+| `udata/core/dataset/api.py`         | FIX 3               |
+| `udata/core/discussions/forms.py`   | FIX 5               |
+| `udata/auth/forms.py`               | FIX 6               |
+| `udata/auth/mails.py`               | FIX 1               |
+| `udata/auth/views.py`               | FIX 7               |
+| `pyproject.toml`                    | FIX 7               |
 
 **Configuração necessária para produção**
 
 ```python
+
+---
+
 # udata.cfg
 CORS_ALLOWED_ORIGINS = ["https://dados.gov.pt", "https://preprod.dados.gov.pt"]
 RATELIMIT_STORAGE_URI = "redis://localhost:6379"
@@ -2469,12 +2463,6 @@ Browser (localhost:3000)
 
 **Ficheiros alterados**
 
-| Ficheiro | Alteração |
-|---|---|
-| `frontend/.env.local` | `NEXT_PUBLIC_API_BASE=/api/1`, `NEXT_PUBLIC_API_V2_BASE=/api/2`, adicionado `BACKEND_URL=http://localhost:7000` |
-| `frontend/.env.example` | Idem (template actualizado) |
-| `frontend/next.config.ts` | `BACKEND_URL` lê de `process.env.BACKEND_URL` em vez de derivar de `NEXT_PUBLIC_API_BASE` |
-
 **Nota**: Após alterar variáveis `NEXT_PUBLIC_*`, é necessário limpar o cache do Next.js (`rm -rf .next/`) e reiniciar o dev server, pois estas variáveis são embebidas no bundle JS no momento da compilação.
 
 **Critérios de Aceitação**
@@ -2506,8 +2494,10 @@ Corrigir o problema em que páginas com Server Components (SSR) — como `/pages
 **Causa Raiz**
 
 `API_BASE_URL` em `src/services/api.ts` era uma constante simples:
+
 ```typescript
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || "https://dados.gov.pt/api/1";
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE || 'https://dados.gov.pt/api/1';
 // Resolvia para "/api/1" — funciona no browser, falha no Node.js
 ```
 
@@ -2518,14 +2508,14 @@ Server Components chamavam `fetch("/api/1/datasets/")` no Node.js → URL invál
 Alterado `src/services/api.ts` para detectar o ambiente de execução e usar o URL adequado:
 
 ```typescript
-const isServer = typeof window === "undefined";
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:7000";
+const isServer = typeof window === 'undefined';
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:7000';
 const API_BASE_URL = isServer
   ? `${BACKEND_URL}/api/1`
-  : (process.env.NEXT_PUBLIC_API_BASE || "/api/1");
+  : process.env.NEXT_PUBLIC_API_BASE || '/api/1';
 const API_V2_BASE_URL = isServer
   ? `${BACKEND_URL}/api/2`
-  : (process.env.NEXT_PUBLIC_API_V2_BASE || "/api/2");
+  : process.env.NEXT_PUBLIC_API_V2_BASE || '/api/2';
 ```
 
 **Fluxo após a correção**
@@ -2542,18 +2532,9 @@ Client Component (Browser):
 
 **Ficheiros alterados**
 
-| Ficheiro | Alteração |
-|---|---|
-| `frontend/src/services/api.ts` | `API_BASE_URL` e `API_V2_BASE_URL` agora usam URL absoluto (`BACKEND_URL`) em server-side e relativo em client-side |
-
 **Relação com TICKET-52**
 
 O TICKET-52 corrigiu os fetches **client-side** (homepage) mudando para URLs relativos. Este ticket completa a correção garantindo que os fetches **server-side** (SSR) continuam a funcionar com URLs absolutos.
-
-| Cenário | TICKET-52 (antes) | TICKET-52 (depois) | TICKET-53 (depois) |
-|---|---|---|---|
-| Client Component (browser) | ❌ CORS blocked | ✅ Relativo `/api/1` | ✅ Relativo `/api/1` |
-| Server Component (Node.js) | ✅ Absoluto `localhost:7000` | ❌ Relativo falha | ✅ Absoluto `localhost:7000` |
 
 **Critérios de Aceitação**
 
@@ -2566,69 +2547,149 @@ O TICKET-52 corrigiu os fetches **client-side** (homepage) mudando para URLs rel
 
 ---
 
+## TICKET-54: Admin — Organization Sections Wiring, Pagination & Harvester Fix ✅
+
+**Descrição**
+Conectar à API real as secções de backoffice da organização que estavam com dados hardcoded/placeholder (Discussões e Membros), corrigir o filtro de harvesters por organização no backend, e implementar paginação real client-side em todas as secções da organização (o componente `Table` do Agora Design System não pagina os dados automaticamente — apenas mostra o controlo visual).
+
+**Contexto Arquitetural**
+
+- Páginas admin da organização: `frontend/src/app/pages/admin/org/[orgId]/`
+- Componentes: `frontend/src/components/admin/`
+- API functions: `frontend/src/services/api.ts`
+- Backend endpoints:
+  - Discussões: `GET /api/1/discussions/?for=<org_id>` — discussões sobre a organização.
+  - Membros: `GET /api/1/organizations/<id>/` → campo `members[]` no response.
+  - Adicionar membro: `POST /api/1/organizations/<id>/member/<user_id>` (body: `{ role: "admin"|"editor" }`).
+  - Editar membro: `PUT /api/1/organizations/<id>/member/<user_id>` (body: `{ role: "admin"|"editor" }`).
+  - Remover membro: `DELETE /api/1/organizations/<id>/member/<user_id>`.
+  - Suggest users: `GET /api/1/users/suggest/?q=<query>` — autocomplete de utilizadores.
+  - Harvesters: `GET /api/1/harvest/sources/?organization=<org_id>` — filtrar por organização.
+
+**O que deve ser feito**
+
+1. **Discussões** — Wiring do `DiscussionsClient.tsx`:
+   - Remover placeholder "Ainda não há discussões".
+   - Usar `fetchOrgDiscussions(org_id)` (já existe em `services/api.ts`).
+   - Mostrar lista de discussões com: título, autor (avatar + nome), data de criação, estado (aberta/fechada), número de mensagens.
+   - Mostrar empty state quando não há discussões.
+   - Clicar numa discussão pode abrir detalhe (opcional nesta fase).
+
+2. **Membros** — Rewrite do `MembersClient.tsx`:
+   - Remover `mockMembers` e todo o mock data.
+   - Buscar membros da organização via API (`fetchOrganization(org_id)` → `org.members[]`).
+   - Mostrar tabela com: avatar, nome, email, role (badge), data de adesão (`since`).
+   - Implementar "Adicionar membro": popup com `suggestUsers(query)` para autocomplete, seleção de role, e `POST /api/1/organizations/<id>/member/<user_id>`.
+   - Implementar "Editar role": popup para alterar role de um membro existente.
+   - Implementar "Remover membro": confirmação + `DELETE /api/1/organizations/<id>/member/<user_id>`.
+
+3. **Harvesters** — Fix filtro por organização (backend):
+   - O endpoint `GET /api/1/harvest/sources/` não filtrava por `organization` — retornava todos os harvesters (38) independentemente da org selecionada.
+   - Adicionado param `organization` ao `source_parser` em `udata/harvest/api.py`.
+   - Adicionado filtro `sources = sources(organization=args['organization'])` na query.
+
+4. **Paginação real client-side** em todas as secções da organização:
+   - O componente `Table` do Agora Design System mostra controlos de paginação visuais (`paginationProps`) mas **não pagina os dados** — renderiza todas as `TableRow` independentemente do `currentPage`.
+   - Implementada paginação manual com `useState(currentPage)`, `useState(itemsPerPage)` e `useMemo(paginatedItems)`.
+   - Cada secção agora mostra apenas N items por página (default: 10), com selector "Linhas por página" (10/20/50), indicador "1–10 de 329", e setas de navegação < >.
+   - Secções afetadas:
+     - `OrgDatasetsClient.tsx` — Conjuntos de dados
+     - `OrgReusesClient.tsx` — Reutilizações
+     - `DiscussionsClient.tsx` — Discussões
+     - `MembersClient.tsx` — Membros
+     - `OrgHarvestersClient.tsx` — Harvesters
+     - `OrgCommunityResourcesClient.tsx` — Recursos comunitários
+
+5. **Funções API** (já existiam em `services/api.ts`):
+   - `fetchOrgDiscussions(org)` — buscar discussões da organização.
+   - `addMember(org, userId, role)` — adicionar membro.
+   - `updateMemberRole(org, userId, role)` — editar role.
+   - `removeMember(org, userId)` — remover membro.
+   - `suggestUsers(query)` — autocomplete de utilizadores.
+
+**Critérios de Aceitação**
+
+- [ ] Discussões lista dados reais da API com título, autor, data, estado e contagem de mensagens.
+- [ ] Membros lista dados reais da API (nome, role, data de adesão).
+- [ ] Adicionar membro funciona com autocomplete de utilizadores (`suggestUsers`).
+- [ ] Editar role de membro funciona via API.
+- [ ] Remover membro funciona com confirmação.
+- [ ] Sem dados hardcoded/mock restantes nas secções Discussões e Membros.
+- [ ] Empty states adequados quando não há dados.
+- [ ] Harvesters filtrados por organização (backend fix — endpoint retorna apenas harvesters da org selecionada).
+- [ ] Paginação real funcional em todas as 6 secções da organização (datasets, reuses, discussions, members, harvesters, community resources).
+- [ ] Selector "Linhas por página" com opções 10/20/50 em cada secção.
+- [ ] Indicador de posição "X–Y de Z" em cada secção.
+
+---
+
 ## Summary Table
 
-| #                                     | Ticket                                                   | Area   | Priority | Status                             |
-| ------------------------------------- | -------------------------------------------------------- | ------ | -------- | ---------------------------------- |
-| **PÁGINAS PÚBLICAS — Conexões API**   |                                                          |        |          |                                    |
-| 01                                    | Auth — Login (CSRF + session)                            | Auth   | High     | Route handler existe, falta wiring |
-| 02                                    | Auth — Registration (proxy + form)                       | Auth   | High     | UI existe, falta wiring            |
-| 03                                    | Auth — Current User (`/me/` + context)                   | Auth   | High     | Not started                        |
-| 04                                    | Homepage — Dados Dinâmicos (site, featured, posts)       | Public | High     | Concluído (CORS fix: TICKET-52)    |
-| 05                                    | Datasets — Search (q param + suggest)                    | Public | High     | fetchDatasets sem q                |
-| 06                                    | Datasets — Filtros (licenses, schemas, tags, etc.)       | Public | Medium   | Parcialmente dinâmico              |
-| 07                                    | Discussions CRUD                                         | Public | Medium   | Placeholder                        |
-| 08                                    | Followers (follow/unfollow genérico)                     | Public | Medium   | Local state only                   |
-| 09                                    | Organization Detail (fetch + org datasets/reuses)        | Public | High     | Página em falta                    |
-| 10                                    | Organizations — Search + Filtros (q, badges, suggest)    | Public | Medium   | fetchOrganizations sem q           |
-| 11                                    | Reuses — Search + Detail (q, types, datasets associados) | Public | Medium   | Parcial                            |
-| 12                                    | Topics/Themes — Leitura API v2                           | Public | Medium   | Tudo estático                      |
-| 13                                    | User Profile (fetch /me/datasets, /users/)               | Public | High     | Not started                        |
-| 14                                    | Dataset Create & Edit                                    | Admin  | —        | → TICKET-26                        |
-| 15                                    | Reuse Create & Edit                                      | Admin  | —        | → TICKET-27                        |
-| 16                                    | Dataservices Wiring                                      | Admin  | —        | → TICKET-28                        |
-| 17                                    | Posts/News — Leitura (fetch posts)                       | Public | Medium   | Placeholder                        |
-| 18                                    | Notifications (fetch /notifications/)                    | Public | Low      | Not started                        |
-| 19                                    | Global Search — Suggest Multi-Entidade                   | Public | High     | Nenhuma lógica                     |
-| 20                                    | Mini-Courses — Fonte de Dados                            | Public | Low      | Tudo hardcoded                     |
-| 21                                    | Password Reset (route handler + functions)               | Auth   | Medium   | Rewrites existem                   |
-| 22                                    | Spatial (zones suggest, granularities, levels)           | Public | Low      | Filtros estáticos                  |
-| 23                                    | Reports — Submissão (reasons + create)                   | Public | Low      | Not started                        |
-| 24                                    | Organization Membership (request, accept, members)       | Public | Low      | Not started                        |
-| 25                                    | CSV/Data Export (URL generators)                         | Public | Low      | Not started                        |
-| **BACKOFFICE / ADMIN — Conexões API** |                                                          |        |          |                                    |
-| 26                                    | Admin — Datasets CRUD (tipos TS + fetch/mutate)          | Admin  | High     | Concluído                          |
-| 27                                    | Admin — Reuses CRUD (tipos TS + fetch/mutate)            | Admin  | High     | Not started                        |
-| 28                                    | Admin — Dataservices CRUD (wiring form existente)        | Admin  | Medium   | UI exists, needs wiring            |
-| 29                                    | Admin — Organizations CRUD + Members                     | Admin  | High     | Not started                        |
-| 30                                    | Admin — User Profile & Metrics                           | Admin  | High     | Not started                        |
-| 31                                    | Admin — Community Resources CRUD                         | Admin  | Low      | Not started                        |
-| 32                                    | Admin — Harvesters CRUD + Jobs                           | Admin  | Medium   | Not started                        |
-| 33                                    | Admin — Topics CRUD (API v2)                             | Admin  | Medium   | Not started                        |
-| 34                                    | Admin — Posts CRUD                                       | Admin  | Medium   | Not started                        |
-| 35                                    | Admin — User Management (Sysadmin)                       | Admin  | Low      | Not started                        |
-| 36                                    | Admin — Site Management & Moderation (Sysadmin)          | Admin  | Medium   | Not started                        |
-| 42                                    | Admin — Organization Content Pages (`org/*`)             | Admin  | High     | Concluído                          |
-| 43                                    | Admin — Editorial Page (Sysadmin)                        | Admin  | Medium   | Concluído                          |
-| 44                                    | Admin — Permission Guards & Role-Based Navigation        | Admin  | High     | Concluído                          |
-| **AUTENTICAÇÃO EXTERNA**              |                                                          |        |          |                                    |
-| 37                                    | Auth — Autenticação.gov / SAML (plugin + frontend)       | Auth   | High     | Concluído                          |
-| 38                                    | Maintenance — Sync Login branches & resolution           | Repo   | High     | Concluído                          |
-| 40                                    | Dataset Detail — Fix hardcoded content & UI bugs         | Public | High     | Not started                        |
-| 41                                    | Legacy Account Migration to CMD/eIDAS                    | Auth   | High     | Concluído                          |
-| **PESQUISA GLOBAL**                   |                                                          |        |          |                                    |
-
-| 45 | Global Search — Unify Local Searches + CategoryToggles | Public | High | Concluído |
-| 46 | Explorar — Redirecionar HVDs para Datasets com tag=hvd | Public | Medium | Concluído |
-| **QUALIDADE & SEGURANÇA** | | | | |
-| 47 | Vulnerability Testing — Frontend (TestSprite MCP) | Security | High | Not started |
-| 48 | Vulnerability Testing — Backend API (TestSprite MCP) | Security | High | Not started |
-| **UX & NAVEGAÇÃO** | | | | |
-| 49 | Datasets Listing — Organization Link in Dataset Card | Public | Medium | Not started |
-| **TESTING & QA** | | | | |
-| 50 | Frontend — Functional Testing with TestSprite MCP | QA | Medium | Concluído |
-| **SEGURANÇA — Remediação** | | | | |
-| 51 | Vulnerability Remediation — Backend (KITS24 Audit) | Security | Critical | Concluído |
-| **INFRAESTRUTURA & CONFIG** | | | | |
-| 52 | Homepage — Fix CORS Blocking All Client-Side API Calls | Frontend | High | Concluído |
-| 53 | Fix Server-Side Fetches Failing with Relative API URLs | Frontend | High | Concluído |
+| Ficheiro                              | Alteração                                                                                                           |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | -------------------- | ---------------------------- | ---------------------------------- |
+| `frontend/.env.local`                 | `NEXT_PUBLIC_API_BASE=/api/1`, `NEXT_PUBLIC_API_V2_BASE=/api/2`, adicionado `BACKEND_URL=http://localhost:7000`     |
+| `frontend/.env.example`               | Idem (template actualizado)                                                                                         |
+| `frontend/next.config.ts`             | `BACKEND_URL` lê de `process.env.BACKEND_URL` em vez de derivar de `NEXT_PUBLIC_API_BASE`                           |
+| Ficheiro                              | Alteração                                                                                                           |
+| ---                                   | ---                                                                                                                 |
+| `frontend/src/services/api.ts`        | `API_BASE_URL` e `API_V2_BASE_URL` agora usam URL absoluto (`BACKEND_URL`) em server-side e relativo em client-side |
+| Cenário                               | TICKET-52 (antes)                                                                                                   | TICKET-52 (depois)   | TICKET-53 (depois)           |
+| ---                                   | ---                                                                                                                 | ---                  | ---                          |
+| Client Component (browser)            | ❌ CORS blocked                                                                                                     | ✅ Relativo `/api/1` | ✅ Relativo `/api/1`         |
+| Server Component (Node.js)            | ✅ Absoluto `localhost:7000`                                                                                        | ❌ Relativo falha    | ✅ Absoluto `localhost:7000` |
+| #                                     | Ticket                                                                                                              | Area                 | Priority                     | Status                             |
+| ------------------------------------- | --------------------------------------------------------                                                            | ------               | --------                     | ---------------------------------- |
+| **QUALIDADE & SEGURANÇA**             |                                                                                                                     |                      |                              |                                    |
+| 01                                    | Auth — Login (CSRF + session)                                                                                       | Auth                 | High                         | Route handler existe, falta wiring |
+| 02                                    | Auth — Registration (proxy + form)                                                                                  | Auth                 | High                         | UI existe, falta wiring            |
+| 03                                    | Auth — Current User (`/me/` + context)                                                                              | Auth                 | High                         | Not started                        |
+| 04                                    | Homepage — Dados Dinâmicos (site, featured, posts)                                                                  | Public               | High                         | Concluído (CORS fix: TICKET-52)    |
+| 05                                    | Datasets — Search (q param + suggest)                                                                               | Public               | High                         | fetchDatasets sem q                |
+| 06                                    | Datasets — Filtros (licenses, schemas, tags, etc.)                                                                  | Public               | Medium                       | Parcialmente dinâmico              |
+| 07                                    | Discussions CRUD                                                                                                    | Public               | Medium                       | Placeholder                        |
+| 08                                    | Followers (follow/unfollow genérico)                                                                                | Public               | Medium                       | Local state only                   |
+| 09                                    | Organization Detail (fetch + org datasets/reuses)                                                                   | Public               | High                         | Página em falta                    |
+| 10                                    | Organizations — Search + Filtros (q, badges, suggest)                                                               | Public               | Medium                       | fetchOrganizations sem q           |
+| 11                                    | Reuses — Search + Detail (q, types, datasets associados)                                                            | Public               | Medium                       | Parcial                            |
+| 12                                    | Topics/Themes — Leitura API v2                                                                                      | Public               | Medium                       | Tudo estático                      |
+| 13                                    | User Profile (fetch /me/datasets, /users/)                                                                          | Public               | High                         | Not started                        |
+| 14                                    | Dataset Create & Edit                                                                                               | Admin                | —                            | → TICKET-26                        |
+| 15                                    | Reuse Create & Edit                                                                                                 | Admin                | —                            | → TICKET-27                        |
+| 16                                    | Dataservices Wiring                                                                                                 | Admin                | —                            | → TICKET-28                        |
+| 17                                    | Posts/News — Leitura (fetch posts)                                                                                  | Public               | Medium                       | Placeholder                        |
+| 18                                    | Notifications (fetch /notifications/)                                                                               | Public               | Low                          | Not started                        |
+| 19                                    | Global Search — Suggest Multi-Entidade                                                                              | Public               | High                         | Nenhuma lógica                     |
+| 20                                    | Mini-Courses — Fonte de Dados                                                                                       | Public               | Low                          | Tudo hardcoded                     |
+| 21                                    | Password Reset (route handler + functions)                                                                          | Auth                 | Medium                       | Rewrites existem                   |
+| 22                                    | Spatial (zones suggest, granularities, levels)                                                                      | Public               | Low                          | Filtros estáticos                  |
+| 23                                    | Reports — Submissão (reasons + create)                                                                              | Public               | Low                          | Not started                        |
+| 24                                    | Organization Membership (request, accept, members)                                                                  | Public               | Low                          | Not started                        |
+| 25                                    | CSV/Data Export (URL generators)                                                                                    | Public               | Low                          | Not started                        |
+| 26                                    | Admin — Datasets CRUD (tipos TS + fetch/mutate)                                                                     | Admin                | High                         | Concluído                          |
+| 27                                    | Admin — Reuses CRUD (tipos TS + fetch/mutate)                                                                       | Admin                | High                         | Not started                        |
+| 28                                    | Admin — Dataservices CRUD (wiring form existente)                                                                   | Admin                | Medium                       | UI exists, needs wiring            |
+| 29                                    | Admin — Organizations CRUD + Members                                                                                | Admin                | High                         | Not started                        |
+| 30                                    | Admin — User Profile & Metrics                                                                                      | Admin                | High                         | Not started                        |
+| 31                                    | Admin — Community Resources CRUD                                                                                    | Admin                | Low                          | Not started                        |
+| 32                                    | Admin — Harvesters CRUD + Jobs                                                                                      | Admin                | Medium                       | Not started                        |
+| 33                                    | Admin — Topics CRUD (API v2)                                                                                        | Admin                | Medium                       | Not started                        |
+| 34                                    | Admin — Posts CRUD                                                                                                  | Admin                | Medium                       | Not started                        |
+| 35                                    | Admin — User Management (Sysadmin)                                                                                  | Admin                | Low                          | Not started                        |
+| 36                                    | Admin — Site Management & Moderation (Sysadmin)                                                                     | Admin                | Medium                       | Not started                        |
+| 37                                    | Auth — Autenticação.gov / SAML (plugin + frontend)                                                                  | Auth                 | High                         | Concluído                          |
+| 38                                    | Maintenance — Sync Login branches & resolution                                                                      | Repo                 | High                         | Concluído                          |
+| 40                                    | Dataset Detail — Fix hardcoded content & UI bugs                                                                    | Public               | High                         | Not started                        |
+| 41                                    | Legacy Account Migration to CMD/eIDAS                                                                               | Auth                 | High                         | Concluído                          |
+| 42                                    | Admin — Organization Content Pages (`org/*`)                                                                        | Admin                | High                         | Concluído                          |
+| 43                                    | Admin — Editorial Page (Sysadmin)                                                                                   | Admin                | Medium                       | Concluído                          |
+| 44                                    | Admin — Permission Guards & Role-Based Navigation                                                                   | Admin                | High                         | Concluído                          |
+| 45                                    | Global Search — Unify Local Searches + CategoryToggles                                                              | Public               | High                         | Concluído                          |
+| 46                                    | Explorar — Redirecionar HVDs para Datasets com tag=hvd                                                              | Public               | Medium                       | Concluído                          |
+| 47                                    | Vulnerability Testing — Frontend (TestSprite MCP)                                                                   | Security             | High                         | Not started                        |
+| 48                                    | Vulnerability Testing — Backend API (TestSprite MCP)                                                                | Security             | High                         | Not started                        |
+| 49                                    | Datasets Listing — Organization Link in Dataset Card                                                                | Public               | Medium                       | Not started                        |
+| 50                                    | Frontend — Functional Testing with TestSprite MCP                                                                   | QA                   | Medium                       | Concluído                          |
+| 51                                    | Vulnerability Remediation — Backend (KITS24 Audit)                                                                  | Security             | Critical                     | Concluído                          |
+| 52                                    | Homepage — Fix CORS Blocking All Client-Side API Calls                                                              | Frontend             | High                         | Concluído                          |
+| 53                                    | Fix Server-Side Fetches Failing with Relative API URLs                                                              | Frontend             | High                         | Concluído                          |
+| 54                                    | Admin — Organization Discussions & Members (Backend Wiring)                                                         | Admin                | High                         | Not started                        |

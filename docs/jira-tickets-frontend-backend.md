@@ -1395,7 +1395,7 @@ Implementar a camada de conexão para gestão de utilizadores por sysadmins: lis
 
 ---
 
-## TICKET-36: Admin — Site Management & Moderation (Conexões API — Sysadmin) ✅
+## TICKET-36: Admin — Site Management & Moderation (Conexões API — Sysadmin) ✅✅
 
 **Descrição**
 Implementar a camada de conexão para gestão global do site e moderação de conteúdo: stats do site, configuração, e gestão de reports.

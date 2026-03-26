@@ -118,6 +118,46 @@ db.user.findOne(
 
 ---
 
+## CLI Command — `udata user fix-duplicates`
+
+The recommended way to fix duplicate SAML accounts. This command automates the full merge procedure described above.
+
+**File:** `backend/udata/core/user/commands.py`
+
+### Usage
+
+```bash
+# Preview what would be done (no changes made)
+udata user fix-duplicates --dry-run
+
+# Execute the merge
+udata user fix-duplicates
+```
+
+### What it does
+
+1. Finds all users with placeholder SAML emails (`saml-*`).
+2. For each duplicate, looks up the traditional account by `first_name` + `last_name` (case-insensitive exact match).
+3. **Skips** if:
+   - The duplicate has no NIC (`auth_nic`) to merge.
+   - No traditional account is found with the same name.
+   - Multiple traditional accounts match (ambiguous — requires manual resolution).
+   - The traditional account already has a NIC assigned.
+4. Copies `extras.auth_nic` from the duplicate into the traditional account.
+5. Deletes the duplicate SAML account.
+
+### Example output
+
+```
+Found 3 duplicate SAML account(s)
+MERGED NIC 32134714 into user@example.com | deleted saml-32134714@autenticacao.gov.pt
+SKIP saml-99999999@autenticacao.gov.pt (Maria Silva) — multiple matches: ['maria1@example.com', 'maria2@example.com']
+SKIP saml-00000000@autenticacao.gov.pt — no NIC to merge
+✔ Merged 1 account(s), skipped 2
+```
+
+---
+
 ## Full Pymongo Script — Bulk Merge
 
 Script to find and merge all existing duplicates in one run:
@@ -179,6 +219,7 @@ print("\nDone.")
 | File | Purpose |
 |------|---------|
 | `backend/udata/auth/saml/saml_plugin/saml_govpt.py` | SAML authentication handler (auto-merge logic) |
+| `backend/udata/core/user/commands.py` | CLI command `udata user fix-duplicates` |
 | `backend/udata/core/user/models.py` | User model (`extras.auth_nic` field) |
 | `backend/udata/settings.py` | `MIGRATION_MODE_ENABLED` flag |
 | `docs/migration-plan-of-legacy-accounts-to-CMD-ticket-40.md` | Full migration plan (TICKET-40) |
@@ -190,3 +231,4 @@ print("\nDone.")
 | 2026-03-26 | Auto-merge logic added to `_find_or_create_saml_user` (name-based fallback) |
 | 2026-03-26 | Manual merge: Adriano Leal (`adbrum@outlook.com` ← NIC `32134714`) |
 | 2026-03-26 | Manual merge: António Soares (`antonio.soares@ama.gov.pt` ← NIC `32135653`) |
+| 2026-03-26 | CLI command `udata user fix-duplicates` added to automate bulk merge |

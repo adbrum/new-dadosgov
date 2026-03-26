@@ -86,6 +86,17 @@ src/
 | Migrações BD            | `cd backend && udata db upgrade`             | —                   |
 | Build produção          | —                                            | `cd frontend && npm run build` |
 
+## Performance
+
+When building or optimizing pages, apply these cross-cutting practices (especially for public-facing, high-traffic pages):
+
+- **Aggregated endpoints** — When a page needs data from multiple sources, create a single backend endpoint that returns everything the page needs in one response (e.g., `/api/1/site/home/`). Avoid forcing the frontend to call multiple endpoints and assemble data.
+- **Lightweight serialization** — Aggregated endpoints should use manual dict serialization including only the fields the frontend actually needs, reducing payload size significantly.
+- **Server-side rendering** — Use Next.js async Server Components to fetch data at request time instead of client-side `useEffect`. Move interactive logic to a child `*Client.tsx` component that receives data as props.
+- **ISR caching (frontend)** — Use `next: { revalidate: N }` on `fetch()` calls instead of `cache: "no-store"` for data that doesn't need to be real-time (homepage: 60s, posts: 120s, site metadata: 300s).
+- **Server-side caching (backend)** — Use `@cache.cached(timeout=N, key_prefix="...")` from Flask-Caching on aggregated endpoints.
+- **Query limiting** — Always limit querysets with `[:N]` slicing on the backend when only a fixed number of results is needed.
+
 ## Regras Gerais
 
 - **Idioma do código**: inglês (variáveis, funções, comentários, commits)

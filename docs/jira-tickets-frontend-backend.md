@@ -2044,7 +2044,7 @@ Unificar as pesquisas locais das páginas de listagem (datasets, organizations, 
 
 ---
 
-## TICKET-46: Explorar — Redirecionar HVDs para Datasets com tag=hvd para nao existir conflitos ✅
+## TICKET-46: Explorar — Redirecionar HVDs para Datasets com tag=hvd para nao existir conflitos ✅✅
 
 **Descrição**
 Atualmente, o link "HVDs" no menu de navegação "Explorar" do Header aponta para `/pages/hvds`, uma página placeholder em manutenção (`StatusCard` com "Página em manutenção"). Os HVDs (High Value Datasets) são datasets com a tag `hvd` e a página de datasets já suporta filtro por tag via query param (`/pages/datasets?tag=hvd`). Este ticket consiste em redirecionar o link do menu e eliminar a página placeholder.
@@ -2080,7 +2080,7 @@ Atualmente, o link "HVDs" no menu de navegação "Explorar" do Header aponta par
 
 ---
 
-## TICKET-47: Vulnerability Testing — Frontend (npm audit + curl + OWASP ZAP) ✅
+## TICKET-47: Vulnerability Testing — Frontend (npm audit + curl + OWASP ZAP) ✅✅
 
 **Descrição**
 Executar testes de vulnerabilidades no frontend Next.js do projeto dados.gov.pt utilizando três ferramentas complementares: **npm audit** (dependências), **curl manual** (headers, XSS, access control), e **OWASP ZAP** (scan automático OWASP Top 10). O objetivo é identificar e corrigir vulnerabilidades de segurança nas páginas públicas, formulários de autenticação e área admin.
@@ -2151,7 +2151,7 @@ Executar testes de vulnerabilidades no frontend Next.js do projeto dados.gov.pt 
 
 ---
 
-## TICKET-48: Vulnerability Testing — Backend API (TestSprite MCP) ✅
+## TICKET-48: Vulnerability Testing — Backend API (TestSprite MCP) ✅✅
 
 **Descrição**
 Executar testes de vulnerabilidades no backend Flask/udata (API REST) do projeto dados.gov.pt utilizando o TestSprite MCP (Model Context Protocol). O objetivo é identificar vulnerabilidades de segurança nos endpoints públicos e autenticados, seguindo OWASP Top 10 e melhores práticas de segurança para APIs.
@@ -2216,7 +2216,7 @@ Executar testes de vulnerabilidades no backend Flask/udata (API REST) do projeto
 
 ---
 
-## TICKET-49: Datasets Listing — Organization Link in Dataset Card ✅
+## TICKET-49: Datasets Listing — Organization Link in Dataset Card ✅✅
 
 **Descrição**
 Na página de listagem de datasets (`/pages/datasets`), cada card de dataset mostra o nome e logo da organização. Atualmente, clicar em qualquer parte do card (incluindo no nome/logo da organização) navega para o detalhe do dataset. O comportamento esperado é que clicar no nome ou logo da organização navegue para a página da organização (`/pages/organizations/<slug>`), enquanto clicar no resto do card continua a navegar para o dataset.

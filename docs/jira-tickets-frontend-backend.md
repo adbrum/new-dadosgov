@@ -2256,7 +2256,7 @@ Na página de listagem de datasets (`/pages/datasets`), cada card de dataset mos
 
 ---
 
-## TICKET-50: Frontend — Functional Testing with TestSprite MCP ✅
+## TICKET-50: Frontend — Functional Testing with TestSprite MCP ✅✅
 
 **Descrição**
 Execução de testes funcionais automatizados no frontend Next.js utilizando o TestSprite MCP (Model Context Protocol). Cobertura de navegação, pesquisa, filtros, paginação, detalhe de entidades e formulários. Inclui correção de bugs encontrados durante os testes e correção de erros de build pré-existentes.
@@ -2328,7 +2328,7 @@ Execução de testes funcionais automatizados no frontend Next.js utilizando o T
 
 ---
 
-## TICKET-51: Vulnerability Remediation — Backend (KITS24 Security Audit) ✅
+## TICKET-51: Vulnerability Remediation — Backend (KITS24 Security Audit) ✅✅
 
 **Descrição**
 Remediação de vulnerabilidades de segurança identificadas nos relatórios de auditoria KITS24 (2021-2026) contra `dados.gov.pt` e `preprod.dados.gov.pt`. Fonte: `Vulnerabilidades_mapa_geral.xlsx` (38 entradas). Implementação de 7 correções cobrindo OWASP Top 10 no backend Flask/udata, abrangendo todos os 10 endpoints de upload (backoffice + API) e endpoints de autenticação.
@@ -2425,7 +2425,7 @@ RATELIMIT_STORAGE_URI = "redis://localhost:6379"
 
 ---
 
-## TICKET-52: Homepage — Fix CORS Blocking All Client-Side API Calls ✅
+## TICKET-52: Homepage — Fix CORS Blocking All Client-Side API Calls ✅✅
 
 **Descrição**
 Corrigir o problema em que a homepage mostrava todas as métricas a 0, "Nenhum conjunto de dados encontrado", "Nenhuma reutilização encontrada" e "Nenhuma novidade encontrada" — apesar do backend ter dados (19 842 datasets, organizações, reuses, etc.).
@@ -2478,7 +2478,7 @@ Browser (localhost:3000)
 
 ---
 
-## TICKET-53: Fix Server-Side Fetches Failing with Relative API URLs ✅
+## TICKET-53: Fix Server-Side Fetches Failing with Relative API URLs ✅✅
 
 **Descrição**
 Corrigir o problema em que páginas com Server Components (SSR) — como `/pages/datasets` — não conseguiam carregar dados da API, mostrando "0 resultados" e "Não encontrou o que procurava?" apesar de as contagens no sidebar estarem correctas (19 842 datasets).
@@ -2547,7 +2547,7 @@ O TICKET-52 corrigiu os fetches **client-side** (homepage) mudando para URLs rel
 
 ---
 
-## TICKET-54: Admin — Organization Sections Wiring, Pagination & Harvester Fix ✅
+## TICKET-54: Admin — Organization Sections Wiring, Pagination & Harvester Fix ✅✅
 
 **Descrição**
 Conectar à API real as secções de backoffice da organização que estavam com dados hardcoded/placeholder (Discussões e Membros), corrigir o filtro de harvesters por organização no backend, e implementar paginação real client-side em todas as secções da organização (o componente `Table` do Agora Design System não pagina os dados automaticamente — apenas mostra o controlo visual).
@@ -2623,7 +2623,7 @@ Conectar à API real as secções de backoffice da organização que estavam com
 
 ---
 
-## TICKET-55: Admin Sistema — Fix Mock Data, Broken Search/Filters, Missing API Wiring & Routing ✅
+## TICKET-55: Admin Sistema — Fix Mock Data, Broken Search/Filters, Missing API Wiring & Routing ✅✅
 
 **Descrição**
 Corrigir os bugs e lacunas nas páginas de administração do sistema (`/pages/admin/system/`). Cinco componentes usam dados mock hardcoded em vez da API real, três componentes com API real têm pesquisa/filtros e paginação não funcionais, o formulário de criação de posts não guarda dados, links de edição apontam para rotas inexistentes, e a página de perfil público mostra sempre o utilizador logado em vez do utilizador visitado.

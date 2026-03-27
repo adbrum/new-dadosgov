@@ -6,7 +6,7 @@
 
 ---
 
-## TICKET-01: Authentication — Login (Conexão API) ✅
+## TICKET-01: Authentication — Login (Conexão API) ✅✅
 
 **Descrição**
 Implementar a lógica de conexão do login: fluxo CSRF → POST login → session cookie, usando o route handler existente.
@@ -473,7 +473,7 @@ Estender `fetchReuses()` para pesquisa/filtros e estender `fetchReuse()` para da
 
 ---
 
-## TICKET-12: Topics/Themes — Dados Dinâmicos (Conexões API v2) 2ª fase ✅
+## TICKET-12: Topics/Themes — Dados Dinâmicos (Conexões API v2) 2ª fase ✅✅
 
 **Descrição**
 Implementar tipos e funções para consumir a API v2 de topics nas páginas públicas de themes.
@@ -508,7 +508,7 @@ Implementar tipos e funções para consumir a API v2 de topics nas páginas púb
 
 ---
 
-## TICKET-13: User Profile (Conexões API) ✅
+## TICKET-13: User Profile (Conexões API) ✅✅
 
 **Descrição**
 Implementar as funções de fetch para perfis de utilizador: perfil público e dados do utilizador autenticado (datasets, reuses, organizações).
@@ -563,7 +563,7 @@ Implementar as funções de fetch para perfis de utilizador: perfil público e d
 
 ---
 
-## TICKET-17: Posts/News — Leitura (Conexões API) ✅
+## TICKET-17: Posts/News — Leitura (Conexões API) ✅✅
 
 **Descrição**
 Implementar tipos e funções para consumir a API de posts nas páginas públicas de notícias, e integrar nas páginas de artigos existentes.
@@ -596,7 +596,7 @@ Implementar tipos e funções para consumir a API de posts nas páginas pública
 
 ---
 
-## TICKET-18: Notifications (Conexão API) ✅
+## TICKET-18: Notifications (Conexão API) ✅✅
 
 **Descrição**
 Implementar tipo e função para consumir notificações do utilizador autenticado.
@@ -629,7 +629,7 @@ Implementar tipo e função para consumir notificações do utilizador autentica
 
 ---
 
-## TICKET-19: Global Search — Suggest Multi-Entidade (Conexões API) ✅
+## TICKET-19: Global Search — Suggest Multi-Entidade (Conexões API) ✅✅
 
 **Descrição**
 Implementar uma pesquisa global inspirada no projeto francês cdata (data.gouv.fr): dropdown de seleção de tipo ao digitar + página de resultados com sidebar de tipos/contagens e lista paginada.
@@ -741,7 +741,7 @@ Definir a estratégia de dados e implementar os tipos e funções para substitui
 
 ---
 
-## TICKET-22: Spatial/Geographic (Conexões API) ✅
+## TICKET-22: Spatial/Geographic (Conexões API) ✅✅
 
 **Estado:** Concluído — PR #88 merged.
 
@@ -785,7 +785,7 @@ Implementar tipos e funções para a API spatial: suggest de zonas, granularidad
 
 ---
 
-## TICKET-23: Reports — Submissão (Conexão API) — ✅
+## TICKET-23: Reports — Submissão (Conexão API) — ✅✅
 
 **Descrição**
 Implementar tipos e funções para submeter reports de conteúdo ao backend.
@@ -816,7 +816,7 @@ Implementar tipos e funções para submeter reports de conteúdo ao backend.
 
 ---
 
-## TICKET-24: Organization Membership (Conexões API) ✅
+## TICKET-24: Organization Membership (Conexões API) ✅✅
 
 **Descrição**
 Implementar as funções de pedido de adesão a organizações e gestão de membros.
@@ -861,7 +861,7 @@ Implementar as funções de pedido de adesão a organizações e gestão de memb
 
 ---
 
-## TICKET-25: CSV/Data Export (Conexão API) ✅
+## TICKET-25: CSV/Data Export (Conexão API) ✅✅
 
 **Descrição**
 Implementar funções utilitárias para gerar URLs de export CSV dos endpoints do backend.
@@ -899,7 +899,7 @@ Implementar funções utilitárias para gerar URLs de export CSV dos endpoints d
 
 ---
 
-## TICKET-26: Admin — Datasets CRUD (Conexões API) ✅
+## TICKET-26: Admin — Datasets CRUD (Conexões API) ✅✅
 
 **Descrição**
 Implementar toda a camada de conexão (tipos TS + funções API) necessária para as páginas admin de datasets: listagem pessoal, criação, edição, eliminação, e gestão de resources.

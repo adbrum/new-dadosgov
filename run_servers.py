@@ -219,13 +219,20 @@ def run_servers_pm2():
     subprocess.run(["pm2", "list"])
 
 
-def run_servers_docker():
+def run_servers_docker(rebuild=False, production=False):
     """Inicia os servidores via Docker Compose (backend + frontend)"""
-    print("\n=== Iniciando servidores em MODO DOCKER ===\n")
+    mode_label = "PRODUÇÃO" if production else "DESENVOLVIMENTO"
+    print(f"\n=== Iniciando servidores em MODO DOCKER ({mode_label}) ===\n")
 
-    print("A construir e iniciar o backend (app + worker + beat + mailpit)...")
+    build_flag = ["--build"] if rebuild else []
+    # In production mode, use only the base docker-compose.yml (no override)
+    compose_flag = ["-f", "docker-compose.yml"] if production else []
+
+    print("A iniciar o backend (app + worker + beat + mailpit)...")
+    if rebuild:
+        print("  (com rebuild de imagens)")
     backend_result = subprocess.run(
-        ["docker", "compose", "up", "-d", "--build"],
+        ["docker", "compose"] + compose_flag + ["up", "-d"] + build_flag,
         cwd="backend",
         stdout=sys.stdout,
         stderr=sys.stderr,
@@ -235,9 +242,11 @@ def run_servers_docker():
         print("\n❌ Falha ao iniciar o backend via Docker!")
         return
 
-    print("\nA construir e iniciar o frontend...")
+    print("\nA iniciar o frontend...")
+    if rebuild:
+        print("  (com rebuild de imagens)")
     frontend_result = subprocess.run(
-        ["docker", "compose", "up", "-d", "--build"],
+        ["docker", "compose"] + compose_flag + ["up", "-d"] + build_flag,
         cwd="frontend",
         stdout=sys.stdout,
         stderr=sys.stderr,
@@ -248,7 +257,10 @@ def run_servers_docker():
         return
 
     print("\n✓ Servidores Docker iniciados com sucesso!")
-    print("  Backend:  http://localhost:7000")
+    if production:
+        print("  Backend:  http://localhost:7000 (gunicorn)")
+    else:
+        print("  Backend:  http://localhost:7000 (hot-reload ativo)")
     print("  Frontend: http://localhost:3000")
     print("  Mailpit:  http://localhost:8025")
     print("\nComandos úteis:")
@@ -275,7 +287,13 @@ def show_menu():
     print("     - Frontend em modo de produção (npm run start)")
     print("\n  4. Modo Docker")
     print("     - Backend e frontend via Docker Compose")
-    print("     - Inclui Celery worker, beat e Mailpit")
+    print("     - Código montado como volume (hot-reload)")
+    print("\n  5. Modo Docker (rebuild)")
+    print("     - Igual ao modo 4, mas reconstrói as imagens")
+    print("     - Usar após alterar dependências (pyproject.toml, package.json)")
+    print("\n  6. Modo Docker (produção)")
+    print("     - Backend com gunicorn (4 workers)")
+    print("     - Ignora o override (sem hot-reload, sem volumes de código)")
     print("\n  0. Sair")
     print("\n" + "=" * 50)
 
@@ -286,7 +304,7 @@ def main():
         show_menu()
 
         try:
-            choice = input("\nDigite sua opção (0-4): ").strip()
+            choice = input("\nDigite sua opção (0-6): ").strip()
 
             if choice == "0":
                 print("\nSaindo...")
@@ -320,8 +338,16 @@ def main():
                 run_servers_docker()
                 break
 
+            elif choice == "5":
+                run_servers_docker(rebuild=True)
+                break
+
+            elif choice == "6":
+                run_servers_docker(rebuild=True, production=True)
+                break
+
             else:
-                print("\n❌ Opção inválida! Por favor, escolha 0, 1, 2, 3 ou 4.")
+                print("\n❌ Opção inválida! Por favor, escolha 0, 1, 2, 3, 4, 5 ou 6.")
                 time.sleep(1)
 
         except KeyboardInterrupt:

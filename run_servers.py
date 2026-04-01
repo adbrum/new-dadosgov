@@ -228,7 +228,7 @@ def run_servers_docker(rebuild=False, production=False):
     # In production mode, use only the base docker-compose.yml (no override)
     compose_flag = ["-f", "docker-compose.yml"] if production else []
 
-    print("A iniciar o backend (app + worker + beat + mailpit)...")
+    print("A iniciar o backend (app + worker + beat)...")
     if rebuild:
         print("  (com rebuild de imagens)")
     backend_result = subprocess.run(
@@ -262,7 +262,6 @@ def run_servers_docker(rebuild=False, production=False):
     else:
         print("  Backend:  http://localhost:7000 (hot-reload ativo)")
     print("  Frontend: http://localhost:3000")
-    print("  Mailpit:  http://localhost:8025")
     print("\nComandos úteis:")
     print("  docker compose -f backend/docker-compose.yml logs -f     - Logs do backend")
     print("  docker compose -f frontend/docker-compose.yml logs -f    - Logs do frontend")

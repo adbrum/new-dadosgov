@@ -69,3 +69,6 @@ docs/testsprite-vulnerability-backend-report.md
 
 # Files
 udata-fs/
+
+# Tests
+.playwright-mcp/

@@ -4,6 +4,23 @@ import sys
 import time
 
 
+def git_pull_submodules():
+    """Executa git pull nos repositórios backend e frontend"""
+    for repo in ["backend", "frontend"]:
+        print(f"A atualizar {repo} (git pull)...")
+        result = subprocess.run(
+            ["git", "pull"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            output = result.stdout.strip()
+            print(f"  ✓ {repo}: {output if output else 'já atualizado'}")
+        else:
+            print(f"  ⚠ {repo}: {result.stderr.strip() or 'erro ao executar git pull'}")
+
+
 def stop_pm2_processes():
     """Para os processos pm2 caso existam"""
     print("Parando processos pm2 existentes...")
@@ -310,6 +327,7 @@ def main():
                 sys.exit(0)
 
             elif choice == "1":
+                git_pull_submodules()
                 # Para todos os processos antes de iniciar
                 stop_pm2_processes()
                 stop_normal_processes()
@@ -318,6 +336,7 @@ def main():
                 break
 
             elif choice == "2":
+                git_pull_submodules()
                 # Para todos os processos antes de iniciar
                 stop_pm2_processes()
                 stop_normal_processes()
@@ -326,6 +345,7 @@ def main():
                 break
 
             elif choice == "3":
+                git_pull_submodules()
                 # Para todos os processos antes de iniciar
                 stop_pm2_processes()
                 stop_normal_processes()
@@ -334,14 +354,17 @@ def main():
                 break
 
             elif choice == "4":
+                git_pull_submodules()
                 run_servers_docker()
                 break
 
             elif choice == "5":
+                git_pull_submodules()
                 run_servers_docker(rebuild=True)
                 break
 
             elif choice == "6":
+                git_pull_submodules()
                 run_servers_docker(rebuild=True, production=True)
                 break
 

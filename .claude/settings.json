@@ -66,6 +66,7 @@
     ]
   },
   "enabledPlugins": {
-    "playwright@claude-plugins-official": true
+    "playwright@claude-plugins-official": true,
+    "claude-mem@thedotmack": true
   }
 }

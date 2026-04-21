@@ -72,3 +72,9 @@ udata-fs/
 
 # Tests
 .playwright-mcp/
+
+# Docs DevOps
+docs/diagrams
+docs/ARCHITECTURE_pdf.md
+docs/ARCHITECTURE.md
+docs/ARCHITECTURE.pdf

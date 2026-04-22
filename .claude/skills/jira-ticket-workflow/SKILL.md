@@ -122,6 +122,28 @@ git push -u origin <ticket-id>-<description>
 - **Automatic**: The agent will `git add` and `git commit` automatically after implementing and testing each point.
 - **Manual**: The agent will pause, show the `git status` or `git diff`, **propose the commit message**, and **wait for the user's approval** before making the commit. The user must validate both the changes and the commit message text. Only run `git commit` after explicit user confirmation of the message.
 
+**Manual commit template (MANDATORY format):**
+
+When proposing a manual commit, always include a **"How to test manually in the browser"** section so the user can validate the change before approving. Use this exact structure:
+
+```markdown
+## 📝 Proposta de commit (Ponto N)
+
+**Mensagem:**
+```
+<commit message here>
+```
+
+**Como testar no browser:**
+1. <step-by-step manual test>
+2. <expected outcome>
+3. <edge case to cover, if any>
+
+Aprovas? (sim/não/ajusta)
+```
+
+Keep the test steps concrete (URLs to open, buttons to click, expected labels). Focus on what changed in this commit — don't retest the whole feature.
+
 ---
 
 ### Phase 5: Incremental Implementation

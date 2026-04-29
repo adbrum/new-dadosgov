@@ -21,16 +21,16 @@
 
 Antes de correr a suite garante que o ambiente local está pronto:
 
-| Componente | Necessário | Comando para validar |
-|---|---|---|
-| **Node.js + dependências do frontend** | sim | `cd frontend && npm install` |
-| **Python/uv + dependências do backend** | sim | `cd backend && uv sync --extra dev --extra test` |
-| **MongoDB local em `27017`** | só para a suite normal | `docker ps \| grep udata-mongodb` |
-| **Frontend dev em `:3000`** | só para a suite normal | `curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3000` (200) |
-| **Backend dev em `:7000`** | só para a suite normal | `curl -s -o /dev/null -w "%{http_code}\n" http://localhost:7000/api/1/site/` (200) |
-| **Docker** | só para a DB descartável | `docker --version` |
-| **Test admin/editor** | sim, ambos os modos | `cd backend && uv run udata user create --email e2e-admin@dados.gov.pt --first-name E2E --last-name Admin --password 'E2eAdmin2026!' --admin` (idem editor) |
-| **Browsers Playwright** | sim | `cd frontend && npx playwright install chromium` |
+| Componente                              | Necessário               | Comando para validar                                                                                                                                        |
+| --------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Node.js + dependências do frontend**  | sim                      | `cd frontend && npm install`                                                                                                                                |
+| **Python/uv + dependências do backend** | sim                      | `cd backend && uv sync --extra dev --extra test`                                                                                                            |
+| **MongoDB local em `27017`**            | só para a suite normal   | `docker ps \| grep udata-mongodb`                                                                                                                           |
+| **Frontend dev em `:3000`**             | só para a suite normal   | `curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3000` (200)                                                                                      |
+| **Backend dev em `:7000`**              | só para a suite normal   | `curl -s -o /dev/null -w "%{http_code}\n" http://localhost:7000/api/1/site/` (200)                                                                          |
+| **Docker**                              | só para a DB descartável | `docker --version`                                                                                                                                          |
+| **Test admin/editor**                   | sim, ambos os modos      | `cd backend && uv run udata user create --email e2e-admin@dados.gov.pt --first-name E2E --last-name Admin --password 'E2eAdmin2026!' --admin` (idem editor) |
+| **Browsers Playwright**                 | sim                      | `cd frontend && npx playwright install chromium`                                                                                                            |
 
 > O test admin e editor são partilhados entre os dois modos. As fixtures (org/dataset/reuse) são geradas automaticamente pelo `globalSetup` em cada modo.
 
@@ -61,14 +61,14 @@ frontend/
 
 ### Projects no `playwright.config.ts`
 
-| Project | testDir | Pré-requisitos | Quando usar |
-|---|---|---|---|
-| `frontend-public` | `tests/e2e/frontend-public` | dev frontend `:3000` | suite anónima pública |
-| `auth-setup` | `auth.setup.ts` | dev frontend + backend | corre 1× e grava cookies |
-| `backoffice` | `tests/e2e/backoffice` (excl. `disposable/`) | depende de `auth-setup` | admin pages não-destrutivas |
-| `auth-setup-disposable` | `auth.setup.disposable.ts` | stack disposable arrancada | login no backend de teste |
-| `backoffice-disposable` | `tests/e2e/backoffice/disposable` | depende de `auth-setup-disposable` | CRUD destrutivo (delete/edit) |
-| `metrics` | `metrics-*.spec.ts` | dev frontend | suite específica de métricas |
+| Project                 | testDir                                      | Pré-requisitos                     | Quando usar                   |
+| ----------------------- | -------------------------------------------- | ---------------------------------- | ----------------------------- |
+| `frontend-public`       | `tests/e2e/frontend-public`                  | dev frontend `:3000`               | suite anónima pública         |
+| `auth-setup`            | `auth.setup.ts`                              | dev frontend + backend             | corre 1× e grava cookies      |
+| `backoffice`            | `tests/e2e/backoffice` (excl. `disposable/`) | depende de `auth-setup`            | admin pages não-destrutivas   |
+| `auth-setup-disposable` | `auth.setup.disposable.ts`                   | stack disposable arrancada         | login no backend de teste     |
+| `backoffice-disposable` | `tests/e2e/backoffice/disposable`            | depende de `auth-setup-disposable` | CRUD destrutivo (delete/edit) |
+| `metrics`               | `metrics-*.spec.ts`                          | dev frontend                       | suite específica de métricas  |
 
 ---
 
@@ -92,16 +92,16 @@ cd backend && inv serve
 cd frontend
 
 # Suite pública anónima (20 specs, ~187 testes)
-npx playwright test --project=frontend-public
+npx playwright test --project=frontend-public --reporter=html
 
 # Suite backoffice (17 specs, ~134 testes; depende do auth-setup)
-npx playwright test --project=auth-setup --project=backoffice
+npx playwright test --project=auth-setup --project=backoffice --reporter=html
 
 # Tudo junto: público + backoffice
-npx playwright test --project=auth-setup --project=frontend-public --project=backoffice
+npx playwright test --project=auth-setup --project=frontend-public --project=backoffice --reporter=html
 
 # Um único spec
-npx playwright test tests/e2e/frontend-public/01-homepage.spec.ts --project=frontend-public
+npx playwright test tests/e2e/frontend-public/01-homepage.spec.ts --project=frontend-public --reporter=html
 
 # Filtrar por nome
 npx playwright test -g "HP-01" --project=frontend-public
@@ -109,10 +109,10 @@ npx playwright test -g "HP-01" --project=frontend-public
 
 ### Resultados típicos
 
-| Suite | Passed | Skipped | Failed | Tempo |
-|---|---|---|---|---|
-| Pública | ~158 | ~28 | 0 | ~4 min |
-| Backoffice | ~78 | ~57 | 0 | ~4 min |
+| Suite      | Passed | Skipped | Failed | Tempo  |
+| ---------- | ------ | ------- | ------ | ------ |
+| Pública    | ~158   | ~28     | 0      | ~4 min |
+| Backoffice | ~78    | ~57     | 0      | ~4 min |
 
 > Skipped no backoffice = testes que precisam de fixtures destrutivas (criar/apagar). Para os correr, ver a próxima secção.
 
@@ -122,12 +122,12 @@ npx playwright test -g "HP-01" --project=frontend-public
 
 Usado para **testes destrutivos** (criar dataset, apagar reuse, mudar role de utilizador, etc.). Tudo o que mexer em dados reais corre numa **stack isolada**:
 
-| Componente | Porta | Local |
-|---|---|---|
-| MongoDB de teste | `27019` | container `udata-mongodb-test` (tmpfs — wiped a cada arranque) |
-| Redis de teste | `6380` | container `udata-redis-test` (tmpfs) |
-| Backend de teste | `7001` | `uv run flask --app udata.wsgi_test:app run --host 127.0.0.1 --port 7001` |
-| Frontend de teste | `3001` | `next dev -p 3001` (`NEXT_DIST_DIR=.next-test`, `BACKEND_URL=http://127.0.0.1:7001`) |
+| Componente        | Porta   | Local                                                                                |
+| ----------------- | ------- | ------------------------------------------------------------------------------------ |
+| MongoDB de teste  | `27019` | container `udata-mongodb-test` (tmpfs — wiped a cada arranque)                       |
+| Redis de teste    | `6380`  | container `udata-redis-test` (tmpfs)                                                 |
+| Backend de teste  | `7001`  | `uv run flask --app udata.wsgi_test:app run --host 127.0.0.1 --port 7001`            |
+| Frontend de teste | `3001`  | `next dev -p 3001` (`NEXT_DIST_DIR=.next-test`, `BACKEND_URL=http://127.0.0.1:7001`) |
 
 A stack arranca e desliga automaticamente a partir do `globalSetup` quando o filtro de project inclui `*-disposable` ou quando `PLAYWRIGHT_USE_DISPOSABLE=1` está definido.
 
@@ -204,6 +204,7 @@ npx playwright show-report
 ```
 
 O comando abre o browser default em `http://localhost:9323` com:
+
 - **Tabs** filtráveis (passed / failed / flaky / skipped)
 - **Trace viewer** (timeline + DOM snapshot por step) — clica em "View trace" no teste falhado
 - **Screenshots** automáticos em failures (`screenshot: "only-on-failure"`)
@@ -226,17 +227,17 @@ npx playwright show-trace test-results/<spec>/trace.zip
 
 Todas opcionais. Default = comportamento normal.
 
-| Variável | Efeito |
-|---|---|
-| `PLAYWRIGHT_USE_DISPOSABLE=1` | Força arranque da stack disposable mesmo sem filtro de project |
-| `PLAYWRIGHT_SKIP_WARMUP=1` | Pula pre-compilation Next.js (mais rápido em dev local quente) |
-| `PLAYWRIGHT_SKIP_SEED=1` | Não cria nem apaga fixtures na dev DB |
-| `PLAYWRIGHT_KEEP_FIXTURES=1` | Deixa a stack disposable a correr no fim (debug) |
-| `TEST_ADMIN_EMAIL` / `TEST_ADMIN_PASSWORD` | Credenciais admin (defaults `e2e-admin@dados.gov.pt` / `E2eAdmin2026!`) |
-| `TEST_EDITOR_EMAIL` / `TEST_EDITOR_PASSWORD` | Credenciais editor (defaults `e2e-editor@dados.gov.pt` / `E2eEditor2026!`) |
-| `TEST_BACKEND_URL` | URL alternativa para o backend de teste (default `http://127.0.0.1:7001`) |
-| `BACKEND_URL` | Lido pelo `next.config.ts` ao arrancar o frontend (default `http://127.0.0.1:7000`) |
-| `NEXT_DIST_DIR` | Pasta de build do Next.js — usar `.next-test` em paralelo com o `.next` da dev |
+| Variável                                     | Efeito                                                                              |
+| -------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `PLAYWRIGHT_USE_DISPOSABLE=1`                | Força arranque da stack disposable mesmo sem filtro de project                      |
+| `PLAYWRIGHT_SKIP_WARMUP=1`                   | Pula pre-compilation Next.js (mais rápido em dev local quente)                      |
+| `PLAYWRIGHT_SKIP_SEED=1`                     | Não cria nem apaga fixtures na dev DB                                               |
+| `PLAYWRIGHT_KEEP_FIXTURES=1`                 | Deixa a stack disposable a correr no fim (debug)                                    |
+| `TEST_ADMIN_EMAIL` / `TEST_ADMIN_PASSWORD`   | Credenciais admin (defaults `e2e-admin@dados.gov.pt` / `E2eAdmin2026!`)             |
+| `TEST_EDITOR_EMAIL` / `TEST_EDITOR_PASSWORD` | Credenciais editor (defaults `e2e-editor@dados.gov.pt` / `E2eEditor2026!`)          |
+| `TEST_BACKEND_URL`                           | URL alternativa para o backend de teste (default `http://127.0.0.1:7001`)           |
+| `BACKEND_URL`                                | Lido pelo `next.config.ts` ao arrancar o frontend (default `http://127.0.0.1:7000`) |
+| `NEXT_DIST_DIR`                              | Pasta de build do Next.js — usar `.next-test` em paralelo com o `.next` da dev      |
 
 ### Combinações úteis
 

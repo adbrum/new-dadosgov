@@ -1,7 +1,7 @@
 ---
 name: jira-ticket-workflow
 description: >
-  Structured Jira ticket-driven development workflow specific to the new-dadosgov project.
+  Structured Jira ticket-driven development workflow specific to the dadosgov project.
   Triggers when the user says "work on ticket", "pick up ticket", "implement TICKET-XX",
   or provides a ticket ID from the project's Jira-style backlog. Handles frontend/backend
   selection, branch creation in the correct separated repository, and incremental commits
@@ -9,9 +9,9 @@ description: >
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
-# Jira Ticket Workflow — new-dadosgov
+# Jira Ticket Workflow — dadosgov
 
-You are a Senior Software Engineer & Automation Agent working on the **new-dadosgov** project
+You are a Senior Software Engineer & Automation Agent working on the **dadosgov** project
 (Portal de Dados Abertos — dados.gov.pt). This skill defines a disciplined, incremental
 development workflow: read ticket → choose repo → create branch → implement each point → commit.
 
@@ -27,12 +27,12 @@ gets its own commit before moving on.
 ├── frontend/     ← Next.js app (git submodule)
 │   remotes:
 │     origin    → git@github.com:adbrum/udata_agora.git
-│     newdadosgov → git@github.com:adbrum/new-dadosgov.git
+│     newdadosgov → git@github.com:adbrum/dadosgov.git
 │
 └── backend/      ← udata/Flask app (git submodule)
     remotes:
       origin    → git@github.com:amagovpt/udata-pt.git
-      newdadosgov → git@github.com:adbrum/new-dadosgov.git
+      newdadosgov → git@github.com:adbrum/dadosgov.git
 ```
 
 Each is a **git submodule** (which operates as an independent git repository) with its own branches and remotes. Always `cd`
@@ -49,9 +49,11 @@ into the correct submodule directory before running any git commands.
 Do not proceed until provided. Then:
 
 1. **Search the ticket** in the project's local backlog:
+
    ```
    <PROJECT_ROOT>/docs/jira-tickets-frontend-backend.md
    ```
+
    Use `grep` or `Read` to find the ticket section by its ID (e.g. `## TICKET-05`).
 
 2. **Read and parse** the full ticket:
@@ -98,6 +100,7 @@ git push -u origin <branch-name>
 ```
 
 **Branch naming rules:**
+
 - **ALWAYS use English**, lowercase, with hyphens — even if the ticket title is in Portuguese
 - Format: `<ticket-id>-<short-description>`
 - Example: `ticket-05-dataset-search-api`
@@ -107,6 +110,7 @@ git push -u origin <branch-name>
 **Propose the branch name to the user and confirm** before creating it.
 
 After confirmation:
+
 ```bash
 cd <REPO_DIR>
 git checkout -b <ticket-id>-<description>
@@ -131,15 +135,18 @@ When proposing a manual commit, always include a **"How to test manually in the 
 
 **Mensagem:**
 ```
+
 <commit message here>
 ```
 
 **Como testar no browser:**
+
 1. <step-by-step manual test>
 2. <expected outcome>
 3. <edge case to cover, if any>
 
 Aprovas? (sim/não/ajusta)
+
 ```
 
 Keep the test steps concrete (URLs to open, buttons to click, expected labels). Focus on what changed in this commit — don't retest the whole feature.
@@ -152,22 +159,27 @@ Go to the **"O que deve ser feito"** section of the ticket. Number each point.
 For **each point**, follow this cycle:
 
 ```
+
 For each implementation point:
-  1. Read and understand the requirement
-  2. Explore the relevant codebase area (read existing files first)
-  3. Implement the change
-  4. Run the relevant test (if applicable)
-  5. If **Manual** strategy: show `git status`/diff and STOP for user approval.
-  6. Commit with a clear English message
-  7. Inform the user: "✅ Point N done. Starting point N+1..."
+
+1. Read and understand the requirement
+2. Explore the relevant codebase area (read existing files first)
+3. Implement the change
+4. Run the relevant test (if applicable)
+5. If **Manual** strategy: show `git status`/diff and STOP for user approval.
+6. Commit with a clear English message
+7. Inform the user: "✅ Point N done. Starting point N+1..."
+
 ```
 
 **Commit message format (ENGLISH ONLY):**
 ```
+
 <type>: <concise description of what was done>
 
 Refs: <TICKET-ID>
-```
+
+````
 
 Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`
 
@@ -177,7 +189,7 @@ git add -A
 git commit -m "feat: add fetchCsrfToken function to services/api.ts
 
 Refs: TICKET-01"
-```
+````
 
 ```bash
 git add -A
@@ -187,14 +199,17 @@ Refs: TICKET-01"
 ```
 
 **Frontend testing guidelines:**
+
 - Run Playwright: `npm run test:e2e` from `frontend/`
 - For unit/integration tests specific to a file, run only that test
 
 **Backend testing guidelines:**
+
 - Run pytest: `uv run pytest <path-to-test-file>` from `backend/`
 - Use `@pytest.mark.django_db` for database tests
 
 **Between points:** Always tell the user:
+
 > "✅ Completed point N: [brief description]. Starting point N+1: [brief description]..."
 
 ---
@@ -212,6 +227,7 @@ After all points are complete:
    - Mark `[x]` if satisfied, `[ ]` if not
 
 3. **Present a final summary** to the user:
+
    ```
    ## ✅ Ticket <TICKET-ID> — Implementation Summary
 
@@ -277,6 +293,7 @@ git push origin ticket-XX-description
 ## Ticket Source File
 
 All tickets are documented in:
+
 ```
 <PROJECT_ROOT>/docs/jira-tickets-frontend-backend.md
 ```

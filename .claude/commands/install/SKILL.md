@@ -14,13 +14,13 @@ Rules:
 ## Backend install command
 
 ```bash
-cd /home/adbrum/workspace/babel/new-dadosgov/backend && uv sync --group dev
+cd /home/adbrum/workspace/babel/dadosgov/backend && uv sync --group dev
 ```
 
 ## Frontend install command
 
 ```bash
-cd /home/adbrum/workspace/babel/new-dadosgov/frontend && npm install
+cd /home/adbrum/workspace/babel/dadosgov/frontend && npm install
 ```
 
 Run both in parallel when installing all. Report the result of each installation (success or errors).

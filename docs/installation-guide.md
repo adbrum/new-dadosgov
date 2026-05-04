@@ -8,17 +8,17 @@ Guia passo a passo para replicar a instalacao completa do sistema dados.gov.pt (
 
 Antes de comecar, garantir que as seguintes ferramentas estao instaladas:
 
-| Ferramenta | Versao minima | Verificacao |
-|---|---|---|
-| Git | 2.x | `git --version` |
-| Docker | 24.x | `docker --version` |
-| Docker Compose | 2.x | `docker compose version` |
-| Node.js | 22.x | `node --version` |
-| npm | 10.x | `npm --version` |
-| Python | 3.12.x | `python3 --version` |
-| uv | 0.4+ | `uv --version` |
-| MongoDB | 6.x/7.x | `mongod --version` |
-| Redis | 7.x | `redis-server --version` |
+| Ferramenta     | Versao minima | Verificacao              |
+| -------------- | ------------- | ------------------------ |
+| Git            | 2.x           | `git --version`          |
+| Docker         | 24.x          | `docker --version`       |
+| Docker Compose | 2.x           | `docker compose version` |
+| Node.js        | 22.x          | `node --version`         |
+| npm            | 10.x          | `npm --version`          |
+| Python         | 3.12.x        | `python3 --version`      |
+| uv             | 0.4+          | `uv --version`           |
+| MongoDB        | 6.x/7.x       | `mongod --version`       |
+| Redis          | 7.x           | `redis-server --version` |
 
 > **Nota:** MongoDB e Redis podem correr localmente ou via Docker. A seccao 5 cobre ambas as opcoes.
 
@@ -30,10 +30,10 @@ O projeto usa Git submodules para backend e frontend.
 
 ```bash
 # 1.1 Clonar o monorepo com submodulos
-git clone --recurse-submodules git@github.com:adbrum/new-dadosgov.git
+git clone --recurse-submodules git@github.com:adbrum/dadosgov.git
 
 # 1.2 Entrar no diretorio do projeto
-cd new-dadosgov
+cd dadosgov
 
 # 1.3 Se ja tiver clonado sem --recurse-submodules, inicializar manualmente
 git submodule update --init --recursive
@@ -42,7 +42,7 @@ git submodule update --init --recursive
 ### Estrutura resultante
 
 ```
-new-dadosgov/
+dadosgov/
 ├── backend/          # git@github.com:amagovpt/udata-pt.git
 ├── frontend/         # git@github.com:adbrum/udata_agora.git
 ├── docs/
@@ -179,10 +179,10 @@ ls -la backend/udata/auth/saml/credentials/
 
 O diretorio deve conter:
 
-| Ficheiro | Descricao |
-|---|---|
-| `private.pem` | Chave privada do Service Provider (RSA 4096) |
-| `AMA.pem` | Certificado publico do Service Provider |
+| Ficheiro       | Descricao                                             |
+| -------------- | ----------------------------------------------------- |
+| `private.pem`  | Chave privada do Service Provider (RSA 4096)          |
+| `AMA.pem`      | Certificado publico do Service Provider               |
 | `metadata.xml` | Metadados XML do Identity Provider (Autenticacao.gov) |
 
 > **Importante:** Estes ficheiros sao sensiveis e nao devem ser commitados. Se nao existirem no repositorio, obter junto da equipa ou gerar novos:
@@ -429,46 +429,46 @@ docker compose ps
 
 ## 10. Comandos uteis pos-instalacao
 
-| Acao | Comando |
-|---|---|
-| Ver logs do backend (Docker) | `cd backend && docker compose logs -f app` |
-| Ver logs do worker (Docker) | `cd backend && docker compose logs -f worker` |
-| Parar tudo (Docker) | `docker compose down` |
-| Reconstruir containers | `docker compose up -d --build` |
-| Correr testes backend | `cd backend && docker compose -f docker-compose.test.yml up -d && uv run pytest` |
-| Lint backend | `cd backend && uv run ruff check --fix . && uv run ruff format .` |
-| Lint frontend | `cd frontend && npm run lint` |
-| Build producao frontend | `cd frontend && npm run build` |
-| Inicializar Elasticsearch | `cd backend && uv run udata search init` |
+| Acao                         | Comando                                                                          |
+| ---------------------------- | -------------------------------------------------------------------------------- |
+| Ver logs do backend (Docker) | `cd backend && docker compose logs -f app`                                       |
+| Ver logs do worker (Docker)  | `cd backend && docker compose logs -f worker`                                    |
+| Parar tudo (Docker)          | `docker compose down`                                                            |
+| Reconstruir containers       | `docker compose up -d --build`                                                   |
+| Correr testes backend        | `cd backend && docker compose -f docker-compose.test.yml up -d && uv run pytest` |
+| Lint backend                 | `cd backend && uv run ruff check --fix . && uv run ruff format .`                |
+| Lint frontend                | `cd frontend && npm run lint`                                                    |
+| Build producao frontend      | `cd frontend && npm run build`                                                   |
+| Inicializar Elasticsearch    | `cd backend && uv run udata search init`                                         |
 
 ---
 
 ## Resumo dos ficheiros de configuracao
 
-| # | Ficheiro | Tipo | Acao |
-|---|---|---|---|
-| 1 | `.env` (raiz) | GitHub PAT | Criar manualmente |
-| 2 | `backend/.env` | Variaveis de ambiente do backend | Criar a partir do template |
-| 3 | `backend/udata.cfg` | Configuracao Flask | Ja incluido no repo |
-| 4 | `backend/docker-compose.override.yml` | Override Docker local | Copiar do `.example` |
-| 5 | `backend/udata/auth/saml/credentials/private.pem` | Chave privada SAML | Obter da equipa ou gerar |
-| 6 | `backend/udata/auth/saml/credentials/AMA.pem` | Certificado SAML | Obter da equipa ou gerar |
-| 7 | `backend/udata/auth/saml/credentials/metadata.xml` | Metadados IdP | Obter da Autenticacao.gov |
-| 8 | `frontend/.env.local` | Variaveis de ambiente do frontend | Copiar do `.env.example` |
+| #   | Ficheiro                                           | Tipo                              | Acao                       |
+| --- | -------------------------------------------------- | --------------------------------- | -------------------------- |
+| 1   | `.env` (raiz)                                      | GitHub PAT                        | Criar manualmente          |
+| 2   | `backend/.env`                                     | Variaveis de ambiente do backend  | Criar a partir do template |
+| 3   | `backend/udata.cfg`                                | Configuracao Flask                | Ja incluido no repo        |
+| 4   | `backend/docker-compose.override.yml`              | Override Docker local             | Copiar do `.example`       |
+| 5   | `backend/udata/auth/saml/credentials/private.pem`  | Chave privada SAML                | Obter da equipa ou gerar   |
+| 6   | `backend/udata/auth/saml/credentials/AMA.pem`      | Certificado SAML                  | Obter da equipa ou gerar   |
+| 7   | `backend/udata/auth/saml/credentials/metadata.xml` | Metadados IdP                     | Obter da Autenticacao.gov  |
+| 8   | `frontend/.env.local`                              | Variaveis de ambiente do frontend | Copiar do `.env.example`   |
 
 ---
 
 ## Portas utilizadas
 
-| Servico | Porta | Descricao |
-|---|---|---|
-| Frontend (Next.js) | 3000 | Interface web |
-| Backend API (Flask) | 7000 | API REST |
-| MongoDB | 27017 | Base de dados |
-| Redis | 6379 | Cache + message broker |
-| Elasticsearch | 9200 | Motor de pesquisa (opcional) |
-| Mailpit SMTP | 1025 | Servidor de email local (dev) |
-| Mailpit UI | 8025 | Interface web do Mailpit |
+| Servico             | Porta | Descricao                     |
+| ------------------- | ----- | ----------------------------- |
+| Frontend (Next.js)  | 3000  | Interface web                 |
+| Backend API (Flask) | 7000  | API REST                      |
+| MongoDB             | 27017 | Base de dados                 |
+| Redis               | 6379  | Cache + message broker        |
+| Elasticsearch       | 9200  | Motor de pesquisa (opcional)  |
+| Mailpit SMTP        | 1025  | Servidor de email local (dev) |
+| Mailpit UI          | 8025  | Interface web do Mailpit      |
 
 ---
 

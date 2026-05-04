@@ -1972,7 +1972,7 @@ Unificar as pesquisas locais das páginas de listagem (datasets, organizations, 
   - Ao clicar numa categoria diferente, a URL muda para a página dessa categoria com `?q=` preservado — os filtros incompatíveis são resetados.
   - A página de destino carrega com a query no `SearchInput` e os resultados já filtrados.
   - Fluxo: utilizador escreve "educação" nos datasets → `CategoryToggles` mostra (ex: datasets 45, APIs 3, reutilizações 12, organizações 7) → clica em "Organizações" → navega para `/organizations?q=educação` → página mostra 7 organizações com "educação" no input de pesquisa.
-- **Estado atual (`new-dadosgov/frontend`)**:
+- **Estado atual (`dadosgov/frontend`)**:
   - Cada página de listagem (datasets, organizations, reuses) já tem `InputSearchBar` que pesquisa localmente com `?q=` — **este comportamento é o correto e deve ser mantido**.
   - `CategoryToggles` existe e mostra as 4 categorias com contagens do `SiteMetrics`, mas **não propaga a query de pesquisa** na navegação e **não mostra totais de pesquisa**.
   - `CategoryToggles` só é usado em `OrganizationsFilters.tsx` — **falta nas páginas de datasets, reuses e dataservices**.

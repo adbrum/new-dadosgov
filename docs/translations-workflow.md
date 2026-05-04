@@ -36,11 +36,11 @@ backend/
 │   └── ...
 ```
 
-| Ficheiro    | Quem o edita                              | Quem o lê                       |
-| ----------- | ----------------------------------------- | ------------------------------- |
+| Ficheiro    | Quem o edita                                 | Quem o lê                    |
+| ----------- | -------------------------------------------- | ---------------------------- |
 | `udata.pot` | gerado automaticamente por `pybabel extract` | é a base de `pybabel update` |
-| `udata.po`  | manualmente (ou via Poedit/Crowdin)       | `pybabel compile`              |
-| `udata.mo`  | gerado por `pybabel compile`              | **Flask-Babel** em runtime      |
+| `udata.po`  | manualmente (ou via Poedit/Crowdin)          | `pybabel compile`            |
+| `udata.mo`  | gerado por `pybabel compile`                 | **Flask-Babel** em runtime   |
 
 > ⚠️ **Importante**: a aplicação só lê o `.mo`. Editar o `.po` sem recompilar **não tem efeito**.
 
@@ -83,9 +83,9 @@ Ordem de prioridade:
 >
 > ```js
 > db.user.updateMany(
->   { prefered_language: { $in: ["en", "fr", "es"] } },
->   { $set: { prefered_language: "pt" } }
-> )
+>   { prefered_language: { $in: ['en', 'fr', 'es'] } },
+>   { $set: { prefered_language: 'pt' } },
+> );
 > ```
 
 ---
@@ -207,12 +207,12 @@ PY
 
 ## 8. Quando reiniciar serviços
 
-| Alteração                                  | Acão                                               |
-| ------------------------------------------ | -------------------------------------------------- |
-| Editaste `.po` mas **não** recompilaste    | Sem efeito. Recompilar é obrigatório.              |
-| Recompilaste o `.mo`                       | Reiniciar `inv serve` **e** `inv work` (Celery).   |
-| Adicionaste idioma novo no `udata.cfg`     | Reiniciar `inv serve` e `inv work`.                |
-| Mudaste `DEFAULT_LANGUAGE`                 | Reiniciar `inv serve` e `inv work`.                |
+| Alteração                               | Acão                                             |
+| --------------------------------------- | ------------------------------------------------ |
+| Editaste `.po` mas **não** recompilaste | Sem efeito. Recompilar é obrigatório.            |
+| Recompilaste o `.mo`                    | Reiniciar `inv serve` **e** `inv work` (Celery). |
+| Adicionaste idioma novo no `udata.cfg`  | Reiniciar `inv serve` e `inv work`.              |
+| Mudaste `DEFAULT_LANGUAGE`              | Reiniciar `inv serve` e `inv work`.              |
 
 > O Flask-Babel carrega os `.mo` no arranque da app e mantém-nos em cache na thread principal. Sem reiniciar não vês as alterações.
 
@@ -225,14 +225,17 @@ PY
 Verifica por esta ordem:
 
 1. **`.mo` desatualizado**:
+
    ```bash
    ls -la backend/udata/translations/pt/LC_MESSAGES/udata.{po,mo}
    ```
+
    Se o `.po` for mais recente que o `.mo`, recompila.
 
 2. **Entrada marcada `fuzzy`** — abre o `.po` e procura `#, fuzzy`. Remove a flag depois de confirmar a tradução.
 
 3. **`prefered_language` do utilizador**:
+
    ```bash
    uv run python -c "
    from udata.app import standalone, create_app
@@ -245,9 +248,10 @@ Verifica por esta ordem:
    ```
 
 4. **`DEFAULT_LANGUAGE` não carregado** — confirma que o worker está a correr de dentro de `backend/`:
+
    ```bash
    ps aux | grep celery
-   # Deve mostrar working directory `/.../new-dadosgov/backend`
+   # Deve mostrar working directory `/.../dadosgov/backend`
    ```
 
 5. **`udata.cfg` ignorado** — verifica logs do arranque, devem aparecer estas configs:

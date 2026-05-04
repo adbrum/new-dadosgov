@@ -24,16 +24,16 @@
 
 Instalar no sistema operativo **antes** de começar:
 
-| Ferramenta | Versão | Instalação |
-|---|---|---|
-| **Python** | 3.11, 3.12 ou 3.13 | [python.org](https://www.python.org/downloads/) |
-| **uv** | Última versão | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
-| **Node.js** | 22.x | [nodejs.org](https://nodejs.org/) ou `nvm install 22` |
-| **npm** | Vem com Node.js | — |
-| **Git** | Última versão | `sudo apt install git` |
-| **MongoDB** | 6.x ou 7.x | Ver secção 3 |
-| **Redis** | 7.x | Ver secção 3 |
-| **Docker** (opcional) | Última versão | [docker.com](https://docs.docker.com/get-docker/) |
+| Ferramenta            | Versão             | Instalação                                            |
+| --------------------- | ------------------ | ----------------------------------------------------- |
+| **Python**            | 3.11, 3.12 ou 3.13 | [python.org](https://www.python.org/downloads/)       |
+| **uv**                | Última versão      | `curl -LsSf https://astral.sh/uv/install.sh \| sh`    |
+| **Node.js**           | 22.x               | [nodejs.org](https://nodejs.org/) ou `nvm install 22` |
+| **npm**               | Vem com Node.js    | —                                                     |
+| **Git**               | Última versão      | `sudo apt install git`                                |
+| **MongoDB**           | 6.x ou 7.x         | Ver secção 3                                          |
+| **Redis**             | 7.x                | Ver secção 3                                          |
+| **Docker** (opcional) | Última versão      | [docker.com](https://docs.docker.com/get-docker/)     |
 
 ### Verificar versões
 
@@ -54,8 +54,8 @@ O projeto usa **git submodules** — o frontend e backend são repositórios sep
 
 ```bash
 # Clonar com submodules
-git clone --recurse-submodules git@github.com:adbrum/new-dadosgov.git
-cd new-dadosgov
+git clone --recurse-submodules git@github.com:adbrum/dadosgov.git
+cd dadosgov
 
 # Se já clonaste sem submodules, inicializar:
 git submodule init
@@ -65,7 +65,7 @@ git submodule update
 ### Estrutura do repositório
 
 ```
-new-dadosgov/
+dadosgov/
 ├── backend/          # Submodule — API REST (Python/Flask/udata)
 ├── frontend/         # Submodule — Interface web (Next.js/React)
 ├── docs/             # Documentação
@@ -77,15 +77,15 @@ new-dadosgov/
 
 Após clonar, os seguintes ficheiros/diretórios **não existem no repositório** e precisam de ser criados ou copiados de um membro da equipa:
 
-| Ficheiro | Caminho | Obrigatório | Como obter |
-|---|---|---|---|
-| `.env` | `backend/.env` | **Sim** | `cp backend/.env.example backend/.env` + pedir valores sensíveis à equipa |
-| `.env.local` | `frontend/.env.local` | **Sim** | `cp frontend/.env.example frontend/.env.local` |
-| `docker-compose.override.yml` | `backend/docker-compose.override.yml` | **Sim** (Docker) | `cp backend/docker-compose.override.yml.example backend/docker-compose.override.yml` |
-| `udata-fs/` | `./udata-fs/` | **Sim** | `mkdir -p udata-fs` (diretório de uploads) |
-| `private.pem` | `backend/udata/auth/saml/credentials/private.pem` | Apenas SAML | Pedir ao admin do projeto |
-| `AMA.pem` | `backend/udata/auth/saml/credentials/AMA.pem` | Apenas SAML | Pedir ao admin do projeto |
-| `metadata.xml` | `backend/udata/auth/saml/credentials/metadata.xml` | Apenas SAML | Pedir ao admin do projeto |
+| Ficheiro                      | Caminho                                            | Obrigatório      | Como obter                                                                           |
+| ----------------------------- | -------------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------ |
+| `.env`                        | `backend/.env`                                     | **Sim**          | `cp backend/.env.example backend/.env` + pedir valores sensíveis à equipa            |
+| `.env.local`                  | `frontend/.env.local`                              | **Sim**          | `cp frontend/.env.example frontend/.env.local`                                       |
+| `docker-compose.override.yml` | `backend/docker-compose.override.yml`              | **Sim** (Docker) | `cp backend/docker-compose.override.yml.example backend/docker-compose.override.yml` |
+| `udata-fs/`                   | `./udata-fs/`                                      | **Sim**          | `mkdir -p udata-fs` (diretório de uploads)                                           |
+| `private.pem`                 | `backend/udata/auth/saml/credentials/private.pem`  | Apenas SAML      | Pedir ao admin do projeto                                                            |
+| `AMA.pem`                     | `backend/udata/auth/saml/credentials/AMA.pem`      | Apenas SAML      | Pedir ao admin do projeto                                                            |
+| `metadata.xml`                | `backend/udata/auth/saml/credentials/metadata.xml` | Apenas SAML      | Pedir ao admin do projeto                                                            |
 
 > Os passos de criação de cada ficheiro estão detalhados nas secções seguintes (4.2, 5.2, 3-B).
 
@@ -98,6 +98,7 @@ O projeto precisa de **MongoDB** (base de dados) e **Redis** (cache + fila de ta
 ### Opção A: Instalar localmente
 
 **MongoDB:**
+
 ```bash
 # Ubuntu/Debian
 sudo apt install -y gnupg curl
@@ -109,6 +110,7 @@ sudo systemctl enable mongod
 ```
 
 **Redis:**
+
 ```bash
 sudo apt install -y redis-server
 sudo systemctl start redis-server
@@ -184,7 +186,7 @@ SERVER_MONGO=localhost
 SERVER_REDIS=localhost
 
 # Uploads de Ficheiros — ALTERAR PARA O TEU PATH ABSOLUTO
-FS_ROOT=/home/SEU_USER/workspace/new-dadosgov/udata-fs
+FS_ROOT=/home/SEU_USER/workspace/dadosgov/udata-fs
 
 # Validação de URLs (apenas dev)
 URLS_ALLOW_LOCAL=True
@@ -196,6 +198,7 @@ URLS_ADDITIONAL_TLDS=local,tst,dev
 ```
 
 > **Após copiar:**
+>
 > 1. Alterar `FS_ROOT` para o caminho absoluto do teu utilizador.
 > 2. Pedir os valores dos campos marcados com `*****` a um membro da equipa (Sentry, passwords, email, reCAPTCHA, SAML, etc.).
 
@@ -274,24 +277,24 @@ Estes ficheiros precisam de ser criados manualmente ou copiados de outro program
 
 ### Obrigatórios
 
-| Ficheiro | Caminho | Descrição | Como obter |
-|---|---|---|---|
-| `.env` | `backend/.env` | Variáveis de ambiente do backend (dados sensíveis) | Pedir à equipa ou criar template (secção 4.2) |
-| `.env.local` | `frontend/.env.local` | Variáveis de ambiente do frontend | `cp .env.example .env.local` |
-| `udata-fs/` | `./udata-fs/` | Diretório de uploads | `mkdir -p udata-fs` |
+| Ficheiro     | Caminho               | Descrição                                          | Como obter                                    |
+| ------------ | --------------------- | -------------------------------------------------- | --------------------------------------------- |
+| `.env`       | `backend/.env`        | Variáveis de ambiente do backend (dados sensíveis) | Pedir à equipa ou criar template (secção 4.2) |
+| `.env.local` | `frontend/.env.local` | Variáveis de ambiente do frontend                  | `cp .env.example .env.local`                  |
+| `udata-fs/`  | `./udata-fs/`         | Diretório de uploads                               | `mkdir -p udata-fs`                           |
 
 ### Opcionais (necessários para SAML / Autenticação.gov)
 
-| Ficheiro | Caminho | Descrição | Como obter |
-|---|---|---|---|
-| `private.pem` | `backend/udata/auth/saml/credentials/private.pem` | Chave privada SP | Pedir ao admin do projeto |
-| `AMA.pem` | `backend/udata/auth/saml/credentials/AMA.pem` | Certificado público SP | Pedir ao admin do projeto |
-| `metadata.xml` | `backend/udata/auth/saml/credentials/metadata.xml` | Metadata do IdP | Pedir ao admin do projeto |
+| Ficheiro       | Caminho                                            | Descrição              | Como obter                |
+| -------------- | -------------------------------------------------- | ---------------------- | ------------------------- |
+| `private.pem`  | `backend/udata/auth/saml/credentials/private.pem`  | Chave privada SP       | Pedir ao admin do projeto |
+| `AMA.pem`      | `backend/udata/auth/saml/credentials/AMA.pem`      | Certificado público SP | Pedir ao admin do projeto |
+| `metadata.xml` | `backend/udata/auth/saml/credentials/metadata.xml` | Metadata do IdP        | Pedir ao admin do projeto |
 
 ### Opcionais (Docker dev)
 
-| Ficheiro | Caminho | Descrição | Como obter |
-|---|---|---|---|
+| Ficheiro                      | Caminho                               | Descrição                  | Como obter                                                           |
+| ----------------------------- | ------------------------------------- | -------------------------- | -------------------------------------------------------------------- |
 | `docker-compose.override.yml` | `backend/docker-compose.override.yml` | Override local para Docker | `cp docker-compose.override.yml.example docker-compose.override.yml` |
 
 ---
@@ -303,22 +306,23 @@ Estes ficheiros precisam de ser criados manualmente ou copiados de outro program
 Na raiz do projeto existe o `run_servers.py` que gere todos os modos de execução:
 
 ```bash
-cd new-dadosgov
+cd dadosgov
 python run_servers.py
 ```
 
 O script apresenta um menu com 6 opções:
 
-| Opção | Modo | Descrição |
-|---|---|---|
+| Opção | Modo                         | Descrição                                                  |
+| ----- | ---------------------------- | ---------------------------------------------------------- |
 | **1** | Desenvolvimento (foreground) | Backend (`inv dev`) + Frontend (`npm run dev`) no terminal |
-| **2** | Segundo plano (PM2) | Backend + Frontend em background via PM2 |
-| **3** | Produção (foreground) | Frontend com `npm run build` + `npm run start` |
-| **4** | Docker | Backend e frontend via Docker Compose (hot-reload) |
-| **5** | Docker (rebuild) | Igual ao 4 mas reconstrói as imagens |
-| **6** | Docker (produção) | Backend com gunicorn, sem hot-reload |
+| **2** | Segundo plano (PM2)          | Backend + Frontend em background via PM2                   |
+| **3** | Produção (foreground)        | Frontend com `npm run build` + `npm run start`             |
+| **4** | Docker                       | Backend e frontend via Docker Compose (hot-reload)         |
+| **5** | Docker (rebuild)             | Igual ao 4 mas reconstrói as imagens                       |
+| **6** | Docker (produção)            | Backend com gunicorn, sem hot-reload                       |
 
 Para desenvolvimento normal, escolher a **opção 1**:
+
 ```
 Backend:  http://localhost:7000
 Frontend: http://localhost:3000
@@ -329,12 +333,14 @@ Parar com `Ctrl+C`.
 ### Opção 2: Manual em dois terminais
 
 **Terminal 1 — Backend:**
+
 ```bash
 cd backend
 uv run inv dev    # Inicia Flask (7000) + Celery worker
 ```
 
 **Terminal 2 — Frontend:**
+
 ```bash
 cd frontend
 npm run dev       # Inicia Next.js (3000)
@@ -344,12 +350,12 @@ npm run dev       # Inicia Next.js (3000)
 
 ## 8. Verificar a instalação
 
-| URL | O que deve aparecer |
-|---|---|
-| http://localhost:7000/api/1/ | Swagger da API (JSON) |
-| http://localhost:3000 | Homepage do portal dados.gov |
-| http://localhost:3000/pages/datasets | Listagem de datasets |
-| http://localhost:3000/pages/admin | Backoffice (requer login) |
+| URL                                  | O que deve aparecer          |
+| ------------------------------------ | ---------------------------- |
+| http://localhost:7000/api/1/         | Swagger da API (JSON)        |
+| http://localhost:3000                | Homepage do portal dados.gov |
+| http://localhost:3000/pages/datasets | Listagem de datasets         |
+| http://localhost:3000/pages/admin    | Backoffice (requer login)    |
 
 ### Testar a API
 
@@ -390,11 +396,11 @@ python run_servers.py
 
 ### Portas em modo Docker
 
-| Serviço | Porta |
-|---|---|
-| Backend API | 7000 |
-| Frontend | 3000 |
-| Mailpit (email dev) | 8025 |
+| Serviço             | Porta |
+| ------------------- | ----- |
+| Backend API         | 7000  |
+| Frontend            | 3000  |
+| Mailpit (email dev) | 8025  |
 
 ---
 
@@ -471,6 +477,7 @@ docker start mongodb
 ### Erro: `CORS blocked` no browser
 
 O frontend está a tentar chamar a API diretamente. Verificar que:
+
 - `NEXT_PUBLIC_API_BASE=/api/1` (relativo, NÃO `http://localhost:7000/api/1`)
 - `BACKEND_URL=http://localhost:7000` (só para o server-side)
 
@@ -511,8 +518,8 @@ npm run dev
 
 ```bash
 # 1. Clonar
-git clone --recurse-submodules git@github.com:adbrum/new-dadosgov.git
-cd new-dadosgov
+git clone --recurse-submodules git@github.com:adbrum/dadosgov.git
+cd dadosgov
 
 # 2. Serviços
 docker run -d --name mongodb -p 27017:27017 mongo:7

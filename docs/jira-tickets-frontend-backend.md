@@ -2762,6 +2762,1131 @@ Corrigir os bugs e lacunas nas páginas de administração do sistema (`/pages/a
 
 ---
 
+## TICKET-56: Stored XSS via Organization Description (VULN-2075)
+
+**Severidade**: HIGH (Stored / Persistent XSS)
+**Origem**: Auditoria de segurança — VULN-2075 (KITS24)
+**Endpoint afetado**: `POST /api/1/organizations/` (campo `description`)
+**Página afetada**: `/pages/organizations/<org-slug>` (renderização da descrição)
+**Localização funcional**: Publicar → Nova Organização → campo *Descrição* (e Editar Organização).
+
+**Descrição**
+
+A aplicação está vulnerável a *Stored XSS*. Um utilizador autenticado com permissão para criar/editar uma organização pode submeter HTML/JavaScript no campo `description` (ex.: `<img src=x onerror=alert('xss')>`). O payload é gravado em MongoDB sem sanitização e, ao ser visualizado por qualquer utilizador (anónimo ou autenticado) que abra a página da organização, é injetado no DOM via `dangerouslySetInnerHTML` e executado no contexto do `origin` `dados.gov.pt`. Permite roubo de cookies de sessão (apesar de `HttpOnly`, o atacante pode realizar pedidos autenticados via `fetch` com `credentials: 'include'`), defacement, *keylogging* e *phishing* dirigido a administradores.
+
+**Causa-Raiz (3 falhas combinadas)**
+
+1. **Backend não sanitiza o input**
+   - [`backend/udata/core/organization/forms.py:50-54`](../backend/udata/core/organization/forms.py#L50-L54) usa `MarkdownField` para `description`.
+   - [`backend/udata/forms/fields.py:700-701`](../backend/udata/forms/fields.py#L700-L701) define `MarkdownField` como simples `TextAreaField` — **não há `bleach.clean()` nem qualquer filtragem**.
+   - O padrão de sanitização correto já existe no projeto: [`backend/udata/core/discussions/forms.py:12-16`](../backend/udata/core/discussions/forms.py#L12-L16) (FIX 5 / VULN-1878) — mas nunca foi replicado para `organization`, `dataset`, `reuse`, `topic` nem `user.about`.
+
+2. **Frontend renderiza com `dangerouslySetInnerHTML` sem sanitização**
+   - [`frontend/src/components/organizations/OrganizationTabs.tsx:243`](../frontend/src/components/organizations/OrganizationTabs.tsx#L243) injeta `organization.description` directamente como HTML.
+   - O mesmo padrão existe noutras entidades — também devem ser corrigidas neste ticket:
+     - [`frontend/src/components/reuses/ReuseDetailClient.tsx:467`](../frontend/src/components/reuses/ReuseDetailClient.tsx#L467) e [`:476`](../frontend/src/components/reuses/ReuseDetailClient.tsx#L476).
+
+3. **CSP do Next.js demasiado permissiva**
+   - [`frontend/next.config.ts:67`](../frontend/next.config.ts#L67) define `script-src 'self' 'unsafe-inline' 'unsafe-eval'`. `'unsafe-inline'` permite handlers de evento inline (`onerror`, `onclick`, …) injetados via HTML — remove a única mitigação que ainda restaria perante uma falha nas camadas 1 e 2.
+   - A CSP do backend ([`backend/udata/app.py:255-259`](../backend/udata/app.py#L255-L259)) é estrita (`script-src 'self'`), mas as páginas `/pages/organizations/<slug>` são servidas pelo Next.js, pelo que a CSP do backend não se aplica a esta superfície.
+
+**O que deve ser feito**
+
+Aplicar **defense-in-depth**: sanitizar no input (backend), escapar/sanitizar no output (frontend), e endurecer a CSP. Cada camada por si só é suficiente para mitigar o *exploit* atual; em conjunto reduzem o risco de regressão futura.
+
+### 1) Backend — Sanitização do input (obrigatório)
+
+Replicar o padrão `_sanitize_html()` de `discussions/forms.py` em `organization/forms.py`:
+
+```python
+# backend/udata/core/organization/forms.py
+import bleach
+
+def _sanitize_html(value):
+    """Strip all HTML tags from a string to prevent XSS."""
+    if value:
+        return bleach.clean(value, tags=[], strip=True)
+    return value
+
+
+class OrganizationForm(ModelForm):
+    # ... campos existentes ...
+
+    def validate(self, **kwargs):
+        self.description.data = _sanitize_html(self.description.data)
+        return super().validate(**kwargs)
+```
+
+Notas:
+- `tags=[]` strippa **toda** a marcação HTML. Se a UX exigir Markdown, a sanitização deve ocorrer **depois** da conversão para HTML, com uma allow-list (`bleach.clean(html, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS, strip=True)`) — sem `script`, `iframe`, `style`, `on*` handlers, `javascript:` URIs, e sem `data:` em `src`.
+- A mesma sanitização deve ser estendida — neste ticket ou num *follow-up* — aos outros formulários com `MarkdownField`: `dataset/forms.py:73,165`, `topic/forms.py:38`, `user/forms.py:24` (`about`), e ao `extras` (livre por design — exige análise do uso).
+
+### 2) Frontend — Sanitização do output
+
+Substituir `dangerouslySetInnerHTML` por uma das opções:
+
+**Opção A (preferida — preserva Markdown):** introduzir `react-markdown` com plugin de sanitização (`rehype-sanitize`) e usar em todos os locais onde hoje há injeção de descrição:
+
+```tsx
+import ReactMarkdown from "react-markdown";
+import rehypeSanitize from "rehype-sanitize";
+
+<div className="mb-32 text-neutral-900 [&_a]:underline [&_a]:text-primary-600">
+  <ReactMarkdown rehypePlugins={[rehypeSanitize]}>
+    {organization.description}
+  </ReactMarkdown>
+</div>
+```
+
+**Opção B (mais simples — perde Markdown):** renderizar como texto puro, deixando o React fazer o *escaping* automático:
+
+```tsx
+<div className="mb-32 text-neutral-900 whitespace-pre-line">
+  {organization.description}
+</div>
+```
+
+Locais a alterar:
+- [`frontend/src/components/organizations/OrganizationTabs.tsx:243`](../frontend/src/components/organizations/OrganizationTabs.tsx#L243)
+- [`frontend/src/components/reuses/ReuseDetailClient.tsx:467`](../frontend/src/components/reuses/ReuseDetailClient.tsx#L467) e [`:476`](../frontend/src/components/reuses/ReuseDetailClient.tsx#L476)
+
+> Auditar o resto de `frontend/src/` antes de fechar o ticket: `grep -r "dangerouslySetInnerHTML" frontend/src/` para garantir que nenhum outro componente renderiza `description`/`about`/`comment` sem escaping.
+
+### 3) Frontend — Hardening da CSP
+
+Em [`frontend/next.config.ts:65-68`](../frontend/next.config.ts#L65-L68), remover `'unsafe-inline'` e `'unsafe-eval'` de `script-src`. Isto exige eliminar quaisquer `<script>` inline e `eval()` no bundle Next.js (ou movê-los para *nonce* / *hash*-based CSP). O Next.js 16 com App Router suporta `nonce` automático via *middleware* — ver [Next.js CSP docs](https://nextjs.org/docs/app/building-your-application/configuring/content-security-policy).
+
+CSP-alvo (após validação):
+
+```
+script-src 'self' 'nonce-<runtime>' https://cdnjs.cloudflare.com;
+```
+
+Se a remoção for inviável a curto prazo, abrir um sub-ticket (`TICKET-56b`) e manter neste ticket apenas as camadas 1 e 2.
+
+### 4) Backend — Migração / limpeza de dados existentes
+
+Existe a possibilidade de já haver descrições maliciosas gravadas (a auditoria foi feita em produção). Criar uma migração one-shot:
+
+```
+backend/udata/migrations/2026-MM-DD-sanitize-organization-descriptions.py
+```
+
+Que percorre todas as `Organization` e aplica `bleach.clean(..., tags=[], strip=True)` ao campo `description`. Documentar em `CHANGELOG.md`.
+
+**Ficheiros a alterar**
+
+| Ficheiro                                                | Alteração                                              |
+| ------------------------------------------------------- | ------------------------------------------------------ |
+| `backend/udata/core/organization/forms.py`              | Adicionar `_sanitize_html()` + override `validate()`   |
+| `backend/udata/migrations/2026-MM-DD-sanitize-org.py`   | NEW — limpeza de dados pré-existentes                  |
+| `frontend/src/components/organizations/OrganizationTabs.tsx`  | Remover `dangerouslySetInnerHTML`                |
+| `frontend/src/components/reuses/ReuseDetailClient.tsx`  | Remover `dangerouslySetInnerHTML` (2 ocorrências)      |
+| `frontend/next.config.ts`                               | Endurecer `script-src` da CSP                          |
+| `frontend/package.json`                                 | Adicionar `react-markdown` + `rehype-sanitize` (Opção A) |
+| `docs/vulnerability-remediation.md`                     | Adicionar entrada FIX 8 — VULN-2075                    |
+| `CHANGELOG.md` (raiz e/ou backend)                      | Documentar a correção                                  |
+
+**Critérios de Aceitação**
+
+- [ ] **Backend** — `POST /api/1/organizations/` com `description = "<img src=x onerror=alert(1)>"` é gravado sem tags HTML (texto puro `""` ou apenas o texto interior).
+- [ ] **Backend** — Mesmo teste com `<script>alert(1)</script>` resulta em descrição vazia / sem o tag.
+- [ ] **Backend** — Existe pelo menos 1 teste pytest novo em `udata/core/organization/tests/` que cobre o vector de XSS.
+- [ ] **Backend** — Migração executada com sucesso em ambiente de PPR; nenhuma `Organization.description` contém `<script>`, `onerror=`, `onclick=`, `javascript:` ou `<iframe`.
+- [ ] **Frontend** — Visitar `/pages/organizations/<org-com-payload>` não dispara `alert()` nem executa código injetado.
+- [ ] **Frontend** — `grep -r "dangerouslySetInnerHTML" frontend/src/` retorna apenas usos seguros (constantes locais, não dados de utilizador).
+- [ ] **Frontend** — Markdown legítimo (`**bold**`, listas, links) continua a renderizar correctamente nas páginas de organização e reuse.
+- [ ] **CSP** — `curl -I https://preprod.dados.gov.pt/pages/organizations/<slug>` mostra `Content-Security-Policy` sem `'unsafe-inline'` em `script-src` (ou justificação documentada para sub-ticket).
+- [ ] **Documentação** — `docs/vulnerability-remediation.md` actualizado com a entrada FIX 8 / VULN-2075.
+- [ ] **Regressão** — Tickets já fechados que tocam descrições (TICKET-09, TICKET-11) continuam funcionais.
+
+**Notas adicionais**
+
+- A vulnerabilidade VULN-1878 (Discussion XSS, fechada via FIX 5) usou exatamente esta mesma abordagem `bleach.clean(tags=[], strip=True)`. Reaproveitar.
+- Avaliar criar um *helper* partilhado `udata/core/utils/sanitization.py` com `sanitize_html()` em vez de duplicar a função em cada `forms.py` — facilita futuras correções equivalentes em `dataset`, `reuse`, `topic`, `user.about`.
+- Após este ticket, abrir tickets de seguimento para os mesmos campos noutras entidades (mesmo *root cause*, mesma classe de campo `MarkdownField`).
+
+---
+
+## TICKET-57: Stored XSS via Reuse Description & Title (VULN-2076)
+
+**Severidade**: HIGH (Stored / Persistent XSS)
+**Origem**: Auditoria de segurança — VULN-2076 (KITS24)
+**Endpoint afetado**: `POST /api/1/reuses/` (campo `description`; também explorável via `title`)
+**Página afetada**: `/pages/reuses/<reuse-slug>` (renderização da descrição) e cabeçalhos `<title>` / breadcrumbs onde `reuse.title` é usado
+**Localização funcional**: Publicar → Nova Reutilização → campo *Descrição* (e Editar Reutilização).
+**Relação**: Mesma classe de bug que TICKET-56 / VULN-2075 (Organization), mas atinge a entidade **Reuse**, que usa um pipeline de validação diferente — exige correção noutra camada.
+
+**Descrição**
+
+A aplicação está vulnerável a *Stored XSS* na criação/edição de reutilizações. Um utilizador autenticado pode submeter HTML/JavaScript no campo `description` (ex.: `<img src=x onerror=alert('xss')>`). O *payload* é gravado em MongoDB sem qualquer sanitização e injetado no DOM via `dangerouslySetInnerHTML` quando qualquer utilizador (anónimo ou autenticado) abre a página da reutilização. As capturas da auditoria mostram o `alert()` a disparar em `/pages/reuses/<slug>` e o *payload* presente também no `title` (visível na barra de URL e no `<title>` do separador do browser, derivado do *slug* gerado a partir do título).
+
+Impacto: roubo de cookies de sessão (`HttpOnly` é insuficiente — o atacante consegue executar pedidos autenticados via `fetch` com `credentials: 'include'`), defacement, *keylogging*, e *phishing* dirigido. As reutilizações são **conteúdo público** indexado, pelo que a superfície de exposição é toda a base de utilizadores do portal.
+
+**Causa-Raiz (3 falhas combinadas)**
+
+1. **Backend não sanitiza o input — *code path* diferente do TICKET-56**
+   - `Reuse` **não tem `forms.py`**: a entidade não usa o pipeline WTForms (`OrganizationForm`/`MarkdownField`). Os campos são declarados com o decorador `field()` em [`backend/udata/core/reuse/models.py:93-106`](../backend/udata/core/reuse/models.py#L93-L106):
+     ```python
+     title = field(StringField(required=True), sortable=True, show_as_ref=True)
+     description = field(StringField(required=True), markdown=True)
+     ```
+   - A criação/edição passa por [`backend/udata/api_fields.py:782`](../backend/udata/api_fields.py#L782) (`patch()`), que apenas faz `setattr(obj, key, value)` — **não há filtragem de HTML** mesmo quando o campo está marcado `markdown=True`.
+   - O marcador `markdown=True` apenas afeta a documentação OpenAPI (`Markdown(String)` em [`backend/udata/api/fields.py:62-63`](../backend/udata/api/fields.py#L62-L63)) — **não desencadeia sanitização**.
+   - O projeto **tem** um sanitizador de Markdown→HTML (`UdataCleaner` em [`backend/udata/frontend/markdown.py:60-77`](../backend/udata/frontend/markdown.py#L60-L77)) com *allow-list* `MD_ALLOWED_TAGS`/`MD_ALLOWED_ATTRIBUTES`, mas **só é invocado** no filtro Jinja `markdown` (server-rendered). A API JSON serve a string Markdown crua.
+   - **Implicação**: a correção do TICKET-56 (override de `validate()` no `OrganizationForm`) **não cobre Reuse** — exige outra abordagem.
+
+2. **Frontend renderiza com `dangerouslySetInnerHTML` sem sanitização**
+   - [`frontend/src/components/reuses/ReuseDetailClient.tsx:467`](../frontend/src/components/reuses/ReuseDetailClient.tsx#L467) e [`:476`](../frontend/src/components/reuses/ReuseDetailClient.tsx#L476) injetam `reuse.description` directamente como HTML (uma ocorrência é o elemento de medição invisível, a outra é o conteúdo visível — ambas executam *handlers* `onerror`).
+   - O `title` é renderizado em vários sítios como texto (escape automático do React) — mas a auditoria mostra-o também em `<title>` da página servida pelo Next.js (metadata) e em breadcrumbs/links: validar caso a caso.
+
+3. **CSP do Next.js demasiado permissiva (igual ao TICKET-56)**
+   - [`frontend/next.config.ts:67`](../frontend/next.config.ts#L67) permite `'unsafe-inline'` e `'unsafe-eval'` em `script-src`. Remove a única defesa que ainda existiria perante uma falha das camadas 1+2 (inline event handlers como `onerror=` continuam a disparar).
+
+**O que deve ser feito**
+
+Aplicar **defense-in-depth** em três camadas. Uma vez que o pipeline `Reuse` é diferente, a camada backend implementa-se de forma genérica (no `api_fields`) para cobrir simultaneamente `Reuse`, `Dataset` e quaisquer outros modelos com `markdown=True` que partilhem o mesmo bug.
+
+### 1) Backend — Sanitização genérica em `api_fields.patch()` (preferida)
+
+Centralizar a sanitização no único ponto por onde passam todos os `POST/PUT` baseados no decorador `field()`. Em [`backend/udata/api_fields.py:782`](../backend/udata/api_fields.py#L782) (função `patch`), antes do `setattr` final, se o campo tiver `markdown=True` aplicar `bleach.clean()` com a *allow-list* já existente em `MD_ALLOWED_TAGS`/`MD_ALLOWED_ATTRIBUTES`/`MD_ALLOWED_PROTOCOLS`:
+
+```python
+# backend/udata/api_fields.py
+import bleach
+from flask import current_app
+
+def _sanitize_markdown_input(value: str) -> str:
+    """Strip dangerous HTML from markdown source on write.
+
+    The udata markdown pipeline (UdataCleaner) only sanitizes on render,
+    while the API serves the raw stored string — so we must clean on input.
+    Allow-list mirrors UdataCleaner so legitimate Markdown HTML passthroughs
+    are preserved.
+    """
+    if not value:
+        return value
+    return bleach.clean(
+        value,
+        tags=set(current_app.config["MD_ALLOWED_TAGS"]),
+        attributes=current_app.config["MD_ALLOWED_ATTRIBUTES"],
+        protocols=current_app.config["MD_ALLOWED_PROTOCOLS"],
+        strip=True,
+        strip_comments=False,
+    )
+
+def patch(obj: _T, request) -> _T:
+    ...
+    for key, value in data.items():
+        field = obj.__write_fields__.get(key)
+        if field is not None and not field.readonly:
+            model_attribute = getattr(obj.__class__, key)
+            info = getattr(model_attribute, "__additional_field_info__", {})
+            ...
+            if info.get("markdown") and isinstance(value, str):
+                value = _sanitize_markdown_input(value)
+            ...
+            setattr(obj, key, value)
+```
+
+Vantagens:
+- Cobre `Reuse.description`, `Dataset.description`, `Dataset.resources[].description` e qualquer futuro campo com `markdown=True` num único sítio.
+- Não duplica a *allow-list* — reaproveita a configuração já validada pelo `UdataCleaner`.
+
+Caveats:
+- `bleach.clean` espera HTML, não Markdown. Tags HTML cruas mantém-se *whitelisted*; texto Markdown puro (`**bold**`, `## heading`) passa intacto porque não tem tags. *Payloads* `<script>`, `<img onerror=...>`, `<iframe>`, `javascript:` URIs são removidos.
+- Se a UX exigir preservar `<` em texto literal (ex.: code snippets), cobrir com testes de regressão (Markdown ` ```code``` ` continua intacto desde que não contenha tags HTML).
+
+### 2) Backend — Sanitização explícita do `title` (`StringField` simples)
+
+`title` não tem `markdown=True`, mas a auditoria mostra-o em contextos onde pode causar dano (HTML `<title>`, *meta tags*). Adicionar sanitização *strip-all-tags* específica:
+
+```python
+# backend/udata/api_fields.py — dentro de patch(), após carregamento de info
+if isinstance(value, str) and not info.get("markdown"):
+    if isinstance(model_attribute, mongo_fields.StringField):
+        value = bleach.clean(value, tags=[], strip=True)
+```
+
+> Avaliar se uma sanitização global a *todos* os `StringField` é segura (não pode quebrar campos como `url`, `slug`, `email`, JSON em `extras`). Em caso de dúvida, manter mais conservador: aplicar apenas a *allow-list* explícita de campos sensíveis (`title`, `name`, `acronym`) via novo *flag* `info["sanitize"]=True` ou via *signal* `pre_save` por modelo.
+
+Alternativa mais cirúrgica — adicionar um `pre_save` específico em [`backend/udata/core/reuse/models.py`](../backend/udata/core/reuse/models.py):
+
+```python
+@pre_save.connect_via(Reuse)
+def sanitize_reuse_strings(sender, document, **kwargs):
+    if document.title:
+        document.title = bleach.clean(document.title, tags=[], strip=True)
+    if document.description:
+        document.description = _sanitize_markdown_input(document.description)
+```
+
+### 3) Frontend — Sanitização do output
+
+Substituir `dangerouslySetInnerHTML` em [`frontend/src/components/reuses/ReuseDetailClient.tsx:467`](../frontend/src/components/reuses/ReuseDetailClient.tsx#L467) e [`:476`](../frontend/src/components/reuses/ReuseDetailClient.tsx#L476):
+
+**Opção A (preferida — preserva Markdown):** introduzir `react-markdown` + `rehype-sanitize` (mesma dependência do TICKET-56):
+
+```tsx
+import ReactMarkdown from "react-markdown";
+import rehypeSanitize from "rehype-sanitize";
+
+<div className="mb-32 text-neutral-900 [&_a]:underline [&_a]:text-primary-600">
+  <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{reuse.description}</ReactMarkdown>
+</div>
+```
+
+**Opção B (mais simples — perde Markdown):** renderizar como texto puro com escape automático:
+
+```tsx
+<div className="mb-32 text-neutral-900 whitespace-pre-line">{reuse.description}</div>
+```
+
+Ambas as ocorrências (visível e medição invisível) têm de ser substituídas — caso contrário o *payload* dispara mesmo na cópia oculta.
+
+### 4) Frontend — Hardening da CSP
+
+Mesmo trabalho do TICKET-56: remover `'unsafe-inline'` e `'unsafe-eval'` de `script-src` em [`frontend/next.config.ts:65-68`](../frontend/next.config.ts#L65-L68), introduzindo CSP por *nonce* via *middleware* do Next.js. Se o TICKET-56 já estiver em curso, **partilhar a mesma alteração** — não duplicar.
+
+### 5) Backend — Migração / limpeza de dados existentes
+
+Criar uma migração one-shot que percorre todas as `Reuse` existentes e aplica `bleach.clean()` ao `description` (com a *allow-list* `MD_ALLOWED_TAGS`) e ao `title` (`tags=[]`). Documentar em `CHANGELOG.md`.
+
+```
+backend/udata/migrations/2026-MM-DD-sanitize-reuse-fields.py
+```
+
+Confirmar se há *payloads* já gravados em PPR antes de proceder a produção.
+
+**Ficheiros a alterar**
+
+| Ficheiro                                                     | Alteração                                                              |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| `backend/udata/api_fields.py`                                | Adicionar `_sanitize_markdown_input()` + chamada em `patch()`          |
+| `backend/udata/core/reuse/models.py`                         | (Opcional) `pre_save` signal para `title` se a abordagem cirúrgica for escolhida |
+| `backend/udata/migrations/2026-MM-DD-sanitize-reuse-fields.py` | NEW — limpeza de dados pré-existentes                                  |
+| `frontend/src/components/reuses/ReuseDetailClient.tsx`       | Substituir `dangerouslySetInnerHTML` (linhas 467 e 476)                |
+| `frontend/next.config.ts`                                    | Endurecer `script-src` (compartilhado com TICKET-56)                   |
+| `frontend/package.json`                                      | `react-markdown` + `rehype-sanitize` (Opção A; partilhado com TICKET-56) |
+| `docs/vulnerability-remediation.md`                          | Adicionar entrada FIX 9 — VULN-2076                                    |
+| `CHANGELOG.md` (raiz e/ou backend)                           | Documentar a correção                                                  |
+
+**Critérios de Aceitação**
+
+- [ ] **Backend** — `POST /api/1/reuses/` com `description = "<img src=x onerror=alert(1)>"` é gravado sem o atributo `onerror` (tag removida ou sem handler executável).
+- [ ] **Backend** — `POST /api/1/reuses/` com `description = "<script>alert(1)</script>"` resulta em descrição sem o `<script>`.
+- [ ] **Backend** — `POST /api/1/reuses/` com `title = "<img src=x onerror=alert(1)>"` é gravado sem tags HTML (texto puro).
+- [ ] **Backend** — Markdown legítimo (`**bold**`, `[link](https://...)`, listas, headings, code blocks) continua a ser aceite e gravado intacto.
+- [ ] **Backend** — Existe pelo menos 1 teste pytest novo em `udata/core/reuse/tests/` que cobre o vector de XSS em `description` e em `title`.
+- [ ] **Backend** — Migração executada em PPR; nenhuma `Reuse.description` contém `<script>`, `onerror=`, `onclick=`, `javascript:`; nenhum `Reuse.title` contém qualquer tag HTML.
+- [ ] **Frontend** — Visitar `/pages/reuses/<reuse-com-payload>` não dispara `alert()` nem executa código injetado.
+- [ ] **Frontend** — `grep -r "dangerouslySetInnerHTML" frontend/src/components/reuses/` não retorna ocorrências sobre dados de utilizador.
+- [ ] **Frontend** — Markdown legítimo continua a renderizar correctamente nas páginas de reutilização (negrito, links, listas).
+- [ ] **CSP** — `script-src` no Next.js sem `'unsafe-inline'` (ou justificação documentada para sub-ticket comum a TICKET-56).
+- [ ] **Documentação** — `docs/vulnerability-remediation.md` actualizado com a entrada FIX 9 / VULN-2076.
+- [ ] **Regressão** — TICKET-11 (Reuses Search + Detail) continua funcional.
+
+**Notas adicionais**
+
+- **Coordenação com TICKET-56 (VULN-2075)**: ambos os tickets partilham camadas 3 (frontend output) e 4 (CSP). Recomenda-se **agrupar a entrega** num único PR ou numa série encadeada para evitar duplicação de mudanças no `next.config.ts` e na introdução do `react-markdown`. A **camada 1 (backend)** é diferente:
+  - TICKET-56 → `OrganizationForm.validate()` (pipeline WTForms).
+  - TICKET-57 → `api_fields.patch()` (pipeline `field()` decorador) — cobre simultaneamente `Reuse` e `Dataset`.
+- **Reuso da configuração existente**: `MD_ALLOWED_TAGS` / `MD_ALLOWED_ATTRIBUTES` / `MD_ALLOWED_PROTOCOLS` já estão validados pelo `UdataCleaner` e devem ser usados como referência única — não criar uma segunda *allow-list*.
+- **Outros campos `markdown=True`**: a correção genérica em `api_fields.patch()` cobre automaticamente o `Dataset.description`, `Dataset.resources[].description`, `Dataservice.description` e quaisquer outros — adicionar testes de não-regressão para garantir que essa cobertura é a esperada.
+- **Caveat do `from_input` nos modelos**: alguns campos (`SlugField`) já têm `from_input` para sanitização específica — a sanitização genérica em `patch()` deve correr **antes** de `from_input` para que não haja conflito.
+
+---
+
+## TICKET-58: Account Takeover via SAML — Manual XML Fallback Bypasses Signature Validation (VULN-2077)
+
+**Severidade**: CRITICAL (Authentication Bypass / Account Takeover)
+**Origem**: Auditoria de segurança — VULN-2077 (KITS24)
+**CWE**: CWE-287 (Improper Authentication), CWE-345 (Insufficient Verification of Data Authenticity), CWE-347 (Improper Verification of Cryptographic Signature), CWE-284 (Improper Access Control)
+**OWASP**: A01:2021 – Broken Access Control
+**Endpoints afetados**: `POST /saml/sso`, `POST /saml/eidas/sso`
+**Localização funcional**: Login via Cartão de Cidadão (CMD / autenticacao.gov) e via eIDAS.
+
+**Descrição**
+
+A aplicação aceita atributos de uma `SAMLResponse` mesmo quando a verificação de assinatura por `pysaml2` **falha**. Concretamente, o fluxo de validação tem três passos — (1) `pysaml2.parse_authn_request_response`, (2) extração de atributos do objeto validado, (3) **fallback de parsing manual do XML cru** — e o passo (3) é executado **sempre que o passo (1)/(2) não consegue extrair email ou NIC**, incluindo quando isso acontece por `SignatureError`, `MissingKey` ou qualquer outra exceção durante a validação. O *fallback* manual lê o `<AttributeStatement>` do XML em base64 sem voltar a verificar a assinatura — pelo que **qualquer atacante que consiga enviar um XML SAML para `/saml/sso` (com ou sem assinatura válida) consegue forjar o atributo `NIC` e obter uma sessão autenticada como qualquer utilizador cujo NIC conheça**.
+
+A auditoria demonstra:
+1. Envio de uma `SAMLResponse` com `NIC=32244422` → o portal devolve um cookie de sessão válido para o utilizador *Francisco* (verificável em `GET /me`).
+2. Alteração do `NIC` para outro valor → o portal devolve um cookie de sessão válido para um utilizador diferente.
+
+**Impacto**: *Account takeover* completo de qualquer utilizador autenticado por SAML — contas administrativas incluídas, dado que o atributo NIC é o identificador *de facto* depois do hashing HMAC. Permite acesso total (leitura, modificação, eliminação) a *datasets*, organizações, utilizadores, e operações privilegiadas.
+
+**Causa-Raiz**
+
+1. **O fallback de XML manual ignora a assinatura — *path* primário do exploit**
+
+   Em [`backend/udata/auth/saml/saml_plugin/saml_govpt.py:594-652`](../backend/udata/auth/saml/saml_plugin/saml_govpt.py#L594-L652) (e duplicado para eIDAS em [`:904-962`](../backend/udata/auth/saml/saml_plugin/saml_govpt.py#L904-L962)):
+
+   ```python
+   # 3. Fallback: parsing manual do XML (para respostas não encriptadas)
+   if not user_email and not user_nic:
+       current_app.logger.info(
+           "pysaml2 não extraiu atributos, a tentar parsing manual do XML"
+       )
+       try:
+           decoded_response = base64.b64decode(raw_saml_response)
+           ...
+           attribute_statement = root.find(".//assertion:AttributeStatement", ns)
+           if attribute_statement is not None:
+               for child in attribute_statement:
+                   ...
+                   if attr_name == "http://interop.gov.pt/MDC/Cidadao/NIC":
+                       user_nic = value.text   # <-- NÃO VERIFICA ASSINATURA
+   ```
+
+   O XML é descodificado de base64 e os atributos são extraídos com `xml.etree.ElementTree` sem qualquer chamada a `xmldsig` / `pysaml2.sigver`. Não há validação do `<Issuer>`, `<Signature>`, `<NotOnOrAfter>`, `<Audience>` nem do certificado.
+
+2. **As exceções de validação são "engolidas" silenciosamente — *path* que conduz ao fallback**
+
+   Em [`saml_govpt.py:521-542`](../backend/udata/auth/saml/saml_plugin/saml_govpt.py#L521-L542):
+
+   ```python
+   for server in auth_servers:
+       try:
+           authn_response = saml_client.parse_authn_request_response(...)
+       except sigver.MissingKey as e:
+           current_app.logger.warning(...); continue
+       except SignatureError as se:
+           current_app.logger.error(...); continue
+       except Exception as e:
+           current_app.logger.error(...); continue
+       else:
+           break
+   ```
+
+   Quando todos os IdPs falham, `authn_response` permanece `None`. O código **não interrompe a execução** — segue para a extração e, depois, para o fallback manual. Não há `return redirect(...login...)` nem `abort(401)` neste caminho.
+
+3. **Bug auto-documentado no teste existente**
+
+   [`backend/udata/tests/frontend/test_saml.py:453-481`](../backend/udata/tests/frontend/test_saml.py#L453-L481) descreve o problema como "comportamento atual aceite":
+
+   ```python
+   def test_sso_callback_no_login_on_signature_error(self, mock_client_for):
+       mock_saml_client.parse_authn_request_response.side_effect = SignatureError("Invalid signature")
+       ...
+       # On signature error the code still parses XML and tries to login
+       # because the except SignatureError block just logs and continues.
+       # This is the current behavior — the XML is parsed independently
+       # of the pysaml2 signature check.
+       assert response.status_code in (302, 400)
+   ```
+
+   O teste **garante que o login pode acontecer mesmo após `SignatureError`** — exactamente o cenário que VULN-2077 explora. Isto exige correção do código E re-escrita deste teste.
+
+4. **Falta de *binding* entre `Subject/NameID` e atributo `NIC`**
+
+   Mesmo que `pysaml2` valide a assinatura, o código identifica o utilizador *exclusivamente* pelo atributo `NIC` extraído do `<AttributeStatement>` ([`saml_govpt.py:566`](../backend/udata/auth/saml/saml_plugin/saml_govpt.py#L566)) — nunca pelo `<Subject><NameID>`. Em ataques *XML Signature Wrapping* (XSW) o `<Subject>` autenticado pode não corresponder ao `<AttributeStatement>` mantido pelo *wrapper*. A recomendação 2 da auditoria é exactamente: *"Validar que o NIC recebido corresponde ao sujeito autenticado pelo IdP"*.
+
+5. **`allow_unsolicited: True` sem replay cache** ([`saml_govpt.py:365`](../backend/udata/auth/saml/saml_plugin/saml_govpt.py#L365))
+
+   A configuração aceita respostas sem `InResponseTo` ligado a um *AuthnRequest* recente, o que permite *replay*. Não é o vector primário (o exploit forja o NIC), mas amplia a superfície.
+
+**O que deve ser feito**
+
+A correção tem de ser **fail-closed** em todas as camadas. Sem assinatura válida, **nenhum atributo** deve ser lido nem usado. Cinco alterações coordenadas no backend, mais novos testes que **substituam** o teste atual auto-documentado.
+
+### 1) Eliminar **completamente** o fallback de parsing manual do XML
+
+Remover os blocos:
+- [`saml_govpt.py:594-652`](../backend/udata/auth/saml/saml_plugin/saml_govpt.py#L594-L652) (CMD)
+- [`saml_govpt.py:904-962`](../backend/udata/auth/saml/saml_plugin/saml_govpt.py#L904-L962) (eIDAS)
+
+Não há cenário legítimo em que faça sentido confiar em atributos não validados. Se a justificação original ("para respostas não encriptadas") for válida em produção, a configuração de encriptação tem de ser corrigida, **não** ignorada.
+
+### 2) Fail-closed quando `authn_response is None` ou quando a assinatura falha
+
+Substituir os blocos `try/except/continue` por uma política rígida: **`SignatureError` é fatal**. Se nenhum IdP conseguir validar a resposta, devolver erro:
+
+```python
+# saml_govpt.py — idp_initiated()
+authn_response = None
+last_error = None
+for server in auth_servers:
+    saml_client = saml_client_for(server)
+    try:
+        authn_response = saml_client.parse_authn_request_response(
+            raw_saml_response, entity.BINDING_HTTP_POST
+        )
+        break
+    except sigver.MissingKey as e:
+        last_error = e
+        # MissingKey só pode ser tolerado se ainda houver outro IdP a tentar
+        continue
+
+if authn_response is None:
+    current_app.logger.error(
+        f"SAML SSO rejected — no IdP could validate the signed response: {last_error}"
+    )
+    do_flash("Autenticação rejeitada: assinatura inválida", "error")
+    frontend_url = current_app.config.get("CDATA_BASE_URL") or ""
+    return redirect(f"{frontend_url}/pages/login")
+```
+
+Notas:
+- `SignatureError` deve **propagar** (ou pelo menos terminar o pedido com 401) — não fazer `continue`.
+- O `except Exception` genérico deve ser removido. As exceções não-tratadas causam 500, que é o comportamento correcto para um pedido malformado.
+- Os atributos só são extraídos depois desta verificação ter passado para um `authn_response` não-None, derivado de `pysaml2` (que verifica assinatura, `NotOnOrAfter`, `Audience`, e o destinatário).
+
+### 3) Validar o `Issuer` e o *binding* `Subject` ⇆ `AttributeStatement`
+
+Após `pysaml2` validar, comparar o `<Issuer>` com a *whitelist* configurada (`SECURITY_SAML_IDP_METADATA`) e garantir que o `<Subject><NameID>` está presente e ligado ao mesmo `<Assertion>` de onde provém o `<AttributeStatement>`:
+
+```python
+issuer = authn_response.issuer()
+trusted_issuers = {
+    cfg.get("entityid")
+    for cfg in current_app.config["TRUSTED_SAML_ISSUERS"]
+}
+if issuer not in trusted_issuers:
+    abort(401, "Untrusted SAML Issuer")
+
+# Subject NameID — autoritativo para identidade do IdP
+subject = authn_response.get_subject()
+if subject is None or not subject.text:
+    abort(401, "Missing SAML Subject")
+
+# (Defesa-em-profundidade contra XSW) garantir que assertion está assinada
+# e que o AttributeStatement está dentro da MESMA assertion verificada.
+if not authn_response.assertion.signature:
+    # pysaml2 já enforça com want_assertions_signed=True, mas reasseguramos
+    abort(401, "Assertion not signed")
+```
+
+Considerar **usar o `NameID` como identidade primária** em vez do atributo `NIC`, ou **exigir que o NameID e o NIC coincidam** (ou que o NameID seja derivado do NIC pelo IdP de forma determinística). Esta decisão deve ser validada com o IdP autenticacao.gov, pois implica eventual migração dos dados existentes.
+
+### 4) Fechar o `allow_unsolicited` (defesa em profundidade)
+
+Em [`saml_govpt.py:365`](../backend/udata/auth/saml/saml_plugin/saml_govpt.py#L365), passar `allow_unsolicited` para `False` e implementar o cache de `outstanding_queries` que `pysaml2` espera (gravar `req_id` em `session` ou em Redis no `sp_initiated`, validar `InResponseTo` no `idp_initiated`). Adicionalmente, uma *replay cache* (memória/Redis) de IDs de respostas já consumidas evita *replay* de respostas válidas. `pysaml2` suporta `IdentityCache`/`SubjectCache` via configuração.
+
+### 5) Hardening adicional
+
+- Confirmar que `want_response_signed=True` e `want_assertions_signed=True` continuam ativos ([`saml_govpt.py:369-370`](../backend/udata/auth/saml/saml_plugin/saml_govpt.py#L369-L370)) — ✅ já estão.
+- Validar `accepted_time_diff` (60s) — ✅ aceitável.
+- Auditar o trust store do `xmlsec1`/`pysaml2` — confirmar que o certificado do IdP autenticacao.gov é o **único** que valida (não usar `*.pem` agregados).
+- Adicionar *audit log* dedicado por cada login SAML: `Issuer`, `NameID` (hash), IP, *user-agent*, resultado (sucesso/recusa/erro).
+
+### 6) Re-escrever o teste auto-documentado e adicionar regressão
+
+Substituir [`test_saml.py:453-481`](../backend/udata/tests/frontend/test_saml.py#L453-L481):
+
+```python
+def test_sso_callback_rejects_on_signature_error(self, mock_client_for):
+    """SignatureError must abort the SSO and never call login_user."""
+    mock_saml_client = MagicMock()
+    mock_saml_client.parse_authn_request_response.side_effect = SignatureError(
+        "Invalid signature"
+    )
+    mock_client_for.return_value = mock_saml_client
+
+    xml = _build_saml_response_xml(
+        email="hacker@evil.com", nic="00000000",
+        first_name="Bad", last_name="Actor",
+    )
+
+    with patch("udata.auth.saml.saml_plugin.saml_govpt.login_user") as mock_login:
+        response = self._post_saml_response(xml)
+
+    mock_login.assert_not_called()
+    # Redirect to /pages/login with error flash
+    assert response.status_code == 302
+    assert "/pages/login" in response.headers["Location"]
+```
+
+Adicionar testes novos:
+
+- `test_sso_rejects_unsigned_response` — XML sem `<Signature>` → 401/redirect.
+- `test_sso_rejects_response_signed_by_unknown_key` — assinatura por chave fora dos metadados → rejeição.
+- `test_sso_rejects_xsw_attack` — *Signature Wrapping* (assertion duplicada com NIC alterado) → rejeição.
+- `test_sso_rejects_replay` — re-envio de uma `SAMLResponse` já consumida → rejeição.
+- `test_sso_rejects_untrusted_issuer` — `Issuer` fora da whitelist → rejeição.
+- `test_sso_rejects_subject_attribute_mismatch` — `NameID` e `NIC` apontam para sujeitos distintos → rejeição.
+
+Idem para o caminho eIDAS (`/saml/eidas/sso`).
+
+**Ficheiros a alterar**
+
+| Ficheiro                                                              | Alteração                                                                  |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `backend/udata/auth/saml/saml_plugin/saml_govpt.py`                   | Remover fallback XML (CMD + eIDAS); fail-closed em `SignatureError`; validar `Issuer`/`Subject`; fechar `allow_unsolicited`. |
+| `backend/udata/tests/frontend/test_saml.py`                           | Re-escrever `test_sso_callback_no_login_on_signature_error`; adicionar 6 testes novos (CMD + eIDAS). |
+| `backend/udata/settings.py`                                           | (Opcional) `TRUSTED_SAML_ISSUERS` se a *whitelist* for explícita.          |
+| `backend/udata/auth/saml/saml_plugin/__init__.py`                     | Garantir que blueprint é registado depois das alterações.                  |
+| `docs/vulnerability-remediation.md`                                   | Adicionar entrada FIX 10 — VULN-2077.                                      |
+| `docs/saml-account-merge.md` / `docs/login-workflow.md`               | Atualizar fluxo: `Subject NameID` é a fonte de identidade autoritativa; documentar fail-closed. |
+| `CHANGELOG.md`                                                        | Documentar correção crítica de Account Takeover.                           |
+| **Resposta a incidente** (separado deste ticket)                      | Após deploy, **rotação de cookies de sessão** (forçar logout global) e auditoria de logins SAML em PPR/Prod nos últimos 30 dias para identificar exploração. |
+
+**Critérios de Aceitação**
+
+- [ ] **Backend** — `POST /saml/sso` com `SAMLResponse` cuja assinatura falha (chave errada, certificado expirado, sem `<Signature>`) devolve redirect para `/pages/login` com mensagem de erro. **Nenhum** cookie de sessão é definido.
+- [ ] **Backend** — `POST /saml/sso` com `SAMLResponse` modificada (NIC alterado **após** assinatura) é rejeitada — a assinatura cobre o `<AttributeStatement>` e a alteração quebra a verificação.
+- [ ] **Backend** — `POST /saml/sso` com `SAMLResponse` sem `<Signature>` é rejeitada (não cai em fallback manual).
+- [ ] **Backend** — `Issuer` da `SAMLResponse` que não corresponda aos metadados configurados é rejeitado.
+- [ ] **Backend** — `Subject/NameID` ausente é rejeitado.
+- [ ] **Backend** — *Replay* da mesma `SAMLResponse` (mesmo `ID`) é rejeitado num intervalo configurável (`accepted_time_diff` + replay cache).
+- [ ] **Backend** — Equivalente para `/saml/eidas/sso` (mesmas garantias).
+- [ ] **Backend** — `grep -n "ET.fromstring\|attribute_statement.*find" backend/udata/auth/saml/` não retorna parsing manual de atributos pós-validação.
+- [ ] **Backend** — `grep -n "except SignatureError" backend/udata/auth/saml/` mostra apenas blocos que terminam o pedido com erro (não `continue`/`pass`).
+- [ ] **Tests** — Os 6 testes novos (CMD) e 6 testes novos (eIDAS) passam; o teste antigo `test_sso_callback_no_login_on_signature_error` foi reescrito e a sua *assertion* é `mock_login.assert_not_called()`.
+- [ ] **Logs** — Cada falha de SAML é registada em log dedicado (Issuer, NameID hash, IP, motivo da rejeição).
+- [ ] **Resposta a incidente** — Auditoria de PPR/Prod realizada; sessões existentes rodadas após o deploy; comunicação ao DPO/responsável de segurança feita.
+- [ ] **Documentação** — `docs/vulnerability-remediation.md` actualizado com FIX 10 / VULN-2077; `CHANGELOG.md` regista a correção crítica.
+
+**Notas adicionais**
+
+- **Severidade CRITICAL é máxima**: trata-se de *Account Takeover* directo, sem necessidade de credenciais, sem necessidade de proximidade ao utilizador. Qualquer pessoa que conheça (ou consiga adivinhar) o NIC de um utilizador-alvo (administrador, p. ex.) pode tomar a sua conta.
+- **Corrigir antes de qualquer outra coisa em backlog de segurança**. TICKETS 56-57 (XSS) impactam clientes e exigem interação; este permite *takeover* directo, sem interação.
+- **Não fazer rebase contra produção sem orquestração**: a correção exige (a) atualização do código, (b) confirmação do PPR, (c) deploy em produção, (d) auditoria forense dos logs anteriores ao deploy, (e) rotação de cookies. Coordenar com a equipa de operações.
+- **Comentário no código original** ("para respostas não encriptadas") sugere que o fallback foi adicionado para resolver um problema operacional de configuração de encriptação. Esse problema operacional **deve ser tratado em ticket próprio**, não através de baixar a guarda da validação de assinatura.
+- **Histórico Git relevante**: existem branches `fix/saml-nic-hashing-and-duplicate-merge`, `fix/saml-redirect-fallback`, `fix/saml-auth-docker` e `feature/ticket-37-saml-session-flag-me`. Confirmar se algum deles toca este código antes do trabalho começar, para evitar conflitos.
+
+---
+
+## TICKET-59: Mass Submission on `/api/1/datasets/community_resources/` — Missing Per-Endpoint Rate Limit (VULN-2078)
+
+**Severidade**: MEDIUM (Resource Exhaustion / Content Spam / Anti-Automation Bypass)
+**Origem**: Auditoria de segurança — VULN-2078 (KITS24)
+**CWE**: CWE-799 (Improper Control of Interaction Frequency), CWE-770 (Allocation of Resources Without Limits or Throttling), CWE-307 (Improper Restriction of Excessive Authentication Attempts — análogo)
+**OWASP**: A04:2021 – Insecure Design / API4:2023 – Unrestricted Resource Consumption
+**Endpoint afetado**: `POST /api/1/datasets/community_resources/`
+**Localização funcional**: Administração → Dataset → Recursos Comunitários → "Adicionar recurso comunitário".
+
+**Descrição**
+
+O endpoint que cria *recursos comunitários* aceita submissões automatizadas sem qualquer limitação efetiva. A auditoria demonstra a criação de **106 recursos comunitários** num único *dataset* através do Burp Intruder (todas as respostas `201 Created`, sem rejeições intermediárias). O efeito visível é o "Recursos comunitários (106)" inundado, mas o problema vai mais longe: qualquer utilizador autenticado pode poluir *datasets* públicos com lixo, conteúdo malicioso (URLs de phishing/malware no campo `url`) ou *spam*, e degradar a usabilidade do portal e dos seus consumidores.
+
+**Combinação com VULN-2075/2076 (XSS)**: as capturas mostram, lado a lado, *payloads* `<img src=x onerror=alert(1)>` no `title`, `last_name` e `description` — i.e. o atacante consegue **simultaneamente** popular o portal com dezenas/centenas de cards persistentes contendo XSS armazenado. A combinação de "sem rate-limit" + "sem sanitização" amplia o blast radius dos tickets 56/57.
+
+**Estado actual da proteção (provas no código)**
+
+1. **Endpoint sem rate-limit dedicado** — [`backend/udata/core/dataset/api.py:798-815`](../backend/udata/core/dataset/api.py#L798-L815):
+
+   ```python
+   @api.secure
+   @api.doc("create_community_resource", responses={400: "Validation error"})
+   @api.expect(community_resource_fields)
+   @api.marshal_with(community_resource_fields, code=201)
+   def post(self):
+       """Create a new community resource"""
+       form = api.validate(CommunityResourceForm)
+       ...
+   ```
+
+   Apenas `@api.secure` (autenticação obrigatória). **Nenhum** decorador `@limiter.limit(...)`.
+
+2. **Limites globais demasiado permissivos** — [`backend/udata/app.py:40-44`](../backend/udata/app.py#L40-L44):
+
+   ```python
+   limiter = Limiter(
+       key_func=get_remote_address,
+       default_limits=["10000 per day", "5000 per hour"],
+       storage_uri="memory://",
+   )
+   ```
+
+   `5000/hora` por IP permite trivialmente os 106 pedidos da PoC e ordens de magnitude acima. Note-se ainda:
+   - `key_func=get_remote_address` → o limite é **por IP**, não por utilizador autenticado. Atacante pode obter limite "fresco" rodando IP/proxy.
+   - `storage_uri="memory://"` → **não partilha estado entre workers/instâncias**. Em produção com múltiplos *gunicorn workers* ou réplicas (Docker Compose, Kubernetes), o limite efetivo é multiplicado pelo número de processos. A documentação FIX 7 já aviso sobre isto, mas continua `memory://` no [`settings.py:132`](../backend/udata/settings.py#L132).
+   - O *default* documentado em FIX 7/`vulnerability-remediation.md` (`200/day, 50/hour`) **não corresponde ao código actual** — ou foi revertido por engano ou nunca foi aplicado.
+
+3. **Rate-limit fino só existe em autenticação** — [`backend/udata/auth/views.py:39`](../backend/udata/auth/views.py#L39):
+
+   ```python
+   auth_rate_limit = limiter.shared_limit("5 per minute", scope="auth")
+   ```
+
+   Cobre login/register/forgot_password/reset_password. **Não cobre** content-creation endpoints.
+
+4. **CAPTCHA existe mas só na autenticação** — `CaptchEtat` em [`backend/udata/auth/forms.py:23-30`](../backend/udata/auth/forms.py#L23-L30); ausente nos formulários `CommunityResourceForm`, `DatasetForm`, `ReuseForm`, `OrganizationForm`, `DiscussionCreateForm`.
+
+5. **Sem deduplicação server-side** — não há verificação de `(owner, dataset, url)` ou `(owner, dataset, title)` único nem de janela temporal mínima entre criações repetidas pelo mesmo utilizador.
+
+**Impacto**
+
+- **Spam / poluição**: utilizadores podem inundar *datasets* com recursos irrelevantes; degrada a UX e a confiança no portal.
+- **Phishing / malware**: o `url` é livre — links maliciosos passam no formulário e ficam visíveis aos visitantes.
+- **DoS lógico**: a aba "Recursos comunitários" carrega todos os items, e o paginador da API faz `paginate(args["page"], args["page_size"])`. Em queries com `page_size` alto, listagens com milhares de entradas pesam no MongoDB e no frontend.
+- **Amplificação de XSS** (VULN-2075/2076/2078 combinados): centenas de cards XSS num único *dataset* aumentam dramaticamente a probabilidade de execução em vítimas.
+- **Notificações/emails**: criação de recursos comunitários dispara *signals* (`post_save`) que podem alertar donos/seguidores — *spam* em massa via emails/notificações para utilizadores legítimos.
+
+**O que deve ser feito**
+
+A correção tem três camadas: rate-limit por endpoint (mitigação imediata), endurecimento dos limites globais e do *backend* de armazenamento (Redis), e (opcional) anti-automation visível ao utilizador. Aplicar em conjunto com tickets 56-57 para que o efeito de XSS armazenado fique também limitado em volume.
+
+### 1) Rate-limit por endpoint na criação de *community resources*
+
+Em [`backend/udata/core/dataset/api.py`](../backend/udata/core/dataset/api.py) decorar o `post()` do `CommunityResourcesAPI`:
+
+```python
+from udata.app import limiter
+
+@ns.route("/community_resources/", endpoint="community_resources")
+class CommunityResourcesAPI(API):
+    ...
+    @api.secure
+    @limiter.limit(
+        "5 per minute; 30 per hour; 100 per day",
+        key_func=lambda: f"user:{current_user.id}" if current_user.is_authenticated else get_remote_address(),
+        methods=["POST"],
+    )
+    @api.doc("create_community_resource", responses={400: "Validation error", 429: "Rate limit exceeded"})
+    @api.expect(community_resource_fields)
+    @api.marshal_with(community_resource_fields, code=201)
+    def post(self):
+        ...
+```
+
+Notas:
+- **`key_func` por utilizador** quando autenticado — não por IP. Caso contrário um atacante autenticado em rede partilhada não é identificado individualmente, e *bypass* via VPN/proxy é trivial.
+- **5/minuto** é generoso para utilização humana legítima (criar recursos comunitários é raro) e suficiente para prevenir *bursts*.
+- **100/dia por utilizador** evita *drip* abuse (1/min durante 8h = 480, ainda excessivo).
+- O `429` deve incluir `Retry-After` header (o `flask-limiter` faz isto por defeito).
+
+### 2) Aplicar o mesmo padrão a outros endpoints content-creation expostos a utilizadores autenticados
+
+Adicionar `@limiter.limit(...)` a:
+
+| Endpoint                                                | Limite sugerido (autenticado)                |
+| ------------------------------------------------------- | -------------------------------------------- |
+| `POST /api/1/datasets/community_resources/` (este)      | `5/min; 30/h; 100/dia`                       |
+| `POST /api/1/datasets/`                                 | `5/min; 20/h; 50/dia`                        |
+| `POST /api/1/datasets/<id>/resources/`                  | `10/min; 100/h; 500/dia` (uploads legítimos) |
+| `POST /api/1/reuses/`                                   | `3/min; 10/h; 30/dia`                        |
+| `POST /api/1/organizations/`                            | `2/min; 5/h; 10/dia`                         |
+| `POST /api/1/datasets/<id>/discussions/`                | `5/min; 30/h; 100/dia`                       |
+| `POST /api/1/discussions/<id>/`                         | `5/min; 30/h; 100/dia` (comentários)         |
+| `POST /api/1/users/<id>/avatar/`                        | `3/min; 10/h`                                |
+
+Os valores são propostas iniciais — calibrar com base em métricas legítimas em produção. Considerar criar um *helper* central `udata/api/limits.py` com constantes e o `key_func` *user-or-ip* uniforme:
+
+```python
+# udata/api/limits.py
+from flask_login import current_user
+from flask_limiter.util import get_remote_address
+
+def user_or_ip():
+    if current_user.is_authenticated:
+        return f"user:{current_user.id}"
+    return f"ip:{get_remote_address()}"
+
+CONTENT_CREATE_LIMIT = "5/minute;30/hour;100/day"
+HEAVY_CREATE_LIMIT = "2/minute;5/hour;10/day"
+```
+
+### 3) Endurecer limites globais e mover storage para Redis
+
+Em [`backend/udata/app.py:40-44`](../backend/udata/app.py#L40-L44) reduzir os *defaults* para algo coerente com a documentação original (FIX 7):
+
+```python
+limiter = Limiter(
+    key_func=user_or_ip,             # <-- usar helper acima
+    default_limits=["1000 per day", "200 per hour"],
+    storage_uri=current_app.config.get("RATELIMIT_STORAGE_URI", "memory://"),
+)
+```
+
+E em [`backend/udata/settings.py:132`](../backend/udata/settings.py#L132) fixar Redis em ambientes não-locais:
+
+```python
+# udata/settings.py
+class Defaults:
+    ...
+    # In production set RATELIMIT_STORAGE_URI=redis://... — without it
+    # rate-limits do NOT share state across gunicorn workers / replicas
+    # and a multi-worker deploy effectively multiplies the limit.
+    RATELIMIT_STORAGE_URI = "memory://"
+```
+
+E em `udata.cfg` / variáveis de ambiente de PPR/Prod:
+
+```python
+RATELIMIT_STORAGE_URI = "redis://redis:6379/1"
+```
+
+Documentar em `docs/INSTALLATION.md` que sem Redis os limites são *best-effort* por worker.
+
+### 4) Deduplicação server-side (defesa adicional)
+
+Adicionar uma verificação no `post()` do `CommunityResourcesAPI` que rejeita criação se já existir um recurso com o mesmo `(dataset, owner, url)` nos últimos `N` minutos:
+
+```python
+from datetime import datetime, timedelta, UTC
+
+DEDUPE_WINDOW = timedelta(minutes=5)
+
+# Antes de form.populate_obj(resource):
+recent = CommunityResource.objects(
+    dataset=resource.dataset,
+    owner=current_user._get_current_object(),
+    url=form.url.data,
+    last_modified_internal__gte=datetime.now(UTC) - DEDUPE_WINDOW,
+).first()
+if recent is not None:
+    api.abort(409, "Duplicate community resource recently submitted")
+```
+
+Não substitui o rate-limit, mas reduz a polução por engano e por scripts triviais.
+
+### 5) (Opcional) CAPTCHA em criação de conteúdo público
+
+Se o rate-limit por utilizador não for suficiente em produção (a calibrar com métricas), reaproveitar o `CaptchEtat` já existente em [`backend/udata/auth/forms.py:138`](../backend/udata/auth/forms.py#L138) para os formulários de criação de *community resources*, *reuses*, *datasets* e *discussions*.
+
+Pré-requisito: depende do FIX 6 do TICKET-51 (CAPTCHA *fail-closed*) já estar em produção.
+
+### 6) Logging e observabilidade
+
+- Adicionar log estruturado (com `user.id`, `dataset.id`, IP, *user-agent*) em cada `429` devolvido pelo limiter. Útil para identificar contas a abusar.
+- Expor métrica Prometheus `community_resources_created_total{status}` para detetar picos anómalos.
+- Alertar (Grafana/Sentry) quando mais de N submissões/min vêm do mesmo `user.id` — pode existir um abuso novo que ultrapassa os limites configurados.
+
+### 7) Limpeza dos dados criados pela PoC
+
+Os 106 recursos criados pela auditoria devem ser apagados antes do *deploy* da correção. Confirmar com o auditor o `dataset.id` afetado e correr:
+
+```python
+# Manual no shell de Flask, em PPR
+CommunityResource.objects(
+    dataset=Dataset.objects(slug="dataset-da-poc").first(),
+    title__icontains="<img src=x onerror"
+).delete()
+```
+
+(Ou, se o atacante adicionou *payloads* limpos sem XSS, identificar pelos timestamps em rajada.)
+
+**Ficheiros a alterar**
+
+| Ficheiro                                            | Alteração                                                      |
+| --------------------------------------------------- | -------------------------------------------------------------- |
+| `backend/udata/core/dataset/api.py`                 | `@limiter.limit(...)` em `CommunityResourcesAPI.post`; deduplicação |
+| `backend/udata/api/limits.py`                       | NEW — `user_or_ip()` helper + constantes                       |
+| `backend/udata/app.py`                              | Reduzir `default_limits`; usar `user_or_ip` como `key_func`    |
+| `backend/udata/core/reuse/api.py`                   | `@limiter.limit(...)` em criação                                |
+| `backend/udata/core/organization/api.py`            | `@limiter.limit(...)` em criação                                |
+| `backend/udata/core/discussions/api.py`             | `@limiter.limit(...)` em criação/comentário                     |
+| `backend/udata/core/storages/api.py`                | `@limiter.limit(...)` em uploads (avatar/logo)                  |
+| `backend/udata/settings.py`                         | Comentário a sublinhar a obrigatoriedade de Redis em produção  |
+| `docs/INSTALLATION.md`                              | Documentar `RATELIMIT_STORAGE_URI=redis://...`                  |
+| `docs/vulnerability-remediation.md`                 | Adicionar entrada FIX 11 — VULN-2078                            |
+| `CHANGELOG.md`                                      | Documentar a correção                                          |
+
+**Critérios de Aceitação**
+
+- [ ] **Rate-limit** — `POST /api/1/datasets/community_resources/` ao 6.º pedido em <60s pelo mesmo utilizador autenticado devolve `429` com `Retry-After`.
+- [ ] **Rate-limit por utilizador** — `key_func` é `user:{id}` quando autenticado; não é por IP. Duas sessões em IPs diferentes do mesmo utilizador partilham o limite.
+- [ ] **Limites globais** — `default_limits` reduzido para `1000/day, 200/hour` em [`app.py`](../backend/udata/app.py).
+- [ ] **Storage** — Em PPR, `RATELIMIT_STORAGE_URI` aponta para Redis; verificar que workers múltiplos partilham o estado (teste manual com 2 workers e o mesmo utilizador).
+- [ ] **Outros endpoints** — `POST` de `datasets`, `reuses`, `organizations`, `discussions`, `comments`, `avatar` têm `@limiter.limit(...)` aplicado.
+- [ ] **Deduplicação** — Submissões idênticas (`dataset`+`owner`+`url`) em 5 min consecutivos devolvem `409 Conflict`.
+- [ ] **Tests** — Pytest novos cobrem: 5 submissões aceites, 6.ª recusada com 429; deduplicação devolve 409.
+- [ ] **Logs** — Cada 429 produz uma entrada de log com `user.id`, IP, endpoint.
+- [ ] **Limpeza** — Os recursos criados pela PoC em PPR foram apagados.
+- [ ] **Documentação** — `docs/vulnerability-remediation.md` actualizado com FIX 11; `INSTALLATION.md` documenta Redis.
+
+**Notas adicionais**
+
+- **Coordenação com TICKETS 56-57 (XSS)**: as capturas da auditoria mostram que o atacante combinou XSS armazenado com submissão massiva. A correção do rate-limit reduz drasticamente o blast radius mas **não substitui** a correção de sanitização. Garantir que ambas seguem para produção.
+- **Coordenação com FIX 7 do TICKET-51**: este ticket **completa** o FIX 7. Os limites *globais* foram aplicados, mas (a) ficaram demasiado altos no código actual, (b) não foram aplicados aos endpoints content-creation, (c) o storage continua `memory://` por defeito. Reaproveitar o trabalho do FIX 7 sem reverter.
+- **Calibração**: os limites propostos são conservadores. Antes do deploy em produção, validar com a equipa de operações se há *workflows* legítimos que poderão ser bloqueados (ex: integrações automáticas com APIs do portal por organizações governamentais). Se sim, fornecer uma *whitelist* configurável (`RATELIMIT_EXEMPT_USERS = [...]` por `user.id`) — ainda assim auditada.
+- **API Keys**: utilizadores com API key devem entrar no `key_func` como `apikey:{key_hash}` em vez de `user:{id}`, para que abuso por API key seja contabilizado separadamente.
+
+---
+
+## TICKET-60: SSRF in `/internal-api/proxy-csv` — Initial Patch Applied + Residual Hardening (VULN-2079)
+
+**Severidade**: MEDIUM (Server-Side Request Forgery)
+**Origem**: Auditoria de segurança — VULN-2079 (KITS24)
+**CWE**: CWE-918 (Server-Side Request Forgery)
+**OWASP**: A10:2021 – Server-Side Request Forgery / API7:2023 – SSRF
+**Endpoints afetados**: `GET /internal-api/proxy-csv?url=...` (rota Next.js, [`frontend/src/app/internal-api/proxy-csv/route.ts`](../frontend/src/app/internal-api/proxy-csv/route.ts)) e a duplicata órfã em [`frontend/src/app/api/proxy-csv/route.ts`](../frontend/src/app/api/proxy-csv/route.ts).
+**Estado**: **Patch inicial aplicado** no commit [`063dda6`](https://github.com/.../commit/063dda6) (2026-04-23) — bloqueia o vector original do PoC. Este ticket cobre o **hardening residual** identificado a posteriori.
+
+**Descrição (problema original)**
+
+A rota Next.js `/internal-api/proxy-csv` é usada por [`frontend/src/components/datasets/DatasetResourcesTable.tsx:268`](../frontend/src/components/datasets/DatasetResourcesTable.tsx#L268) para buscar o CSV de um recurso e fazer *preview* tabular. A versão original validava o `url` recebido com **prefixo de string**:
+
+```ts
+// versão vulnerável (pre-063dda6)
+const ALLOWED_ORIGIN = "https://dados.gov.pt";
+if (!url.startsWith(ALLOWED_ORIGIN)) {
+  return NextResponse.json({ error: "URL not allowed" }, { status: 403 });
+}
+```
+
+Qualquer hostname que **comece por** `dados.gov.pt` passava — `https://dados.gov.pt.s.inty.io/`, `https://dados.gov.pt@evil.com/`, `https://dados.gov.pt-evil.com/`, etc. A auditoria demonstrou:
+
+```
+GET /internal-api/proxy-csv?url=https://dados.gov.pt.s.inty.io
+→ 502 {"error":"Failed to fetch resource"}
+DNS server: query[A]    dados.gov.pt.s.inty.io   from <preprod-ip>
+```
+
+A *DNS canary* `s.inty.io` confirma que o servidor da Next.js fez resolução DNS para um host externo arbitrário — *server-side request forgery* clássico. A resposta 502 vem do `catch` (a ligação TCP foi recusada/filtrada por firewall), mas a query DNS **e** a tentativa de conexão saíram do servidor.
+
+**Patch inicial (já aplicado — commit `063dda6`)**
+
+A correção shippada substituiu o prefixo por:
+
+- `new URL(rawUrl)` parsing — falha em URIs malformados (resposta `400`).
+- *Allowlist* exata `Set<string>` de hosts via env var `CSV_PROXY_ALLOWED_HOSTS` (defaults `dados.gov.pt`, `preprod.dados.gov.pt`).
+- Match em `target.host` **ou** `target.hostname` — bloqueia `dados.gov.pt.s.inty.io`, `dados.gov.pt@evil.com`, `dados.gov.pt-evil.com`.
+- Protocolo controlado por `CSV_PROXY_ALLOW_HTTP` (default: HTTPS-only).
+- `redirect: "error"` — bloqueia *bypass* via redirect 3xx para outro host.
+- `AbortSignal.timeout(10s)` — limita tempo do *fetch* (DoS / *slow-loris*).
+
+A duplicata órfã em `src/app/api/proxy-csv/route.ts` recebeu o mesmo patch (defesa em profundidade — em runtime é inacessível, dado que `next.config.ts` faz *rewrite* de `/api/*` para Flask).
+
+**Lacunas residuais que este ticket resolve**
+
+O patch fecha o vector exacto do PoC, mas a recomendação OWASP/CWE-918 vai além de "validação de hostname". A auditoria sugere *whitelist* de **hosts e serviços** — o `host` é só uma das dimensões. Persistem riscos:
+
+1. **Porta não validada** ⚠️
+   - `target.host` inclui porta (`dados.gov.pt:25`); `target.hostname` não. A *check* atual `allowedHosts.has(host) || allowedHosts.has(hostname)` aceita `dados.gov.pt:25` porque o `hostname` (`dados.gov.pt`) está na *allowlist*. Permite **port-scan / port-probe** de qualquer porta no IP do `dados.gov.pt` (ex.: SMTP 25, Redis 6379, MongoDB 27017 — caso o IP coabite com infra interna).
+   - **Fix**: validar explicitamente `target.port` contra `{"", "443"}` (HTTPS) ou `{"", "443", "80"}` (se `CSV_PROXY_ALLOW_HTTP`).
+
+2. **Sem filtragem de IP privado / loopback / link-local / cloud-metadata** ⚠️⚠️
+   - O .env.local permite `CSV_PROXY_ALLOWED_HOSTS=localhost:7000` para dev, e `172.31.204.12` / `10.55.37.38` para DEV/TST. Em PPR/PRD a *allowlist* é a *whitelist* de produção, mas:
+     - Operador pode **acidentalmente** colocar `localhost` ou `127.0.0.1` em PPR/PRD — sem guardrail.
+     - DNS *poisoning* / *rebinding* pode fazer `dados.gov.pt` resolver para `127.0.0.1`, `169.254.169.254` (AWS/Azure/GCP metadata), `10.0.0.x` (rede interna).
+   - **Fix**: após resolver o `hostname` via `dns.lookup`, validar que o IP **não** está em RFC1918 (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), loopback (`127.0.0.0/8`, `::1`), link-local (`169.254.0.0/16`, `fe80::/10`), CG-NAT (`100.64.0.0/10`), nem cloud metadata IPs. Bloquear se sim. **Excepção**: em `NODE_ENV=development` permitir loopback (necessário para dev local).
+
+3. **DNS rebinding (TOCTOU)** ⚠️⚠️
+   - A *check* do hostname acontece antes do `fetch()`. O Node `fetch` resolve DNS **outra vez** internamente. Atacante que controle DNS de um host *allowlisted* pode devolver IP público em T0 e IP interno em T1.
+   - **Fix**: pré-resolver o `hostname` com `dns.lookup`, validar IP, e fazer o `fetch` **com esse IP fixo** (`Host: hostname`, conexão a IP) — usando um custom `dispatcher` do `undici` ou `http(s).Agent` com `lookup` que devolve sempre o IP validado.
+
+4. **Sem cap de tamanho durante streaming** ⚠️
+   - `const buffer = await res.arrayBuffer()` lê o corpo **inteiro** antes de fazer `slice(0, MAX_BYTES)`. Upstream `allowlisted` (legítimo ou comprometido) que sirva 1 GB exausta memória do worker Next.js.
+   - **Fix**: usar `res.body` (`ReadableStream`) com leitura *chunk-a-chunk*, abortando quando ultrapassa `MAX_BYTES`.
+
+5. **Validação de Content-Type post-fetch** ⚠️
+   - O endpoint chama-se `proxy-csv` mas aceita qualquer corpo, decodifica como UTF-8, e devolve como `text/plain`. Não há validação de `Content-Type` da resposta. Útil exfilar binários ou conteúdos não-CSV através do proxy.
+   - **Fix**: validar que `res.headers.get('content-type')` começa por `text/csv`, `text/plain`, `application/csv` ou `application/octet-stream` (para CSVs sem charset). Rejeitar `text/html`, `application/json`, `image/*`, etc.
+
+6. **Sem rate-limit no proxy** ⚠️
+   - O endpoint pode ser usado como **amplificador** ou **canal de exfil** — anyone hammering `/internal-api/proxy-csv?url=https://dados.gov.pt/large-csv.csv` causa N pedidos para `dados.gov.pt`. Também pode ser explorado para esgotar a quota de saída do worker.
+   - **Fix**: rate-limit no Next.js *middleware* (5/min, 50/hora por IP). Coordenar com TICKET-59 (estratégia comum de rate-limit no portal).
+
+7. **`User-Agent` ausente nos pedidos saintes** ⚠️
+   - Default do Node `fetch` é `node`. Operadores de `dados.gov.pt` (e CDN/WAF) não distinguem o tráfego do proxy de tráfego anónimo.
+   - **Fix**: `headers: { ..., "User-Agent": "dadosgov-csv-proxy/1.0 (+https://dados.gov.pt)" }`.
+
+8. **Sem log estruturado** ⚠️
+   - `console.error("Proxy CSV error:", err)` perde contexto. Para investigação forense pós-incidente: registar `requestor IP`, `target.host`, `status`, `bytes`, `latency`.
+   - **Fix**: log JSON estruturado em cada pedido (sucesso e erro).
+
+9. **Guardrail em `process.env.CSV_PROXY_ALLOWED_HOSTS`** ⚠️
+   - Configuração textual sem validação. Operador pode escrever `*`, `localhost`, `127.0.0.1`, `169.254.169.254` em PRD por engano.
+   - **Fix**: ao parsear a allowlist, em `NODE_ENV=production` rejeitar (com erro fatal de boot ou log de aviso) qualquer entrada que normalize para um IP privado/loopback/link-local. Isso também ajuda a #2.
+
+10. **Duplicata órfã é code-rot risk** ⚠️
+    - [`frontend/src/app/api/proxy-csv/route.ts`](../frontend/src/app/api/proxy-csv/route.ts) é unreachable hoje (rewrite `/api/*` → Flask em [`next.config.ts:144-146`](../frontend/next.config.ts#L144-L146)), mas existe como código vivo. Se o rewrite mudar (e.g. um futuro endpoint Next.js sob `/api/`), a versão duplicada volta a estar exposta — e divergirá da canónica.
+    - **Fix**: **eliminar** o ficheiro `src/app/api/proxy-csv/route.ts` e adicionar comentário em `next.config.ts` a explicar a regra `/api/*` → backend.
+
+11. **Documentar limites em `.env.example`** ✅ parcial
+    - `.env.example` já documenta `CSV_PROXY_ALLOWED_HOSTS` (commit 063dda6). Acrescentar aviso explícito: **nunca** incluir `localhost`, `127.0.0.1`, `0.0.0.0`, `::1`, RFC1918 ranges (`10.*`, `172.16-31.*`, `192.168.*`) ou `169.254.169.254` (cloud metadata) em PRD/PPR.
+
+**O que deve ser feito**
+
+Aplicar **defense-in-depth** sobre o patch existente. Em ordem de prioridade:
+
+### 1) Validação de IP (resolver-time + runtime) — fix #2, #3, #9
+
+Refactor `route.ts` para resolver o hostname com `dns.lookup`, validar o IP, e fazer o fetch contra esse IP. Esboço:
+
+```ts
+import { lookup } from "node:dns/promises";
+import { isIPv4, isIPv6 } from "node:net";
+import { Agent, fetch as undiciFetch } from "undici";
+
+const PRIVATE_V4 = [
+  /^10\./,
+  /^127\./,
+  /^169\.254\./,
+  /^172\.(1[6-9]|2\d|3[0-1])\./,
+  /^192\.168\./,
+  /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./,  // 100.64.0.0/10 (CG-NAT)
+  /^0\.0\.0\.0$/,
+];
+const PRIVATE_V6 = [/^::1$/, /^fc/, /^fd/, /^fe[89ab]/i];
+
+function isInternalIp(ip: string): boolean {
+  if (isIPv4(ip)) return PRIVATE_V4.some((re) => re.test(ip));
+  if (isIPv6(ip)) return PRIVATE_V6.some((re) => re.test(ip.toLowerCase()));
+  return true; // unknown → reject
+}
+
+async function resolveAndValidate(hostname: string): Promise<string> {
+  const { address } = await lookup(hostname);
+  if (process.env.NODE_ENV === "production" && isInternalIp(address)) {
+    throw new Error(`Resolved to internal IP: ${address}`);
+  }
+  return address;
+}
+
+// In GET():
+const ip = await resolveAndValidate(target.hostname);
+const agent = new Agent({
+  connect: { lookup: (_h, _o, cb) => cb(null, ip, isIPv6(ip) ? 6 : 4) },
+});
+const res = await undiciFetch(target, {
+  dispatcher: agent,
+  headers: {
+    Accept: "text/csv, text/plain, */*",
+    "User-Agent": "dadosgov-csv-proxy/1.0",
+  },
+  redirect: "error",
+  signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+});
+```
+
+Pinning DNS via `lookup` no agent fecha a janela TOCTOU.
+
+### 2) Validação de porta — fix #1
+
+```ts
+const allowedPorts = protocols.has("https:") ? new Set(["", "443"]) : new Set(["", "80", "443"]);
+if (!allowedPorts.has(target.port)) {
+  return NextResponse.json({ error: "URL not allowed" }, { status: 403 });
+}
+```
+
+### 3) Stream com cap de tamanho — fix #4
+
+Substituir `arrayBuffer()` por leitura streamada:
+
+```ts
+const reader = res.body?.getReader();
+const chunks: Uint8Array[] = [];
+let total = 0;
+while (reader) {
+  const { value, done } = await reader.read();
+  if (done) break;
+  total += value.byteLength;
+  if (total > MAX_BYTES) {
+    reader.cancel();
+    break;
+  }
+  chunks.push(value);
+}
+const text = new TextDecoder("utf-8").decode(Buffer.concat(chunks));
+```
+
+### 4) Validação de Content-Type — fix #5
+
+```ts
+const ct = (res.headers.get("content-type") || "").toLowerCase();
+const acceptable = ["text/csv", "text/plain", "application/csv", "application/octet-stream"];
+if (!acceptable.some((t) => ct.startsWith(t))) {
+  return NextResponse.json({ error: "Upstream returned unsupported content-type" }, { status: 415 });
+}
+```
+
+### 5) Rate-limit no proxy — fix #6
+
+Implementar via Next.js *middleware* ou via biblioteca como `@upstash/ratelimit` com Redis. Coordenar com TICKET-59 para definir o backend de rate-limit comum entre Flask (`flask-limiter`) e Next.js.
+
+Limites sugeridos: `5 per minute, 50 per hour, 200 per day` por IP.
+
+### 6) Logging estruturado — fix #7, #8
+
+Substituir `console.error` por logger estruturado (e.g., `pino`):
+
+```ts
+log.info({
+  event: "proxy-csv",
+  url: target.toString(),
+  ip: request.headers.get("x-forwarded-for") ?? "?",
+  status,
+  bytes: total,
+  latency_ms: Date.now() - t0,
+});
+```
+
+### 7) Eliminar duplicata e fortalecer comentário — fix #10
+
+```bash
+rm frontend/src/app/api/proxy-csv/route.ts
+```
+
+Em [`next.config.ts:144-146`](../frontend/next.config.ts#L144-L146):
+
+```ts
+// SECURITY: any /api/* route in Next.js is shadowed by the rewrite to
+// the Flask backend below — keep this route reserved for backend
+// proxying. Do NOT add Next.js handlers under /api/. CSV proxy lives
+// at /internal-api/proxy-csv.
+{ source: "/api/:path*", destination: `${BACKEND_URL}/api/:path*` },
+```
+
+### 8) Documentar limites no `.env.example` — fix #11
+
+Adicionar bloco explícito:
+
+```bash
+# CSV proxy allowlist — STRICT in production.
+# NEVER include: localhost, 127.0.0.1, 0.0.0.0, ::1, RFC1918 ranges
+# (10.*, 172.16-31.*, 192.168.*), 100.64-127.* (CG-NAT), 169.254.169.254
+# (cloud metadata), or any internal hostname that resolves to those.
+# See ../docs/vulnerability-remediation.md (FIX 12 — VULN-2079).
+CSV_PROXY_ALLOWED_HOSTS=dados.gov.pt,preprod.dados.gov.pt
+```
+
+### 9) Testes de regressão
+
+Criar `frontend/src/app/internal-api/proxy-csv/route.test.ts` (Vitest/Jest, conforme stack do projeto):
+
+- `https://dados.gov.pt.s.inty.io` → 403 (regressão original).
+- `https://dados.gov.pt@evil.com` → 403.
+- `https://dados.gov.pt:25` → 403 (porta não permitida).
+- `https://dados.gov.pt` mas DNS resolve para `127.0.0.1` → 502 / `Resolved to internal IP` em PRD; aceite em `NODE_ENV=development`.
+- `http://dados.gov.pt` com `CSV_PROXY_ALLOW_HTTP=false` → 403.
+- Resposta `Content-Type: text/html` → 415.
+- Resposta de 100 MB → terminada após 1 MB lidos; sem OOM.
+- Redirect 3xx → bloqueado (`redirect: "error"`).
+
+**Ficheiros a alterar**
+
+| Ficheiro                                                  | Alteração                                                          |
+| --------------------------------------------------------- | ------------------------------------------------------------------ |
+| `frontend/src/app/internal-api/proxy-csv/route.ts`        | Validação de IP + DNS pinning + porta + streaming + content-type + UA + log estruturado |
+| `frontend/src/app/api/proxy-csv/route.ts`                 | **Eliminar** (duplicata órfã)                                      |
+| `frontend/next.config.ts`                                 | Comentário a marcar `/api/*` como reservado para Flask              |
+| `frontend/src/app/internal-api/proxy-csv/route.test.ts`   | NEW — testes de regressão (9 casos descritos acima)                 |
+| `frontend/.env.example`                                   | Aviso explícito sobre IPs proibidos em PRD                          |
+| `frontend/.env.local`                                     | Confirmar que dev tem `CSV_PROXY_ALLOWED_HOSTS=localhost:7000` (mantém para dev local; pode passar com guard de `NODE_ENV=development`) |
+| `frontend/package.json`                                   | (Se necessário) adicionar `undici`, `pino`, `@upstash/ratelimit`    |
+| `docs/vulnerability-remediation.md`                       | Adicionar entrada FIX 12 — VULN-2079 (status: PATCHED + hardening)  |
+| `CHANGELOG.md` (frontend)                                  | Documentar hardening                                                |
+
+**Critérios de Aceitação**
+
+- [x] **Patch inicial** — bypass via prefixo (`dados.gov.pt.s.inty.io`) já bloqueado (commit `063dda6`).
+- [ ] **Porta** — `https://dados.gov.pt:25/...` → 403.
+- [ ] **IP privado** — em PRD/PPR (`NODE_ENV=production`), pedido cujo hostname resolva para IP RFC1918/loopback/link-local/CG-NAT/metadata é rejeitado com 502 e log claro.
+- [ ] **DNS rebinding** — fetch usa o IP pré-validado (DNS pinning via `lookup` no dispatcher).
+- [ ] **Cap streamado** — corpo > 1 MB é truncado **sem** reservar 1 GB de memória; teste com upstream de 10 MB falha cleanly.
+- [ ] **Content-Type** — upstream a devolver `text/html` é rejeitado com 415.
+- [ ] **Rate-limit** — 6.º pedido em <60 s do mesmo IP → 429.
+- [ ] **User-Agent** — pedidos saintes incluem `dadosgov-csv-proxy/1.0`.
+- [ ] **Logs** — cada pedido produz uma linha JSON com `event`, `url`, `ip`, `status`, `bytes`, `latency_ms`.
+- [ ] **Guardrail env** — `CSV_PROXY_ALLOWED_HOSTS=localhost` em `NODE_ENV=production` resulta em log de aviso (ou recusa de boot, conforme decisão de operações).
+- [ ] **Duplicata removida** — `frontend/src/app/api/proxy-csv/route.ts` foi apagado; `next.config.ts` tem comentário a explicar.
+- [ ] **Tests** — os 9 testes de regressão descritos passam.
+- [ ] **Documentação** — `.env.example` documenta IPs proibidos; `vulnerability-remediation.md` regista FIX 12.
+
+**Notas adicionais**
+
+- **Severidade MEDIUM justifica-se mesmo após o patch**: o patch fechou o vector explícito do PoC, mas (a) a porta permanece aberta a *port-probe* via `host` partilhado, (b) DNS rebinding contra hosts da allowlist é trivialmente explorável por quem controle o DNS de um *hostname* que algum operador acrescente à allowlist no futuro, (c) a duplicata em `/api/proxy-csv/` cria risco de regressão. Estas são exposições reais mas exigem condições adicionais (controle de DNS, mudança de rewrite); daí MEDIUM e não HIGH/Critical.
+- **Coordenação com TICKET-59**: rate-limit no Next.js (este ticket) e rate-limit no Flask (TICKET-59) devem usar o mesmo backend (Redis) e key strategy para consistência entre frontend-proxy e API direta.
+- **Acompanhar revisão de SSRF noutros endpoints**: este foi o primeiro identificado, mas qualquer endpoint Flask/Next.js que aceite URL e faça `fetch`/`requests.get` carece de revisão equivalente. Candidatos a auditar: harvesters (`backend/udata/harvest/`), webhooks, `image_url` em recursos.
+- **Histórico**: o teste manual do auditor produziu uma resposta `502 {"error":"Failed to fetch resource"}` (catch block) — o servidor *fez* a query DNS e a tentativa de TCP, evidência clara da SSRF antes do patch. Confirmar que o monitor DNS de PPR/PRD não regista mais queries para hosts não-allowlisted após o deploy do hardening.
+
+---
+
 ## Summary Table
 
 | Ficheiro                              | Alteração                                                                                                           |
@@ -2833,3 +3958,8 @@ Corrigir os bugs e lacunas nas páginas de administração do sistema (`/pages/a
 | 53                                    | Fix Server-Side Fetches Failing with Relative API URLs                                                              | Frontend             | High                         | Concluído                          |
 | 54                                    | Admin — Organization Discussions & Members (Backend Wiring)                                                         | Admin                | High                         | Not started                        |
 | 55                                    | Admin Sistema — Fix Mock Data, Broken Search/Filters, Missing API Wiring & Routing                                  | Admin                | High                         | Concluído                          |
+| 56                                    | Stored XSS via Organization Description (VULN-2075)                                                                 | Security             | High                         | Not started                        |
+| 57                                    | Stored XSS via Reuse Description & Title (VULN-2076)                                                                | Security             | High                         | Not started                        |
+| 58                                    | Account Takeover via SAML — Manual XML Fallback Bypasses Signature Validation (VULN-2077)                           | Security             | Critical                     | Not started                        |
+| 59                                    | Mass Submission on `/api/1/datasets/community_resources/` — Missing Per-Endpoint Rate Limit (VULN-2078)             | Security             | Medium                       | Not started                        |
+| 60                                    | SSRF in `/internal-api/proxy-csv` — Initial Patch Applied + Residual Hardening (VULN-2079)                          | Security             | Medium                       | Initial patch shipped — residual hardening pending |

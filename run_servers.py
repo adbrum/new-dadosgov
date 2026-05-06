@@ -1,7 +1,24 @@
+import os
+import pwd
 import shutil
 import subprocess
 import sys
 import time
+
+
+def _backend_docker_env():
+    """Resolve UDATA_UID/UDATA_GID a partir do utilizador 'dadosgov' do host
+    e injecta-os no ambiente passado ao docker compose do backend.
+    Se 'dadosgov' não existir, mantém o ambiente actual e o Dockerfile cai
+    para os defaults (UID/GID 10001)."""
+    env = os.environ.copy()
+    try:
+        entry = pwd.getpwnam("dadosgov")
+        env["UDATA_UID"] = str(entry.pw_uid)
+        env["UDATA_GID"] = str(entry.pw_gid)
+    except KeyError:
+        pass
+    return env
 
 
 def git_pull_submodules():
@@ -245,12 +262,22 @@ def run_servers_docker(rebuild=False, production=False):
     # In production mode, use only the base docker-compose.yml (no override)
     compose_flag = ["-f", "docker-compose.yml"] if production else []
 
+    backend_env = _backend_docker_env()
+    if "UDATA_UID" in backend_env:
+        print(
+            f"  → 'dadosgov' detectado no host: "
+            f"UID={backend_env['UDATA_UID']}, GID={backend_env['UDATA_GID']}"
+        )
+    else:
+        print("  → 'dadosgov' não existe no host; a usar defaults do Dockerfile (10001).")
+
     print("A iniciar o backend (app + worker + beat)...")
     if rebuild:
         print("  (com rebuild de imagens)")
     backend_result = subprocess.run(
         ["docker", "compose"] + compose_flag + ["up", "-d"] + build_flag,
         cwd="backend",
+        env=backend_env,
         stdout=sys.stdout,
         stderr=sys.stderr,
     )

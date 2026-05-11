@@ -122,6 +122,13 @@ If you see anything other than `429` on the 6th request, the limit is not
 firing — investigate config (`RATELIMIT_STORAGE_URI`) and process state
 (restart workers).
 
+> For an automated rehearsal against the dev stack, run the Playwright
+> regression spec: `cd frontend && npx playwright test --project=frontend-vulnerabilities 05-rate-limit-community-resources.spec.ts`.
+> The `RL-02` case (Retry-After header) is currently marked `test.fixme`
+> until the backend ships `RATELIMIT_HEADERS_ENABLED=True` — confirm the
+> deployed PPR/PRD response also includes `Retry-After` once that change
+> lands.
+
 Cleanup the smoke entries afterwards:
 
 ```bash

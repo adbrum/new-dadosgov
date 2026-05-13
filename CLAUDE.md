@@ -103,6 +103,7 @@ When building or optimizing pages, apply these cross-cutting practices (especial
 
 ## Regras Gerais
 
+- **Antes de corrigir um bug, procurar precedentes**: `git log --all --grep=<keyword>`, `git log --all -- <file>`, `grep -r` por padrões/símbolos relacionados (e.g. `Isolated*`, `Safe*` wrappers), e leitura de PRs/commits anteriores. Se já existe fix funcional, replicar o padrão. Se for possível melhorar, sugerir explicitamente antes de divergir.
 - **Idioma do código**: inglês (variáveis, funções, comentários, commits)
 - **Commits**: mensagens descritivas em inglês, referenciar issues com `(fix #XXX)`. **Nunca incluir `Co-Authored-By` ou qualquer atribuição de IA nos commits.**
 - **Ao alterar a API**: atualizar sempre tanto o backend (endpoint + serialização) como o frontend (tipo TS + fetch function)

@@ -290,7 +290,7 @@ def run_servers_docker(rebuild=False, production=False):
     if rebuild:
         print("  (com rebuild de imagens)")
     frontend_result = subprocess.run(
-        ["docker", "compose"] + compose_flag + ["--env-file", ".env.local", "up", "-d"] + build_flag,
+        ["docker", "compose"] + compose_flag + ["--env-file", ".env", "up", "-d"] + build_flag,
         cwd="frontend",
         stdout=sys.stdout,
         stderr=sys.stderr,

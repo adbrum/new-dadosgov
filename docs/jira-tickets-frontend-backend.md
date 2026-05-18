@@ -3887,6 +3887,155 @@ Criar `frontend/src/app/internal-api/proxy-csv/route.test.ts` (Vitest/Jest, conf
 
 ---
 
+## TICKET-61: QA Retest Blocker — `/me` 401 Misinterpreted as Login Bug (False Positive)
+
+**Severidade**: LOW (operacional / clareza de comunicação com QA)
+**Origem**: Retest de vulnerabilidades em PPR — equipa QA marcou novamente vulnerabilidades como "Unable to retest" alegando que o login está partido porque `GET /me` devolve 401 em `preprod.dados.gov.pt`, mesmo em janela privada.
+**Tipo**: Documentação + UX/observabilidade
+**Endpoints envolvidos**: `GET /me` (frontend, [`frontend/src/app/me/route.ts`](../frontend/src/app/me/route.ts)) → `GET /api/1/me/` (backend, [`backend/udata/core/user/api.py:72`](../backend/udata/core/user/api.py#L72))
+**Estado**: **Não é bug** — comportamento correcto. Este ticket cobre as acções necessárias para evitar que o mesmo mal-entendido bloqueie o retest novamente.
+
+**Contexto e prova**
+
+A equipa QA reportou (e-mail interno, 2026-05-18):
+
+> Após novos testes, continuamos com impedimentos no processo de login. O pedido ao endpoint GET /me devolve o erro "The server could not verify that you are authorized to access the URL requested...", mesmo em janela privada.
+
+Reproduzimos o pedido exactamente como o capturado pelo Burp da QA:
+
+```
+GET https://preprod.dados.gov.pt/me
+  Cookie: session=eyJjc3JmX3Rva2VuIjoi...
+  Referer: https://preprod.dados.gov.pt/pages/login
+
+→ HTTP/2 401
+  Content-Type: application/json
+  Set-Cookie: session=eyJfZnJlc2giOmZhbHNlLCJjc3JmX3Rva2VuIjoi...; Secure; HttpOnly; Path=/
+  Server: GreenLeprechaun
+
+  {"message": "The server could not verify that you are authorized to access the URL requested..."}
+```
+
+Descodificámos o payload do cookie de sessão (base64 da primeira componente antes do `.`):
+
+```
+{"csrf_token": "47af99565a048d07dcd4eb69a49ed7017e298efc"}
+```
+
+A sessão contém **apenas** o `csrf_token` — não tem `user_id` / `_user_id` do Flask-Login. O endpoint `/api/1/me/` está decorado com `@api.secure` em [`backend/udata/core/user/api.py:74`](../backend/udata/core/user/api.py#L74), pelo que devolve 401 para qualquer pedido sem sessão autenticada. É o padrão REST standard (GitHub `/user`, GitLab `/user`, etc.).
+
+O frontend já trata o 401 correctamente em [`frontend/src/services/api.ts:167`](../frontend/src/services/api.ts#L167):
+
+```ts
+export async function fetchCurrentUser(): Promise<UserRef | null> {
+  try {
+    const res = await fetch("/me", { cache: "no-store" });
+    if (!res.ok) return null;        // ← 401 → null (não autenticado)
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+```
+
+→ `null` → o Header renderiza o estado "não autenticado" (botão Login em vez de avatar). Nada partido.
+
+**Causa raiz do mal-entendido da QA**
+
+1. A QA captura o `GET /me` no proxy quando aterra em `/pages/login`. O frontend chama `fetchCurrentUser()` em cada carregamento de página para descobrir o estado de autenticação. Antes de logar, este 401 é o resultado natural.
+2. O `Set-Cookie` no 401 (Flask a "renovar" o cookie da sessão anónima) reforça a impressão de "algo está partido", quando na realidade é apenas o `SESSION_REFRESH_EACH_REQUEST=True` (padrão Flask) a actualizar o timestamp do itsdangerous.
+3. Os prints partilhados são todos do estado **pré-login** (Referer = `/pages/login`, segundo print no IdP `autenticacao.gov.pt` ainda no passo CONFIRMAR). Não há nenhum trace do `POST /saml/sso` (callback do CMD) — que é onde estaria a evidência de um bug real, se existisse.
+
+**Fixes a montante já em PRD/PPR (relacionados com este tema)**
+
+| Commit | Problema resolvido | Validação |
+| --- | --- | --- |
+| [`694fa15e`](../backend/) (LEDG-1736) | `SESSION_COOKIE_DOMAIN` derivado de `SERVER_NAME` causava cookie bleed entre PRD/PPR — browsers enviavam cookies de mais que um ambiente, backend escolhia o errado, 401 inconsistente em `/me`. Agora `SESSION_COOKIE_DOMAIN=None` (host-only). | `GET /me` com session+remember / só session / só remember / `/api/1/me/` directo → todos 200 |
+| [`7ec6c5a1`](../backend/) | pysaml2 rejeitava `Response` assinada só no envelope (sem assinatura por `Assertion`) e `SubjectConfirmationData/@Address` não-IP — comportamento real do CMD `autenticacao.gov.pt`. `want_assertions_signed=False` (integridade mantida pela assinatura do `Response`) + `valid_address` permissivo. | SAML CMD em PPR conclui sem erro pysaml2 |
+| [`fd00486a`](../backend/) | Atributos do namespace `http://interop.gov.pt/MDC/Cidadao/*` eram silenciosamente descartados (`allow_unknown_attributes=False`) e o binding NameID↔NIC falhava porque o CMD emite NameID como pseudónimo opaco com `Format=unspecified`. | Atributos extraídos correctamente; binding só aplicado quando NameID **não** é pseudónimo |
+
+Estes três fixes em conjunto resolvem todos os impedimentos técnicos identificados durante o retest anterior. O 401 isolado em `/me` no `/pages/login` **não** indica que algum deles regrediu.
+
+**O que deve ser feito**
+
+Acções de baixo custo para evitar reincidência do bloqueio:
+
+### 1) Atualizar `docs/login-workflow.md` com secção de troubleshooting para QA
+
+Acrescentar uma secção no fim do ficheiro com FAQ e padrões de tráfego esperados:
+
+- **"Vejo 401 em GET /me — o login está partido?"** → Não. `/me` é autenticado; antes de logar devolve 401. Padrão idêntico ao GitHub `/user`, GitLab `/user`. O frontend trata o 401 como "não autenticado" (devolve `null`).
+- **Como distinguir 401 pré-login (esperado) de 401 pós-login (bug)** → tabela com o caminho de chamadas esperado:
+  - Pré-login: `Referer: /pages/login` (ou outra página pública), sessão só com `csrf_token`, 401 normal.
+  - Pós-login válido: `Referer` pós-SSO, sessão com `_user_id`, **deve** devolver 200.
+- **Fluxo CMD/CDATA ponto-a-ponto** com tabela de status esperados em cada passo (`GET /saml/login` → 302 IdP → POST IdP → `POST /saml/sso` → 302 frontend → `GET /me` → 200).
+
+### 2) Adicionar nota de comentário no `frontend/src/app/me/route.ts`
+
+Comentário a explicar a semântica do 401 e a redireccionar para a doc, para reduzir risco de "fix" que altere o status code por engano:
+
+```ts
+/**
+ * Proxies `GET /me` to backend `/api/1/me/` (Flask-RestX, @api.secure).
+ *
+ * Returns 401 when the user is NOT authenticated — this is the standard
+ * REST pattern (GitHub /user, GitLab /user) and is consumed by
+ * fetchCurrentUser() as "no logged-in user" (it returns null).
+ *
+ * DO NOT change the 401 to 200+null unless you also audit every caller —
+ * the 401 is meaningful to direct API consumers and to flask-login.
+ *
+ * For QA: a 401 here on /pages/login is expected, not a bug. The login
+ * flow evidence has to be captured around POST /saml/sso. See
+ * docs/login-workflow.md § "Troubleshooting & 401 on /me".
+ */
+```
+
+### 3) Acrescentar entrada na `docs/vulnerability-remediation.md`
+
+Pequena secção no fim a documentar este episódio (PT/EN), para servir de referência futura para auditores e para a equipa QA:
+
+- O que foi reportado.
+- Como reproduzir o 401 e descodificar o cookie da sessão anónima.
+- Por que é comportamento correcto.
+- Como apresentar a evidência de um bug real (trace pós-CMD).
+
+### 4) (Opcional, P3) Endpoint utilitário para diagnóstico
+
+Em retestes futuros, um endpoint `GET /api/1/site/login-status/` ou `GET /__debug/session/` (público, sem dados sensíveis) que devolva:
+
+```json
+{ "authenticated": false, "session_has_csrf": true, "session_has_user_id": false }
+```
+
+permite à equipa QA validar **directamente** o estado da sessão sem ter de inferir do 401. Manter trás de feature flag e desligado em PRD.
+
+**Ficheiros a alterar**
+
+| Ficheiro | Alteração |
+| --- | --- |
+| `docs/login-workflow.md` | Secção "Troubleshooting & 401 on /me" + fluxo CMD ponto-a-ponto com status esperados |
+| `frontend/src/app/me/route.ts` | Docstring a explicar o porquê do 401 e a apontar para a doc |
+| `docs/vulnerability-remediation.md` | Entrada "Retest 2026-05-18 — /me 401 false positive" |
+| (opcional) `backend/udata/core/site/api.py` | Endpoint público de diagnóstico de sessão atrás de `DEBUG_DIAGNOSTICS_ENABLED` |
+
+**Critérios de Aceitação**
+
+- [ ] `docs/login-workflow.md` documenta o 401 como esperado pré-login e descreve o fluxo CMD ponto-a-ponto com status codes esperados em cada passo.
+- [ ] `frontend/src/app/me/route.ts` tem docstring que explica a semântica do 401 e aponta para a doc.
+- [ ] `docs/vulnerability-remediation.md` regista o falso-positivo do retest 2026-05-18.
+- [ ] Resposta formal enviada à equipa QA (anexada também a este ticket) com a explicação técnica + passos para o retest correcto.
+- [ ] (Se feito) Endpoint de diagnóstico de sessão entregue atrás de feature flag, desligado em PRD.
+
+**Notas adicionais**
+
+- **Severidade LOW** porque não há vulnerabilidade nem bug funcional — o sistema está a fazer exactamente o que deve. O risco é operacional: cada retest mal interpretado custa um ciclo completo (release de PPR, aviso, captura de trace, resposta) e atrasa o fecho formal das vulnerabilidades.
+- **Não alterar o 401 para 200+null**. Os benefícios percepcionais (ferramentas de proxy não vermelhas) não compensam o quebrar do contrato REST e o risco de mascarar futuros bugs em consumidores directos da API (Postman, scripts CI, integrações externas).
+- **Coordenar com o ticket de vulnerabilidades original**: o close-out formal das VULN deste retest fica dependente de a equipa QA voltar a marcar como "Retested OK" assim que o fluxo correcto (post-CMD) seja capturado e validado.
+- **Lição registada para o playbook de releases**: sempre que houver mudanças nos cookies de sessão (`SESSION_COOKIE_DOMAIN`, `SAMESITE`, expiry) ou no fluxo SAML, comunicar **explicitamente** à equipa QA o impacto no `/me` antes do retest, para evitar interpretação errada de logs antigos vs. novos.
+
+---
+
 ## Summary Table
 
 | Ficheiro                              | Alteração                                                                                                           |
@@ -3963,3 +4112,4 @@ Criar `frontend/src/app/internal-api/proxy-csv/route.test.ts` (Vitest/Jest, conf
 | 58                                    | Account Takeover via SAML — Manual XML Fallback Bypasses Signature Validation (VULN-2077)                           | Security             | Critical                     | Not started                        |
 | 59                                    | Mass Submission on `/api/1/datasets/community_resources/` — Missing Per-Endpoint Rate Limit (VULN-2078)             | Security             | Medium                       | Not started                        |
 | 60                                    | SSRF in `/internal-api/proxy-csv` — Initial Patch Applied + Residual Hardening (VULN-2079)                          | Security             | Medium                       | Initial patch shipped — residual hardening pending |
+| 61                                    | QA Retest Blocker — `/me` 401 Misinterpreted as Login Bug (False Positive)                                          | Docs/QA              | Low                          | Not started                        |

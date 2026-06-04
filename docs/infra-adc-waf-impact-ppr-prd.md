@@ -141,7 +141,10 @@ Cada mecanismo abaixo é inofensivo para um site estático, mas **interfere com 
 - **Efeito:** o rate-limit por IP em `/api/1/me/` somava os pedidos de todos os utilizadores como se fossem um só → respostas 429 → o frontend interpretava como sessão expirada → utilizadores "deslogados" aleatoriamente.
 - **Porque não acontece em TST:** cada cliente chega com o seu IP real; o limite por IP nunca dispara. Além disso, o volume de tráfego de TST/PPR nunca esgotaria o bucket partilhado - o erro só se manifesta com tráfego real de produção.
 - **Mitigação aplicacional:** rate-limit por utilizador autenticado + propagação de `X-Forwarded-For`. Mas isto só é fiável se a cadeia (F5 incluído) **preservar o IP real do cliente** no header - algo que não controlamos nem conseguimos verificar.
-- **Validação (2026-06-04):** teste de carga `scripts/loadtest_me_ratelimit.py` em TST, reproduzindo a condição de colapso (12 utilizadores autenticados, 360 pedidos agregados a partir de um único IP de origem - acima do bucket antigo de 200/hora): **0×429**; um controlo negativo com 1 utilizador acima de 60/min recebeu 429 exatamente a partir do 61.º pedido, provando que o limiter está ativo e keyed por utilizador. Falta a validação em PPR, através do F5 real - que continua dependente da preservação do IP (ver 6.4).
+- **Validação (2026-06-04):** teste de carga `scripts/loadtest_me_ratelimit.py`, reproduzindo a condição de colapso (12 utilizadores autenticados, 360 pedidos agregados a partir de um único IP de origem - acima do bucket antigo de 200/hora):
+  - **TST** (acesso direto): **0×429**; um controlo negativo com 1 utilizador acima de 60/min recebeu 429 exatamente a partir do 61.º pedido, provando que o limiter está ativo e keyed por utilizador;
+  - **PPR** (através do F5 real - travessia confirmada pelos cookies `cookiesession1` injetados nas 12 sessões): **0×429** nos mesmos 360 pedidos agregados, p95 = 81 ms. O fix sobrevive à cadeia F5/WAF de produção.
+  - A ressalva mantém-se: o rate-limit correto continua dependente da preservação do IP real do cliente pela cadeia (ver 6.4).
 
 ### 4.3 Terminação TLS + headers encaminhados → bloqueios CSRF 400/401
 

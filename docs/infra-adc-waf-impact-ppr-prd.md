@@ -171,22 +171,25 @@ Cada mecanismo abaixo é inofensivo para um site estático, mas **interfere com 
 
 ## 6. Proposta: a mesma estrutura de F5/WAF em TST/DEV
 
-### 6.1 Opção A (recomendada) - VIP de TST no F5 existente
+### 6.1 Opção A (recomendada) - VIP de TST e DEV no F5 existente
 
-Criar no **mesmo F5** que já serve PPR/PRD um _virtual server_ adicional para TST:
+Criar no **mesmo F5** que já serve PPR/PRD um _virtual server_ adicional para TST e DEV:
 
 ```
 Proposto:
   Cliente ──▶ F5 (62.28.186.196 ou VIP interno) ──▶ VM 10.55.37.38 (TST)
-              hostname: tst-dadosgov.arte.gov.pt
+              hostname: fe01tstdadosgov.srv.ama.lan
+
+  Cliente ──▶ F5 (62.28.186.196 ou VIP interno) ──▶ VM 172.31.204.12 (DEV)
+              hostname: fe01devdadosgov.srv.ama.lan
 ```
 
 - **Reutilizar exatamente os mesmos perfis e políticas** de PPR/PRD: política WAF/ASM, perfil de persistência de cookies (`cookiesession1`/`cookie_adc_ext`), perfil HTTP (reescrita de headers), perfil TLS do lado do cliente.
 - Esforço estimado do lado F5: um _virtual server_ + um _pool_ com um membro (10.55.37.38), apontando para perfis/políticas **já existentes** - sem criação de políticas novas.
 - Bloquear, como em PPR/PRD, o acesso direto à VM exceto a partir do F5 e da rede de administração - assim a equipa de desenvolvimento testa **obrigatoriamente** nas mesmas condições da produção.
-- DNS: registo interno `tst-dadosgov.arte.gov.pt` → VIP. Não precisa de exposição pública; basta ser resolvível na rede interna.
+- DNS: registo interno `fe01tstdadosgov.srv.ama.lan` → VIP. Não precisa de exposição pública; basta ser resolvível na rede interna.
 
-**Critério de aceitação** (verificável por qualquer das equipas com os comandos do Anexo A): a resposta de `https://tst-dadosgov.arte.gov.pt/saml/login` deve apresentar os mesmos cookies injetados (`cookiesession1`, `cookie_adc_ext`) e o mesmo padrão de headers que PPR/PRD.
+**Critério de aceitação** (verificável por qualquer das equipas com os comandos do Anexo A): a resposta de `https://fe01tstdadosgov.srv.ama.lan/saml/login` deve apresentar os mesmos cookies injetados (`cookiesession1`, `cookie_adc_ext`) e o mesmo padrão de headers que PPR/PRD.
 
 ### 6.2 Opção B - sincronização de políticas documentada
 
@@ -243,7 +246,7 @@ Limitação importante: isto só emula o que **já descobrimos por engenharia in
 
 ## 7. Conclusão
 
-Os erros que afetam PPR e PRD não resultam de instabilidade da aplicação - o mesmo código é estável quando o tráfego chega intacto (TST). Resultam do facto de **só PPR/PRD terem à frente um F5/WAF que modifica o tráfego**, e de a equipa de desenvolvimento testar num ambiente onde essas modificações não existem. A solução estrutural é simples de enunciar e, na Opção A, de implementar: **pôr o TST atrás do mesmo F5, com as mesmas políticas**. A partir daí, qualquer interação entre o appliance e a aplicação manifesta-se primeiro em TST - onde deve - e PPR/PRD deixam de ser o local onde estes problemas são descobertos.
+Os erros que afetam PPR e PRD não resultam de instabilidade da aplicação - o mesmo código é estável quando o tráfego chega intacto (TST). Resultam do facto de **só PPR/PRD terem à frente um F5/WAF que modifica o tráfego**, e de a equipa de desenvolvimento testar num ambiente onde essas modificações não existem. A solução estrutural é simples de enunciar e, na Opção A, de implementar: **pôr o TST e o DEV atrás do mesmo F5, com as mesmas políticas**. A partir daí, qualquer interação entre o appliance e a aplicação manifesta-se primeiro em TST e DEV - onde deve - e PPR/PRD deixam de ser o local onde estes problemas são descobertos.
 
 ---
 

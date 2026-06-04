@@ -1,33 +1,35 @@
-# Logrotate Setup - Backend Logs
+# Logrotate Setup - Container Logs
 
-How backend logs are collected on the host and rotated with `logrotate`.
+How backend and frontend logs are collected on the host and rotated with `logrotate`.
 
-This document covers the **dadosgov backend** (uwsgi + Celery worker + Celery beat) running under Docker Compose on a Linux host.
+This document covers the **dadosgov backend** (uwsgi + Celery worker + Celery beat) and the **dadosgov frontend** (Next.js) running under Docker Compose on a Linux host.
 
 ## Overview
 
-Each backend container writes its log file to `/logs/` inside the container. That directory is bind-mounted from `./logs/` on the host, so logs are readable directly from the host without `docker exec` or `sudo`. A `logrotate` config caps file size at 10 MB and keeps a long history of compressed archives.
+Each container writes its log file to `/logs/` inside the container. That directory is bind-mounted from `./logs/` on the host, so logs are readable directly from the host without `docker exec` or `sudo`. A `logrotate` config caps file size at 10 MB and keeps a long history of compressed archives.
 
 ```
-Container                           Host
-─────────────────────────────────────────────────────────
-udata-backend-app    /logs/app.log     →  ./logs/app.log
-udata-backend-worker /logs/worker.log  →  ./logs/worker.log
-udata-backend-beat   /logs/beat.log    →  ./logs/beat.log
+Container                            Host
+──────────────────────────────────────────────────────────────────
+udata-backend-app    /logs/app.log     →  backend/logs/app.log
+udata-backend-worker /logs/worker.log  →  backend/logs/worker.log
+udata-backend-beat   /logs/beat.log    →  backend/logs/beat.log
+udata-frontend-app   /logs/app.log     →  frontend/logs/app.log
 
-                                      logrotate (cron)
-                                      ├─ rotates at 10 MB
-                                      ├─ keeps 50 historical files
-                                      └─ gzips all but the most recent
+                                       logrotate (cron)
+                                       ├─ rotates at 10 MB
+                                       ├─ keeps 50 historical files
+                                       └─ gzips all but the most recent
 ```
 
 What lands in each file:
 
-| File         | Contents                                                                                                                     |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| `app.log`    | uwsgi master events (workers buried, harakiri, deadlock), HTTP 4xx/5xx access lines, Python tracebacks from request handlers |
-| `worker.log` | Celery worker output: task lifecycle, broker connection events, task tracebacks (e.g. failed downloads to `/dadosgov/fs/`)   |
-| `beat.log`   | Celery scheduler events                                                                                                      |
+| File                    | Contents                                                                                                                     |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `backend/logs/app.log`  | uwsgi master events (workers buried, harakiri, deadlock), HTTP 4xx/5xx access lines, Python tracebacks from request handlers |
+| `backend/logs/worker.log` | Celery worker output: task lifecycle, broker connection events, task tracebacks (e.g. failed downloads to `/dadosgov/fs/`) |
+| `backend/logs/beat.log` | Celery scheduler events                                                                                                      |
+| `frontend/logs/app.log` | Next.js stdout/stderr (piped via `tee` in docker-compose): startup, server-side `console.*`, unhandled exceptions            |
 
 ## Prerequisites
 
@@ -40,7 +42,7 @@ What lands in each file:
 
    If the user does not exist, create it: `sudo useradd --system --uid 10001 --gid 10001 --shell /sbin/nologin dadosgov` (after creating the matching group).
 
-2. **The deploying user belongs to `wheel`** (or to `dadosgov`) so they can read the rotated logs without `sudo`. The `wheel` group works because the bind-mount directory inherits group `wheel` via setgid, and rotated files inherit it too.
+2. **The deploying user belongs to the `dadosgov` group** so they can read and write the logs without `sudo`. The bind-mount directory is setgid (`2775`, group `dadosgov`), so new files inherit the group.
 
 3. **Docker Compose v2** and `logrotate` (already installed by default on RHEL 9 / Rocky 9 / Alma 9).
 
@@ -108,25 +110,30 @@ beat:
   command: uv run celery -A udata.worker beat -l info --logfile=/logs/beat.log
 ```
 
-### 5. Create the host log directory with the right permissions
+### 5. Host log directory permissions (automatic)
 
-```sh
-mkdir -p /opt/dadosgov/backend/logs
-chgrp wheel /opt/dadosgov/backend/logs
-chmod 1777 /opt/dadosgov/backend/logs   # sticky bit + setgid effect via wheel group
+Both `backend/docker-compose.yml` and `frontend/docker-compose.yml` include a one-shot `init-logs` service that runs before the app services on every `docker compose up`:
+
+```yaml
+init-logs:
+  image: busybox:stable
+  command: sh -c "chown -R ${UDATA_UID:-10001}:${UDATA_GID:-10001} /logs && chmod 2775 /logs"
+  volumes:
+    - ./logs:/logs
 ```
 
-Mode `1777` (`drwxrwxrwt`) lets the container write while the sticky bit prevents users from deleting each other's files. The setgid on the parent group propagates `wheel` to new files, which is what makes the logs readable by anyone in `wheel`.
+If `./logs` does not exist, Docker auto-creates it (as `root:root`) and `init-logs` fixes ownership to `dadosgov:dadosgov` with mode `2775` (setgid: new files inherit the group, group members can read/write). It also normalizes ownership of pre-existing log files, preventing the `PermissionError` restart-loop described in Troubleshooting. No manual `mkdir`/`chmod` is needed.
 
-### 6. Install the logrotate config
+### 6. Install the logrotate configs
 
-The repository ships the config under `backend/scripts/logrotate-dadosgov.conf`:
+Each repository ships its own config (`backend/scripts/logrotate-dadosgov.conf` and `frontend/scripts/logrotate-dadosgov-frontend.conf`):
 
 ```sh
 sudo cp /opt/dadosgov/backend/scripts/logrotate-dadosgov.conf /etc/logrotate.d/dadosgov
+sudo cp /opt/dadosgov/frontend/scripts/logrotate-dadosgov-frontend.conf /etc/logrotate.d/dadosgov-frontend
 ```
 
-Contents:
+Contents (the frontend config is identical, targeting `frontend/logs/*.log`):
 
 ```
 /opt/dadosgov/backend/logs/*.log {
@@ -188,10 +195,10 @@ If you get `uid=10001`, step 1 was skipped or `.env` wasn't picked up. Rebuild w
 ### Logs are being written to the host directory
 
 ```sh
-ls -la /opt/dadosgov/backend/logs/
-# -rw-r-----  1 dadosgov wheel  ...  app.log
-# -rw-r--r--  1 dadosgov wheel  ...  worker.log
-# -rw-r--r--  1 dadosgov wheel  ...  beat.log
+ls -la /opt/dadosgov/backend/logs/ /opt/dadosgov/frontend/logs/
+# -rw-rw----  1 dadosgov dadosgov  ...  app.log
+# -rw-rw-r--  1 dadosgov dadosgov  ...  worker.log
+# -rw-rw-r--  1 dadosgov dadosgov  ...  beat.log
 ```
 
 The files should be growing. If they're owned by `10001` rather than `dadosgov`, check the host has the user with that UID.
@@ -286,7 +293,10 @@ Either add the user to the `wheel` or `dadosgov` group, or use `docker exec udat
 | Path                                      | Purpose                                                          |
 | ----------------------------------------- | ---------------------------------------------------------------- |
 | `backend/.env`                            | Holds `UDATA_UID` / `UDATA_GID` for build-time alignment         |
-| `backend/docker-compose.yml`              | Bind-mounts `./logs:/logs` and configures `--logfile` for Celery |
+| `backend/docker-compose.yml`              | Bind-mounts `./logs:/logs`, `init-logs` service, Celery `--logfile` |
 | `backend/uwsgi/front.ini`                 | uwsgi log target, levels, and 4xx/5xx capture                    |
-| `backend/scripts/logrotate-dadosgov.conf` | Source of truth for the logrotate config                         |
-| `/etc/logrotate.d/dadosgov`               | Installed copy that the system actually reads                    |
+| `backend/scripts/logrotate-dadosgov.conf` | Source of truth for the backend logrotate config                 |
+| `frontend/docker-compose.yml`             | Bind-mounts `./logs:/logs`, `init-logs` service, `tee` pipe      |
+| `frontend/scripts/logrotate-dadosgov-frontend.conf` | Source of truth for the frontend logrotate config      |
+| `/etc/logrotate.d/dadosgov`               | Installed copy (backend) that the system actually reads          |
+| `/etc/logrotate.d/dadosgov-frontend`      | Installed copy (frontend) that the system actually reads         |

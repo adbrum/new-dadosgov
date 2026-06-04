@@ -11,7 +11,7 @@
 
 A aplicação dados.gov.pt (backend Flask + frontend Next.js) é estável quando o tráfego chega diretamente à VM (TST/DEV). Em PPR e PRD, todo o tráfego atravessa um **appliance F5/WAF** que **modifica ativamente** pedidos e respostas: injeta cookies de persistência, reescreve atributos de cookies da aplicação (`SameSite`), duplica e injeta headers, mascara a identidade do servidor e faz NAT do IP de origem.
 
-Estas modificações já foram a **causa-raiz de múltiplos incidentes em PPR/PRD** (falha no login CMD, logouts em massa, bloqueios CSRF) que eram **impossíveis de reproduzir em TST/DEV** - porque nesses ambientes o appliance não existe. Cada incidente custou dias de diagnóstico e os utilizadores foram afetados antes de qualquer deteção ser possível.
+Estas modificações já foram a **causa-raiz de múltiplos incidentes em PPR/PRD** (falha no login CMD, logouts em massa, bloqueios CSRF) que, à exceção de um (4.3, reproduzível em TST - ver correção nessa secção), eram **impossíveis de reproduzir em TST/DEV** - porque nesses ambientes o appliance não existe. Cada incidente custou dias de diagnóstico e os utilizadores foram afetados antes de qualquer deteção ser possível.
 
 **Não pedimos a remoção do WAF.** Pedimos que a **mesma estrutura de F5/WAF, com as mesmas políticas, seja colocada à frente de TST/DEV** (secção 6), para que qualquer problema se manifeste primeiro nos ambientes de teste e nunca pela primeira vez em produção.
 
@@ -139,19 +139,20 @@ Cada mecanismo abaixo é inofensivo para um site estático, mas **interfere com 
 
 - **Mecanismo:** atrás do F5 + cadeia de proxies, o backend via **todos os utilizadores com o mesmo IP de origem**.
 - **Efeito:** o rate-limit por IP em `/api/1/me/` somava os pedidos de todos os utilizadores como se fossem um só → respostas 429 → o frontend interpretava como sessão expirada → utilizadores "deslogados" aleatoriamente.
-- **Porque não acontece em TST:** cada cliente chega com o seu IP real; o limite por IP nunca dispara.
+- **Porque não acontece em TST:** cada cliente chega com o seu IP real; o limite por IP nunca dispara. Além disso, o volume de tráfego de TST/PPR nunca esgotaria o bucket partilhado - o erro só se manifesta com tráfego real de produção.
 - **Mitigação aplicacional:** rate-limit por utilizador autenticado + propagação de `X-Forwarded-For`. Mas isto só é fiável se a cadeia (F5 incluído) **preservar o IP real do cliente** no header - algo que não controlamos nem conseguimos verificar.
+- **Validação (2026-06-04):** teste de carga `scripts/loadtest_me_ratelimit.py` em TST, reproduzindo a condição de colapso (12 utilizadores autenticados, 360 pedidos agregados a partir de um único IP de origem - acima do bucket antigo de 200/hora): **0×429**; um controlo negativo com 1 utilizador acima de 60/min recebeu 429 exatamente a partir do 61.º pedido, provando que o limiter está ativo e keyed por utilizador. Falta a validação em PPR, através do F5 real - que continua dependente da preservação do IP (ver 6.4).
 
 ### 4.3 Terminação TLS + headers encaminhados → bloqueios CSRF 400/401
 
 - **Mecanismo:** o F5 termina o TLS e o tráfego segue com `X-Forwarded-Proto: https`; isso ativa no framework a validação CSRF estrita para HTTPS (`WTF_CSRF_SSL_STRICT`), que exige a presença e correspondência do header `Referer`.
 - **Efeito:** pedidos servidor-a-servidor legítimos sem `Referer` eram rejeitados com 400/401 - login bloqueado.
-- **Porque não acontece em TST/local:** sem terminação TLS intermediária, a validação estrita não é ativada da mesma forma.
+- **Correção (2026-06-04):** ao contrário do que esta secção afirmava originalmente, este mecanismo **reproduz-se também em TST** - o nginx local do TST também termina TLS e encaminha `X-Forwarded-Proto: https`, ativando a mesma validação estrita. Foi confirmado em TST a 2026-06-04: um build do frontend anterior ao fix bloqueava todos os logins locais com o mesmo 400→401. O incidente estreou em PPR apenas por ordem de deploy, não por diferença de ambiente. Dos três incidentes, este é o único que TST consegue reproduzir; 4.1 e 4.2 continuam exclusivos da cadeia F5.
 - **Mitigação aplicacional:** commit `73e2733c` (frontend) - encaminhar explicitamente o `Referer` nos pedidos proxied.
 
 ### 4.4 O padrão comum
 
-1. O erro **só existe atrás do F5** → TST/DEV não servem para reproduzir nem para validar o fix; a validação real acontece em PPR ou diretamente em PRD, com utilizadores afetados.
+1. O erro **só existe atrás do F5** (4.1 e 4.2; o 4.3 reproduz-se em qualquer cadeia com terminação TLS, incluindo o nginx do TST) → TST/DEV não servem para reproduzir nem para validar os fixes; a validação real acontece em PPR ou diretamente em PRD, com utilizadores afetados.
 2. O diagnóstico exige **engenharia inversa do appliance** a partir de capturas de headers, porque a equipa de desenvolvimento não tem acesso às políticas nem aos logs do WAF.
 3. A correção acaba sempre por ser feita **no lado da aplicação**, aumentando a complexidade do código. E permanece o risco estrutural: **qualquer alteração futura de política no F5 pode quebrar PRD sem nenhuma alteração de código**, e ninguém o detetará antes dos utilizadores.
 
@@ -229,7 +230,7 @@ Limitação importante: isto só emula o que **já descobrimos por engenharia in
 
 ### 6.4 Pedidos complementares (independentes da opção escolhida)
 
-1. **Preservação do IP de origem:** garantir que o F5 envia `X-Forwarded-For` com o IP real do cliente até ao backend (necessário para rate-limiting, auditoria e logs - incidente 4.2).
+1. **Preservação do IP de origem:** garantir que o F5 envia `X-Forwarded-For` com o IP real do cliente até ao backend (necessário para rate-limiting, auditoria e logs - incidente 4.2). Não é só o `/me`: os endpoints de autenticação (login, registo, recuperação de password) têm proteção anti-brute-force limitada por IP. A aplicação já mitigou o pior cenário (o limite de tentativas passou a ser por credencial, com um teto por IP), mas **qualquer limite por IP só funciona se o IP que chega ao backend for o do cliente real** - se o F5 colapsar os IPs, os tetos por IP somam todos os utilizadores de PRD como se fossem um só.
 2. **Isenção do cookie `session`:** excluir o cookie de sessão da aplicação da política de reescrita de `SameSite` (causa do incidente 4.1).
 3. **Headers duplicados:** deixar de injetar headers que a aplicação já envia (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Cache-Control`) - duplicados/contraditórios têm comportamento indefinido nos browsers - e remover o `X-XSS-Protection`, obsoleto e desaconselhado (os browsers modernos ignoram-no; a funcionalidade que ativava foi ela própria fonte de vulnerabilidades).
 4. **Gestão de alterações:** comunicação prévia à equipa de desenvolvimento de qualquer alteração de política no F5 que toque em cookies, headers, redirects, NAT ou TLS.
@@ -269,4 +270,6 @@ curl -skI --max-time 10 https://10.50.37.70/   # timeout
 - Commit backend `aeb6d768` - `fix(saml): mirror outstanding bucket to Redis via RelayState` (incidente 4.1; a descrição do commit documenta a reescrita do SameSite pelo appliance)
 - Commit frontend `73e2733c` - `fix: send Referer on proxied backend requests to satisfy SSL-strict CSRF` (incidente 4.3)
 - Fix de rate-limit por utilizador em `/api/1/me/` + propagação de `X-Forwarded-For` (incidente 4.2)
+- `scripts/loadtest_me_ratelimit.py` - teste de carga que valida o fix do incidente 4.2 sob condições de colapso de IP (executado com sucesso em TST a 2026-06-04; execução em PPR pendente)
+- Rate-limit de autenticação em dois níveis (por credencial + teto por IP) em `udata/auth/views.py`, com suite de regressão em `udata/tests/test_auth_ratelimit_ip_collapse.py` - mitigação preventiva do colapso de IP nos endpoints de auth (secção 6.4, ponto 1)
 - `docs/login-workflow.md`, `docs/saml-account-merge.md`

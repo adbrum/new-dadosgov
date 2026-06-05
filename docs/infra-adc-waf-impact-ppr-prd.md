@@ -145,6 +145,11 @@ Cada mecanismo abaixo é inofensivo para um site estático, mas **interfere com 
   - **TST** (acesso direto): **0×429**; um controlo negativo com 1 utilizador acima de 60/min recebeu 429 exatamente a partir do 61.º pedido, provando que o limiter está ativo e keyed por utilizador;
   - **PPR** (através do F5 real - travessia confirmada pelos cookies `cookiesession1` injetados nas 12 sessões): **0×429** nos mesmos 360 pedidos agregados, p95 = 81 ms. O fix sobrevive à cadeia F5/WAF de produção.
   - A ressalva mantém-se: o rate-limit correto continua dependente da preservação do IP real do cliente pela cadeia (ver 6.4).
+- **Validação completa em PPR (2026-06-05):** repetição do teste em PPR com as três fases e contas dedicadas (`loadtest01..13`, criadas na BD de PPR nesse dia):
+  - Fase 1: **13/13 logins** com sucesso através do F5 (travessia confirmada pelos `cookiesession1` nas 13 sessões);
+  - Fase 2 (condição de colapso): 360 pedidos agregados de um único IP → **0×429**, p50 = 32 ms, p95 = 51 ms;
+  - Fase 3 (controlo negativo, que no run de 2026-06-04 não tinha corrido em PPR): 1 utilizador em burst acima de 60/min → **70×429 apenas nesse utilizador** - o limiter está ativo e keyed por utilizador, não meramente desativado.
+  - Veredicto: **PASS** - é a primeira validação completa do fix em PPR, incluindo a prova de que o limite individual continua a disparar atrás do F5.
 
 ### 4.3 Terminação TLS + headers encaminhados → bloqueios CSRF 400/401
 
@@ -152,6 +157,11 @@ Cada mecanismo abaixo é inofensivo para um site estático, mas **interfere com 
 - **Efeito:** pedidos servidor-a-servidor legítimos sem `Referer` eram rejeitados com 400/401 - login bloqueado.
 - **Correção (2026-06-04):** ao contrário do que esta secção afirmava originalmente, este mecanismo **reproduz-se também em TST** - o nginx local do TST também termina TLS e encaminha `X-Forwarded-Proto: https`, ativando a mesma validação estrita. Foi confirmado em TST a 2026-06-04: um build do frontend anterior ao fix bloqueava todos os logins locais com o mesmo 400→401. O incidente estreou em PPR apenas por ordem de deploy, não por diferença de ambiente. Dos três incidentes, este é o único que TST consegue reproduzir; 4.1 e 4.2 continuam exclusivos da cadeia F5.
 - **Mitigação aplicacional:** commit `73e2733c` (frontend) - encaminhar explicitamente o `Referer` nos pedidos proxied.
+- **Prova controlada antes/depois em PPR, através do F5 real (2026-06-05):** experiência deliberada com duas versões do frontend no próprio PPR, mantendo tudo o resto constante (mesmas contas, mesma password - verificada diretamente contra o hash na BD de PPR com `verify_password` → True - mesmo backend, mesma cadeia F5):
+  - **Build sem o fix** (base anterior a `73e2733c`, imagem de 2026-06-05 10:38): **0/13 logins** - todos 401 ("Autenticação falhada"), que mascara o 400 CSRF subjacente; o teste de carga aborta na fase 1. Nenhum login local é possível em PPR sem o fix.
+  - **Build com o fix** (imagem de 2026-06-05 11:17): **13/13 logins** e PASS completo das três fases (ver 4.2).
+  - Sendo a versão do frontend a única variável entre os dois runs, fica demonstrado empiricamente que o fix é a diferença entre login impossível e funcionamento pleno atrás da cadeia F5/TLS - e, inversamente, que **qualquer deploy de uma versão sem estes fixes quebra imediatamente a autenticação em PPR/PRD**.
+  - Nota operacional: a mensagem 401 genérica devolvida ao cliente é indistinguível de credenciais erradas - sem acesso aos logs do WAF/appliance (secção 6.4, ponto 5), o diagnóstico voltou a exigir inspeção manual da imagem e verificação do hash da password na BD.
 
 ### 4.4 O padrão comum
 
@@ -276,6 +286,6 @@ curl -skI --max-time 10 https://10.50.37.70/   # timeout
 - Commit backend `aeb6d768` - `fix(saml): mirror outstanding bucket to Redis via RelayState` (incidente 4.1; a descrição do commit documenta a reescrita do SameSite pelo appliance)
 - Commit frontend `73e2733c` - `fix: send Referer on proxied backend requests to satisfy SSL-strict CSRF` (incidente 4.3)
 - Fix de rate-limit por utilizador em `/api/1/me/` + propagação de `X-Forwarded-For` (incidente 4.2)
-- `scripts/loadtest_me_ratelimit.py` - teste de carga que valida o fix do incidente 4.2 sob condições de colapso de IP (executado com sucesso em TST a 2026-06-04; execução em PPR pendente)
+- `scripts/loadtest_me_ratelimit.py` - teste de carga que valida o fix do incidente 4.2 sob condições de colapso de IP (TST PASS 2026-06-04; PPR PASS completo das três fases a 2026-06-05, incluindo a prova antes/depois do fix de login descrita em 4.3)
 - Rate-limit de autenticação em dois níveis (por credencial + teto por IP) em `udata/auth/views.py`, com suite de regressão em `udata/tests/test_auth_ratelimit_ip_collapse.py` - mitigação preventiva do colapso de IP nos endpoints de auth (secção 6.4, ponto 1)
 - `docs/login-workflow.md`, `docs/saml-account-merge.md`

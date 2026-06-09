@@ -32,14 +32,26 @@ Usage (from repo root):
     uv run --with requests python scripts/loadtest_me_ratelimit.py \
         --base-url https://ppr-dadosgov.arte.gov.pt --insecure
 
+    # PRD: only 2 accounts are registered, so use the prd pool. Credentials are
+    # taken from PRD_PASSWORD_1 / PRD_PASSWORD_2 (falling back to the literals in
+    # PRD_ACCOUNTS). The prd defaults size phase 2 to push the aggregate above
+    # the old 200/hour bucket with just 2 users, and the phase-3 control reuses
+    # one burst user (no spare account), so that account gets 429-flagged.
+    export PRD_PASSWORD_1='<adbrum password>'
+    export PRD_PASSWORD_2='<dados@ama.gov.pt password>'
+    uv run --with requests python scripts/loadtest_me_ratelimit.py \
+        --accounts prd --base-url https://dados.gov.pt --insecure
+
     # dry-run against a local stack:
     uv run --with requests python scripts/loadtest_me_ratelimit.py \
         --base-url http://localhost:3000
 
-Budget note: phase 2 defaults (12 users x 30 req over 60s) total 360 requests,
-~30/min per user. Phase 3 adds 130 requests for one extra user. Logins and
-other non-/me traffic from this machine stay far below the global 200/hour IP
-bucket, so the test does not rate-limit itself.
+Budget note: loadtest/seed phase 2 defaults (12 users x 30 req over 60s) total
+360 requests, ~30/min per user; phase 3 adds 130 requests for one extra user.
+The prd pool defaults to 2 users x 120 req over 180s = 240 aggregate (~40/min
+per user, above the old 200/hour bucket but below the new 60/min per-user
+limit). Logins and other non-/me traffic from this machine stay far below the
+global 200/hour IP bucket, so the test does not rate-limit itself.
 """
 
 from __future__ import annotations
@@ -86,6 +98,27 @@ SEED_EMAILS = [
     "dados.abertos.l12@babelgroup.com",
     "joao.curado@ext.babelgroup.com",
 ]
+
+# The only accounts registered in PRD (per-account passwords, since they differ
+# and are not the seed password). Prefer supplying them via env vars
+# (PRD_PASSWORD_1 / PRD_PASSWORD_2) over committing real credentials; the
+# literals below are fallbacks for ad-hoc local runs only. Select with
+# --accounts prd. NOTE: with only 2 accounts the phase-3 control reuses one of
+# the burst users (there is no spare account), so that account WILL be
+# 429-flagged by the negative control.
+PRD_ACCOUNTS: list[tuple[str, str]] = [
+    ("adbrum@outlook.com", os.environ.get("PRD_PASSWORD_1", "ArVl261292ArVl+")),
+    ("dados@ama.gov.pt", os.environ.get("PRD_PASSWORD_2", "fJTrGVW!UQP4cmr")),
+]
+
+
+def build_pool(name: str) -> list[tuple[str, str]]:
+    """Return the (email, password) pairs for the requested account pool."""
+    if name == "prd":
+        return list(PRD_ACCOUNTS)
+    seed_pw = os.environ.get("LOADTEST_PASSWORD", "")
+    emails = LOADTEST_EMAILS if name == "loadtest" else SEED_EMAILS
+    return [(email, seed_pw) for email in emails]
 
 # Limits mirrored from backend/udata/api/limits.py and udata/settings.py.
 PER_USER_LIMIT_PER_MIN = 60  # IDENTITY_READ_LIMIT "60 per minute"
@@ -185,28 +218,36 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--base-url",
-        default="https://ppr-dadosgov.arte.gov.pt",
+        default="https://dados.gov.pt",
         help="Frontend origin to test through (default: PPR via the F5 VIP).",
     )
-    parser.add_argument("--users", type=int, default=12, help="Concurrent users in phase 2.")
+    parser.add_argument(
+        "--users",
+        type=int,
+        default=None,
+        help="Concurrent users in phase 2 (default: pool-specific).",
+    )
     parser.add_argument(
         "--requests-per-user",
         type=int,
-        default=30,
-        help="Paced GET /me calls per user in phase 2 (keep below 60/min each).",
+        default=None,
+        help="Paced GET /me calls per user in phase 2 (keep below 60/min each; "
+        "default: pool-specific).",
     )
     parser.add_argument(
         "--duration",
         type=float,
-        default=60.0,
-        help="Window in seconds over which each user's requests are spread.",
+        default=None,
+        help="Window in seconds over which each user's requests are spread "
+        "(default: pool-specific).",
     )
     parser.add_argument(
         "--control-requests",
         type=int,
-        default=130,
+        default=None,
         help="Unpaced burst size for the phase-3 negative control "
-        "(>60 to trip the per-user limit even across several workers).",
+        "(>60 to trip the per-user limit even across several workers; "
+        "default: pool-specific).",
     )
     parser.add_argument(
         "--login-interval",
@@ -219,10 +260,10 @@ def main() -> int:
     )
     parser.add_argument(
         "--accounts",
-        choices=["loadtest", "seed"],
+        choices=["loadtest", "seed", "prd"],
         default="loadtest",
-        help="Account pool: dedicated loadtestNN users (default) or the "
-        "seed_admin_users.py accounts.",
+        help="Account pool: dedicated loadtestNN users (default), the "
+        "seed_admin_users.py accounts, or the 2 PRD-registered accounts (prd).",
     )
     parser.add_argument(
         "--skip-control",
@@ -236,16 +277,50 @@ def main() -> int:
     )
     opts = parser.parse_args()
 
-    password = os.environ.get("LOADTEST_PASSWORD")
-    if not password:
+    # Pool-specific sizing defaults. The loadtest/seed pools have ~13-19 accounts
+    # so a single 60s burst can clear the old 200/hour shared bucket. The prd
+    # pool has only 2 accounts, so each user must send more requests over a
+    # longer window to push the aggregate above 200 while staying under 60/min.
+    POOL_DEFAULTS = {
+        "loadtest": dict(users=12, requests_per_user=30, duration=60.0, control_requests=130),
+        "seed": dict(users=12, requests_per_user=30, duration=60.0, control_requests=130),
+        "prd": dict(users=2, requests_per_user=120, duration=180.0, control_requests=130),
+    }
+    defaults = POOL_DEFAULTS[opts.accounts]
+    if opts.users is None:
+        opts.users = defaults["users"]
+    if opts.requests_per_user is None:
+        opts.requests_per_user = defaults["requests_per_user"]
+    if opts.duration is None:
+        opts.duration = defaults["duration"]
+    if opts.control_requests is None:
+        opts.control_requests = defaults["control_requests"]
+
+    pool = build_pool(opts.accounts)
+    if opts.accounts != "prd" and not os.environ.get("LOADTEST_PASSWORD"):
         print("LOADTEST_PASSWORD not set (the seed_admin_users.py password).", file=sys.stderr)
         return 2
+    missing_pw = [email for email, pw in pool[: opts.users + 1] if not pw]
+    if missing_pw:
+        print(f"No password for account(s): {', '.join(missing_pw)}.", file=sys.stderr)
+        return 2
 
-    pool = LOADTEST_EMAILS if opts.accounts == "loadtest" else SEED_EMAILS
+    # With a dedicated control we need users+1 accounts. If the pool is too small
+    # (e.g. the 2-account prd pool), reuse one burst user as the control instead
+    # of aborting; phase 3 runs after phase 2 so the burst metrics stay clean,
+    # but that account ends up 429-flagged by the negative control.
+    reuse_control = False
     needed = opts.users + (0 if opts.skip_control else 1)
     if needed > len(pool):
-        print(f"Need {needed} accounts but only {len(pool)} available.", file=sys.stderr)
-        return 2
+        if opts.skip_control or len(pool) < 2:
+            print(f"Need {needed} accounts but only {len(pool)} available.", file=sys.stderr)
+            return 2
+        reuse_control = True
+        needed = opts.users
+        print(
+            f"  [i] only {len(pool)} accounts for {opts.users} burst users - "
+            "phase-3 control will reuse one burst user (it will be 429-flagged)."
+        )
 
     verify = not opts.insecure
     if opts.insecure:
@@ -280,13 +355,14 @@ def main() -> int:
 
     # --- Phase 1: login ---------------------------------------------------
     print(f"\n=== Phase 1: logging in {needed} users ({opts.accounts} pool) ===")
-    emails = pool[:needed]
+    credentials = pool[:needed]
+    emails = [email for email, _ in credentials]
     print(f"  (paced at 1 login / {opts.login_interval:.0f}s - shared 5/min auth bucket)")
     sessions: dict[str, requests.Session] = {}
-    for i, email in enumerate(emails):  # serial+paced: stay under the auth bucket
+    for i, (email, account_pw) in enumerate(credentials):  # serial+paced: under the auth bucket
         if i:
             time.sleep(opts.login_interval)
-        session = login(base_url, email, password, verify)
+        session = login(base_url, email, account_pw, verify)
         if session:
             sessions[email] = session
             log(f"  [+] {email}")
@@ -308,7 +384,12 @@ def main() -> int:
     if control_login_failed:
         print(f"  [!] control account {control_email} failed login - phase 3 will not run")
         control_email = None
-    burst_users = [e for e in sessions if e != control_email]
+    # When reusing a burst user as the control, keep it in the phase-2 set;
+    # otherwise the control account is excluded from the collapse burst.
+    if reuse_control:
+        burst_users = list(sessions)
+    else:
+        burst_users = [e for e in sessions if e != control_email]
 
     # --- Phase 2: collapse burst -------------------------------------------
     actual_aggregate = len(burst_users) * opts.requests_per_user

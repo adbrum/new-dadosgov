@@ -414,7 +414,7 @@ O regex do listener (`listeners.py`) filtra sub-endpoints. Se aparecerem eventos
 Criar os índices (correr uma vez após deploy):
 
 ```bash
-cd backend && uv run udata db upgrade
+cd backend && uv run udata db migrate
 ```
 
 A migração `2026-03-17-create-metrics-events-collection.py` cria:

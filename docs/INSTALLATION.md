@@ -212,7 +212,7 @@ mkdir -p ../udata-fs
 
 ```bash
 uv run udata init
-uv run udata db upgrade
+uv run udata db migrate
 ```
 
 ### 4.5. Criar um utilizador admin (opcional)
@@ -417,7 +417,7 @@ uv run inv dev                        # API + Celery worker
 
 # Base de dados
 uv run udata init                     # Inicializar BD
-uv run udata db upgrade               # Correr migrações
+uv run udata db migrate               # Correr migrações
 
 # Utilizadores
 uv run udata user create              # Criar utilizador
@@ -531,7 +531,7 @@ uv sync --extra dev --extra test
 # Copiar .env e preencher valores sensíveis (ver secção 4.2)
 cp .env.example .env
 mkdir -p ../udata-fs
-uv run udata init && uv run udata db upgrade
+uv run udata init && uv run udata db migrate
 
 # 4. Frontend
 cd ../frontend

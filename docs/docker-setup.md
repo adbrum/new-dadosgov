@@ -289,7 +289,7 @@ docker compose -f frontend/docker-compose.yml up -d app
 ### Run Database Migrations
 
 ```bash
-docker compose -f backend/docker-compose.yml exec app uv run udata db upgrade
+docker compose -f backend/docker-compose.yml exec app uv run udata db migrate
 ```
 
 ### Initialize Database

@@ -353,7 +353,7 @@ cd backend
 uv run udata init
 
 # 7.2 Executar migracoes pendentes
-uv run udata db upgrade
+uv run udata db migrate
 
 cd ..
 ```

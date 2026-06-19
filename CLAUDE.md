@@ -87,7 +87,7 @@ src/
 | Testes                | `cd backend && uv run pytest`                                     | `cd frontend && npm run lint`             |
 | Lint/Format           | `cd backend && uv run ruff check --fix . && uv run ruff format .` | `cd frontend && npm run lint`             |
 | Worker Celery         | `cd backend && inv work`                                          | —                                         |
-| Migrações BD          | `cd backend && udata db upgrade`                                  | —                                         |
+| Migrações BD          | `cd backend && udata db migrate`                                  | —                                         |
 | Build produção        | —                                                                 | `cd frontend && npm run build`            |
 
 ## Performance
@@ -105,9 +105,61 @@ When building or optimizing pages, apply these cross-cutting practices (especial
 
 - **Antes de corrigir um bug, procurar precedentes**: `git log --all --grep=<keyword>`, `git log --all -- <file>`, `grep -r` por padrões/símbolos relacionados (e.g. `Isolated*`, `Safe*` wrappers), e leitura de PRs/commits anteriores. Se já existe fix funcional, replicar o padrão. Se for possível melhorar, sugerir explicitamente antes de divergir.
 - **Idioma do código**: inglês (variáveis, funções, comentários, commits)
-- **Commits**: mensagens descritivas em inglês, referenciar issues com `(fix #XXX)`. **Nunca incluir `Co-Authored-By` ou qualquer atribuição de IA nos commits.**
+- **Commits**: seguir [Conventional Commits 1.0.0](#convenções-de-branches-e-commits), mensagens em inglês, referenciar issues com `(fix #XXX)`. **Nunca incluir `Co-Authored-By` ou qualquer atribuição de IA nos commits.**
+- **Branches**: seguir [Conventional Branch](#convenções-de-branches-e-commits) (`<type>/<descrição-em-kebab-case>`).
 - **Ao alterar a API**: atualizar sempre tanto o backend (endpoint + serialização) como o frontend (tipo TS + fetch function)
 - **Novos endpoints**: registar em `backend/udata/api/__init__.py` → `init_app()`
 - **Novos tipos TS**: adicionar em `frontend/src/types/api.ts`
 - **Novas fetch functions**: adicionar em `frontend/src/services/api.ts`
 - **Testes**: backend obriga pytest; frontend usa ESLint para validação estática
+
+## Convenções de Branches e Commits
+
+Todos os contribuidores deste projeto **devem** seguir estas convenções. Padrões de referência:
+[Conventional Branch](https://conventionalbranch.org/) e [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/).
+
+### Branches — Conventional Branch
+
+Formato: `<type>/<descrição>`
+
+- **Descrição** em `kebab-case`, apenas minúsculas, alfanuméricos e hífens (sem espaços, `_`, maiúsculas ou caracteres especiais).
+- Opcionalmente incluir o número da issue/ticket: `feature/issue-123-public-search-ratelimit`.
+
+| Prefixo      | Uso                                                        |
+| ------------ | ---------------------------------------------------------- |
+| `main`       | Branch principal de produção (não usar prefixo).           |
+| `feature/`   | Nova funcionalidade.                                       |
+| `bugfix/`    | Correção de bug.                                           |
+| `hotfix/`    | Correção urgente (normalmente sobre produção).             |
+| `release/`   | Preparação de uma release.                                 |
+| `chore/`     | Tarefas sem impacto em código de produção (deps, config).  |
+
+Exemplos: `feature/aggregated-home-endpoint`, `bugfix/csrf-session-overwrite`, `chore/bump-backend-submodule`, `hotfix/download-ratelimit`.
+
+### Commits — Conventional Commits 1.0.0
+
+Formato:
+
+```
+<type>[scope opcional][!]: <descrição>
+
+[corpo opcional]
+
+[rodapé(s) opcional(is)]
+```
+
+- **type** (obrigatório): `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`.
+- **scope** (opcional): área afetada, e.g. `feat(dataset):`, `fix(api):`, `chore(frontend):`.
+- **descrição**: imperativo, minúsculas, em inglês, sem ponto final.
+- **`feat`** → bump _MINOR_; **`fix`** → bump _PATCH_.
+- **Breaking changes**: `!` após o type/scope (e.g. `feat(api)!:`) e/ou rodapé `BREAKING CHANGE: <descrição>`.
+- Referenciar issues no rodapé ou na descrição: `(fix #XXX)`.
+
+Exemplos:
+
+```
+feat(search): add user_or_ip rate-limit to public GET endpoints
+fix(auth): mint CSRF server-side on authenticated POSTs (fix #42)
+chore: bump backend submodule for public download rate-limit fix
+refactor(home): move data fetch to async Server Component
+```

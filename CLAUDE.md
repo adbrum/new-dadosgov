@@ -101,11 +101,32 @@ When building or optimizing pages, apply these cross-cutting practices (especial
 - **Server-side caching (backend)** — Use `@cache.cached(timeout=N, key_prefix="...")` from Flask-Caching on aggregated endpoints.
 - **Query limiting** — Always limit querysets with `[:N]` slicing on the backend when only a fixed number of results is needed.
 
+## Repositórios Git & Fluxo de Promoção
+
+O monorepo agrega **dois repositórios git independentes** (submódulos), cada um com o seu próprio fluxo:
+
+| Submódulo   | Repositório GitHub                  |
+| ----------- | ----------------------------------- |
+| `backend/`  | `github.com/amagovpt/udata-pt`      |
+| `frontend/` | `github.com/amagovpt/dadosgov-fe`   |
+
+Cada repo tem branches de ambiente de longa duração — `develop`, `tst`, `ppr`, `main` — e promove alterações por PRs, um ambiente de cada vez:
+
+1. Criar branch **a partir de `develop`** (nomenclatura Conventional Branch: `feature/...`, `fix/...`).
+2. Quando pronto, abrir PR **para `tst`**; testar em tst.
+3. Depois PR **para `ppr`**; testar em ppr.
+4. Depois PR **para `main`** (produção).
+
+- A base de cada PR é sempre o **ambiente seguinte**, não sempre `main`.
+- **Fazer o fluxo só no(s) repo(s) efetivamente alterado(s)** — uma alteração só de backend passa por este fluxo apenas em `udata-pt`; o frontend fica intocado, e vice-versa.
+- O GitHub CLI (`gh`) **não está instalado** neste ambiente. Abrir PRs pelo URL de comparação: `https://github.com/amagovpt/<repo>/compare/<base>...<head>?expand=1`.
+
 ## Regras Gerais
 
 - **Antes de corrigir um bug, procurar precedentes**: `git log --all --grep=<keyword>`, `git log --all -- <file>`, `grep -r` por padrões/símbolos relacionados (e.g. `Isolated*`, `Safe*` wrappers), e leitura de PRs/commits anteriores. Se já existe fix funcional, replicar o padrão. Se for possível melhorar, sugerir explicitamente antes de divergir.
 - **Idioma do código**: inglês (variáveis, funções, comentários, commits)
 - **Commits**: mensagens descritivas em inglês, referenciar issues com `(fix #XXX)`. **Nunca incluir `Co-Authored-By` ou qualquer atribuição de IA nos commits.**
+- **Branches e commits** seguem [Conventional Branch](https://conventionalbranch.org/) / [Conventional Commits](https://www.conventionalcommits.org/) em **qualquer** dos repos (incluindo o do monorepo) — ver `backend/CLAUDE.md` ou `frontend/CLAUDE.md` para a tabela completa de prefixos e tipos.
 - **Ao alterar a API**: atualizar sempre tanto o backend (endpoint + serialização) como o frontend (tipo TS + fetch function)
 - **Novos endpoints**: registar em `backend/udata/api/__init__.py` → `init_app()`
 - **Novos tipos TS**: adicionar em `frontend/src/types/api.ts`

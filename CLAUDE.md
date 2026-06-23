@@ -113,9 +113,10 @@ O monorepo agrega **dois repositórios git independentes** (submódulos), cada u
 Cada repo tem branches de ambiente de longa duração — `develop`, `tst`, `ppr`, `main` — e promove alterações por PRs, um ambiente de cada vez:
 
 1. Criar branch **a partir de `develop`** (nomenclatura Conventional Branch: `feature/...`, `fix/...`).
-2. Quando pronto, abrir PR **para `tst`**; testar em tst.
-3. Depois PR **para `ppr`**; testar em ppr.
-4. Depois PR **para `main`** (produção).
+2. Quando pronto, abrir PR de volta **para `develop`**; integrar e testar aí.
+3. Depois PR **para `tst`**; testar em tst.
+4. Depois PR **para `ppr`**; testar em ppr.
+5. Depois PR **para `main`** (produção).
 
 - A base de cada PR é sempre o **ambiente seguinte**, não sempre `main`.
 - **Fazer o fluxo só no(s) repo(s) efetivamente alterado(s)** — uma alteração só de backend passa por este fluxo apenas em `udata-pt`; o frontend fica intocado, e vice-versa.

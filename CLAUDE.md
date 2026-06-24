@@ -128,6 +128,7 @@ Cada repo tem branches de ambiente de longa duração — `develop`, `tst`, `ppr
 - **Idioma do código**: inglês (variáveis, funções, comentários, commits)
 - **Commits**: mensagens descritivas em inglês, referenciar issues com `(fix #XXX)`. **Nunca incluir `Co-Authored-By` ou qualquer atribuição de IA nos commits.**
 - **Branches e commits** seguem [Conventional Branch](https://conventionalbranch.org/) / [Conventional Commits](https://www.conventionalcommits.org/) em **qualquer** dos repos (incluindo o do monorepo) — ver `backend/CLAUDE.md` ou `frontend/CLAUDE.md` para a tabela completa de prefixos e tipos.
+- **Tickets Jira**: ao criar um ticket, indicar que foi criado e **perguntar em que sprint** inserir — por norma, o **sprint atual**.
 - **Ao alterar a API**: atualizar sempre tanto o backend (endpoint + serialização) como o frontend (tipo TS + fetch function)
 - **Novos endpoints**: registar em `backend/udata/api/__init__.py` → `init_app()`
 - **Novos tipos TS**: adicionar em `frontend/src/types/api.ts`

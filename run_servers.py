@@ -1,6 +1,5 @@
 import os
 import pwd
-import shutil
 import subprocess
 import sys
 import time
@@ -36,19 +35,6 @@ def git_pull_submodules():
             print(f"  ✓ {repo}: {output if output else 'já atualizado'}")
         else:
             print(f"  ⚠ {repo}: {result.stderr.strip() or 'erro ao executar git pull'}")
-
-
-def stop_pm2_processes():
-    """Para os processos pm2 caso existam"""
-    print("Parando processos pm2 existentes...")
-    try:
-        subprocess.run(["pm2", "delete", "backend"], capture_output=True)
-        subprocess.run(["pm2", "delete", "frontend"], capture_output=True)
-        print("Processos pm2 parados com sucesso.")
-    except FileNotFoundError:
-        print("Aviso: pm2 não está instalado.")
-    except Exception as e:
-        print(f"Aviso ao parar pm2: {e}")
 
 
 def stop_normal_processes():
@@ -110,10 +96,9 @@ def stop_normal_processes():
     time.sleep(0.5)
 
 
-def run_servers_normal(mode="dev"):
-    """Inicia os servidores em modo normal"""
-    modo_nome = "DESENVOLVIMENTO" if mode == "dev" else "PRODUÇÃO"
-    print(f"\n=== Iniciando servidores em MODO {modo_nome} ===\n")
+def run_servers_normal():
+    """Inicia os servidores em modo de desenvolvimento (foreground)"""
+    print("\n=== Iniciando servidores em MODO DESENVOLVIMENTO ===\n")
 
     print("Iniciando o servidor backend (API + Celery worker)...")
     backend_process = subprocess.Popen(
@@ -126,23 +111,9 @@ def run_servers_normal(mode="dev"):
     # Aguarda um pouco para o backend iniciar
     time.sleep(2)
 
-    if mode == "start":
-        print("\n⏳ A compilar o frontend para produção (npm run build)... isto pode demorar alguns minutos.")
-        build_process = subprocess.run(
-            ["npm", "run", "build"],
-            cwd="frontend",
-            stdout=sys.stdout,
-            stderr=sys.stderr,
-        )
-        if build_process.returncode != 0:
-            print("\n❌ Falha na compilação do frontend! A cancelar o arranque.")
-            backend_process.terminate()
-            backend_process.wait()
-            return
-
-    print(f"\nIniciando o servidor frontend em modo {mode}...")
+    print("\nIniciando o servidor frontend em modo dev...")
     frontend_process = subprocess.Popen(
-        ["npm", "run", mode, "--", "-p", "3000"],
+        ["npm", "run", "dev", "--", "-p", "3000"],
         cwd="frontend",
         stdout=sys.stdout,
         stderr=sys.stderr,
@@ -166,101 +137,22 @@ def run_servers_normal(mode="dev"):
         print("Servidores encerrados com sucesso.")
 
 
-def ensure_pm2_installed():
-    """Verifica se pm2 está instalado e instala se necessário. Retorna True se disponível."""
-    if shutil.which("pm2"):
-        return True
+def run_servers_docker():
+    """Inicia os servidores via Docker Compose em modo de produção
+    (backend + frontend, com rebuild de imagens)"""
+    print("\n=== Iniciando servidores em MODO DOCKER (PRODUÇÃO) ===\n")
 
-    print("pm2 não encontrado. Instalando globalmente...")
-    result = subprocess.run(
-        ["npm", "install", "-g", "pm2"],
-        capture_output=True,
-        text=True,
+    print("A limpar imagens, containers parados e volumes órfãos (docker system prune)...")
+    prune_result = subprocess.run(
+        ["docker", "system", "prune", "-a", "--volumes", "-f"],
+        stdout=sys.stdout,
+        stderr=sys.stderr,
     )
-    if result.returncode != 0:
-        print(f"❌ Falha ao instalar pm2: {result.stderr}")
-        return False
+    if prune_result.returncode != 0:
+        print("  ⚠ Falha no prune; a continuar mesmo assim.")
 
-    print("✓ pm2 instalado com sucesso.")
-    return True
-
-
-def run_servers_pm2():
-    """Inicia os servidores em modo segundo plano com pm2"""
-    print("\n=== Iniciando servidores em MODO SEGUNDO PLANO (PM2) ===\n")
-
-    if not ensure_pm2_installed():
-        return
-
-    print("Iniciando o servidor backend com pm2...")
-    backend_result = subprocess.run(
-        [
-            "pm2",
-            "start",
-            "uv run udata serve",
-            "--name",
-            "backend",
-        ],
-        cwd="backend",
-        capture_output=True,
-        text=True,
-    )
-
-    if backend_result.returncode != 0:
-        print(f"❌ Erro ao iniciar backend: {backend_result.stderr}")
-        return
-
-    time.sleep(2)
-
-    print("Iniciando o servidor frontend com pm2...")
-    frontend_result = subprocess.run(
-        [
-            "pm2",
-            "start",
-            "npx",
-            "--name",
-            "frontend",
-            "--",
-            "next",
-            "dev",
-            "-H",
-            "0.0.0.0",
-            "-p",
-            "3000",
-        ],
-        cwd="frontend",
-        capture_output=True,
-        text=True,
-    )
-
-    if frontend_result.returncode != 0:
-        print(f"❌ Erro ao iniciar frontend: {frontend_result.stderr}")
-        subprocess.run(["pm2", "delete", "backend"], capture_output=True)
-        return
-
-    print("\n✓ Servidores iniciados em segundo plano com sucesso!")
-    print("\nComandos úteis do pm2:")
-    print("  pm2 list          - Lista todos os processos")
-    print("  pm2 logs          - Visualiza os logs em tempo real")
-    print("  pm2 logs backend  - Logs apenas do backend")
-    print("  pm2 logs frontend - Logs apenas do frontend")
-    print("  pm2 stop all      - Para todos os processos")
-    print("  pm2 restart all   - Reinicia todos os processos")
-    print("  pm2 delete all    - Remove todos os processos")
-
-    # Mostra o status dos processos
-    print("\nStatus dos processos:")
-    subprocess.run(["pm2", "list"])
-
-
-def run_servers_docker(rebuild=False, production=False):
-    """Inicia os servidores via Docker Compose (backend + frontend)"""
-    mode_label = "PRODUÇÃO" if production else "DESENVOLVIMENTO"
-    print(f"\n=== Iniciando servidores em MODO DOCKER ({mode_label}) ===\n")
-
-    build_flag = ["--build"] if rebuild else []
     # In production mode, use only the base docker-compose.yml (no override)
-    compose_flag = ["-f", "docker-compose.yml"] if production else []
+    compose_flag = ["-f", "docker-compose.yml"]
 
     backend_env = _backend_docker_env()
     if "UDATA_UID" in backend_env:
@@ -272,10 +164,9 @@ def run_servers_docker(rebuild=False, production=False):
         print("  → 'dadosgov' não existe no host; a usar defaults do Dockerfile (10001).")
 
     print("A iniciar o backend (app + worker + beat)...")
-    if rebuild:
-        print("  (com rebuild de imagens)")
+    print("  (com rebuild de imagens)")
     backend_result = subprocess.run(
-        ["docker", "compose"] + compose_flag + ["up", "-d"] + build_flag,
+        ["docker", "compose"] + compose_flag + ["up", "-d", "--build"],
         cwd="backend",
         env=backend_env,
         stdout=sys.stdout,
@@ -287,10 +178,9 @@ def run_servers_docker(rebuild=False, production=False):
         return
 
     print("\nA iniciar o frontend...")
-    if rebuild:
-        print("  (com rebuild de imagens)")
+    print("  (com rebuild de imagens)")
     frontend_result = subprocess.run(
-        ["docker", "compose"] + compose_flag + ["--env-file", ".env", "up", "-d"] + build_flag,
+        ["docker", "compose"] + compose_flag + ["--env-file", ".env", "up", "-d", "--build"],
         cwd="frontend",
         stdout=sys.stdout,
         stderr=sys.stderr,
@@ -301,16 +191,49 @@ def run_servers_docker(rebuild=False, production=False):
         return
 
     print("\n✓ Servidores Docker iniciados com sucesso!")
-    if production:
-        print("  Backend:  http://localhost:7000 (gunicorn)")
-    else:
-        print("  Backend:  http://localhost:7000 (hot-reload ativo)")
+    print("  Backend:  http://localhost:7000 (gunicorn)")
     print("  Frontend: http://localhost:3000")
     print("\nComandos úteis:")
     print("  docker compose -f backend/docker-compose.yml logs -f     - Logs do backend")
     print("  docker compose -f frontend/docker-compose.yml logs -f    - Logs do frontend")
     print("  docker compose -f backend/docker-compose.yml down        - Parar backend")
     print("  docker compose -f frontend/docker-compose.yml down       - Parar frontend")
+
+
+def restart_docker_containers():
+    """Reinicia todos os containers Docker (backend + frontend)"""
+    print("\n=== Reiniciando todos os containers Docker ===\n")
+
+    compose_flag = ["-f", "docker-compose.yml"]
+
+    print("A reiniciar os containers do backend (app + worker + beat)...")
+    backend_result = subprocess.run(
+        ["docker", "compose"] + compose_flag + ["restart"],
+        cwd="backend",
+        env=_backend_docker_env(),
+        stdout=sys.stdout,
+        stderr=sys.stderr,
+    )
+
+    if backend_result.returncode != 0:
+        print("\n❌ Falha ao reiniciar os containers do backend!")
+        return
+
+    print("\nA reiniciar os containers do frontend...")
+    frontend_result = subprocess.run(
+        ["docker", "compose"] + compose_flag + ["--env-file", ".env", "restart"],
+        cwd="frontend",
+        stdout=sys.stdout,
+        stderr=sys.stderr,
+    )
+
+    if frontend_result.returncode != 0:
+        print("\n❌ Falha ao reiniciar os containers do frontend!")
+        return
+
+    print("\n✓ Todos os containers foram reiniciados com sucesso!")
+    print("  Backend:  http://localhost:7000")
+    print("  Frontend: http://localhost:3000")
 
 
 def show_menu():
@@ -322,21 +245,12 @@ def show_menu():
     print("\n  1. Modo de Desenvolvimento (foreground)")
     print("     - Servidores rodam no terminal atual")
     print("     - Frontend em modo dev (npm run dev)")
-    print("\n  2. Modo Segundo Plano (pm2)")
-    print("     - Servidores rodam em background")
-    print("     - Processos gerenciados pelo pm2")
-    print("\n  3. Modo de Produção (foreground)")
-    print("     - Servidores rodam no terminal atual")
-    print("     - Frontend em modo de produção (npm run start)")
-    print("\n  4. Modo Docker")
-    print("     - Backend e frontend via Docker Compose")
-    print("     - Código montado como volume (hot-reload)")
-    print("\n  5. Modo Docker (rebuild)")
-    print("     - Igual ao modo 4, mas reconstrói as imagens")
-    print("     - Usar após alterar dependências (pyproject.toml, package.json)")
-    print("\n  6. Modo Docker (produção)")
+    print("\n  2. Modo Docker (produção)")
     print("     - Backend com gunicorn (4 workers)")
-    print("     - Ignora o override (sem hot-reload, sem volumes de código)")
+    print("     - Reconstrói as imagens (sem hot-reload, sem volumes de código)")
+    print("     - Faz prune de imagens e volumes órfãos antes de iniciar")
+    print("\n  3. Reiniciar containers")
+    print("     - Faz restart de todos os containers Docker (backend + frontend)")
     print("\n  0. Sair")
     print("\n" + "=" * 50)
 
@@ -347,7 +261,7 @@ def main():
         show_menu()
 
         try:
-            choice = input("\nDigite sua opção (0-6): ").strip()
+            choice = input("\nDigite sua opção (0-3): ").strip()
 
             if choice == "0":
                 print("\nSaindo...")
@@ -355,48 +269,23 @@ def main():
 
             elif choice == "1":
                 git_pull_submodules()
-                # Para todos os processos antes de iniciar
-                stop_pm2_processes()
+                # Liberta as portas antes de iniciar
                 stop_normal_processes()
                 time.sleep(1)
-                run_servers_normal("dev")
+                run_servers_normal()
                 break
 
             elif choice == "2":
                 git_pull_submodules()
-                # Para todos os processos antes de iniciar
-                stop_pm2_processes()
-                stop_normal_processes()
-                time.sleep(1)
-                run_servers_pm2()
-                break
-
-            elif choice == "3":
-                git_pull_submodules()
-                # Para todos os processos antes de iniciar
-                stop_pm2_processes()
-                stop_normal_processes()
-                time.sleep(1)
-                run_servers_normal("start")
-                break
-
-            elif choice == "4":
-                git_pull_submodules()
                 run_servers_docker()
                 break
 
-            elif choice == "5":
-                git_pull_submodules()
-                run_servers_docker(rebuild=True)
-                break
-
-            elif choice == "6":
-                git_pull_submodules()
-                run_servers_docker(rebuild=True, production=True)
+            elif choice == "3":
+                restart_docker_containers()
                 break
 
             else:
-                print("\n❌ Opção inválida! Por favor, escolha 0, 1, 2, 3, 4, 5 ou 6.")
+                print("\n❌ Opção inválida! Por favor, escolha 0, 1, 2 ou 3.")
                 time.sleep(1)
 
         except KeyboardInterrupt:

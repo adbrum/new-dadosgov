@@ -142,14 +142,19 @@ def run_servers_docker():
     (backend + frontend, com rebuild de imagens)"""
     print("\n=== Iniciando servidores em MODO DOCKER (PRODUÇÃO) ===\n")
 
-    print("A limpar imagens, containers parados e volumes órfãos (docker system prune)...")
-    prune_result = subprocess.run(
-        ["docker", "system", "prune", "-a", "--volumes", "-f"],
-        stdout=sys.stdout,
-        stderr=sys.stderr,
-    )
-    if prune_result.returncode != 0:
-        print("  ⚠ Falha no prune; a continuar mesmo assim.")
+    print("A limpar containers parados, imagens dangling, volumes órfãos e cache de build antiga...")
+    prune_commands = [
+        (["docker", "container", "prune", "-f"], "containers parados"),
+        (["docker", "image", "prune", "-f"], "imagens dangling"),
+        (["docker", "volume", "prune", "-f"], "volumes anónimos órfãos"),
+        # Mantém até 10 GB da cache de build mais recente (builds rápidos)
+        # e apaga apenas o excedente mais antigo.
+        (["docker", "builder", "prune", "-f", "--max-used-space", "10GB"], "cache de build antiga"),
+    ]
+    for cmd, label in prune_commands:
+        result = subprocess.run(cmd, stdout=sys.stdout, stderr=sys.stderr)
+        if result.returncode != 0:
+            print(f"  ⚠ Falha ao limpar {label}; a continuar mesmo assim.")
 
     # In production mode, use only the base docker-compose.yml (no override)
     compose_flag = ["-f", "docker-compose.yml"]
@@ -248,7 +253,8 @@ def show_menu():
     print("\n  2. Modo Docker (produção)")
     print("     - Backend com gunicorn (4 workers)")
     print("     - Reconstrói as imagens (sem hot-reload, sem volumes de código)")
-    print("     - Faz prune de imagens e volumes órfãos antes de iniciar")
+    print("     - Limpa containers parados, imagens dangling, volumes órfãos")
+    print("       e cache de build antiga (mantém 10 GB) antes de iniciar")
     print("\n  3. Reiniciar containers")
     print("     - Faz restart de todos os containers Docker (backend + frontend)")
     print("\n  0. Sair")

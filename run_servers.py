@@ -5,19 +5,31 @@ import sys
 import time
 
 
-def _backend_docker_env():
-    """Resolve UDATA_UID/UDATA_GID a partir do utilizador 'dadosgov' do host
-    e injecta-os no ambiente passado ao docker compose do backend.
-    Se 'dadosgov' não existir, mantém o ambiente actual e o Dockerfile cai
-    para os defaults (UID/GID 10001)."""
+def _docker_env(uid_var, gid_var):
+    """Resolve o UID/GID do utilizador 'dadosgov' do host e injecta-os no
+    ambiente passado ao docker compose sob os nomes indicados. Se 'dadosgov'
+    não existir, mantém o ambiente actual e o compose cai para os defaults
+    (UID/GID 10001). Nota: variáveis de ambiente têm precedência sobre o
+    ficheiro .env na interpolação do compose."""
     env = os.environ.copy()
     try:
         entry = pwd.getpwnam("dadosgov")
-        env["UDATA_UID"] = str(entry.pw_uid)
-        env["UDATA_GID"] = str(entry.pw_gid)
+        env[uid_var] = str(entry.pw_uid)
+        env[gid_var] = str(entry.pw_gid)
     except KeyError:
         pass
     return env
+
+
+def _backend_docker_env():
+    """UDATA_UID/UDATA_GID: user do container e ownership dos volumes do backend."""
+    return _docker_env("UDATA_UID", "UDATA_GID")
+
+
+def _frontend_docker_env():
+    """NEXTJS_UID/NEXTJS_GID: user do container (build args do Dockerfile) e
+    chown dos bind mounts ./logs e ./.next/cache feito pelo init-dirs."""
+    return _docker_env("NEXTJS_UID", "NEXTJS_GID")
 
 
 def git_pull_submodules():
@@ -187,6 +199,7 @@ def run_servers_docker():
     frontend_result = subprocess.run(
         ["docker", "compose"] + compose_flag + ["--env-file", ".env", "up", "-d", "--build"],
         cwd="frontend",
+        env=_frontend_docker_env(),
         stdout=sys.stdout,
         stderr=sys.stderr,
     )
@@ -228,6 +241,7 @@ def restart_docker_containers():
     frontend_result = subprocess.run(
         ["docker", "compose"] + compose_flag + ["--env-file", ".env", "restart"],
         cwd="frontend",
+        env=_frontend_docker_env(),
         stdout=sys.stdout,
         stderr=sys.stderr,
     )

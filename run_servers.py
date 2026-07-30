@@ -50,9 +50,10 @@ def git_pull_submodules():
 
 
 def install_dependencies():
-    """Instala as dependências dos dois projetos antes de iniciar os servidores:
-    'uv sync' no backend e 'npm install' no frontend. Devolve True se ambas
-    as instalações terminarem com sucesso."""
+    """Instala as dependências dos dois projetos para o modo de desenvolvimento
+    local: 'uv sync' no backend e 'npm install' no frontend. Devolve True se
+    ambas as instalações terminarem com sucesso. (No modo Docker não é usado:
+    o build das imagens já instala as dependências.)"""
     print("\n=== Instalando dependências ===\n")
 
     steps = [
@@ -298,7 +299,7 @@ def show_menu():
     print("     - Servidores rodam no terminal atual")
     print("     - Frontend em modo dev (npm run dev)")
     print("\n  2. Modo Docker (produção)")
-    print("     - Instala dependências (uv sync + npm install) antes de iniciar")
+    print("     - Dependências instaladas no build das imagens (npm ci / uv sync)")
     print("     - Backend com gunicorn (4 workers)")
     print("     - Reconstrói as imagens (sem hot-reload, sem volumes de código)")
     print("     - Limpa containers parados, imagens dangling, volumes órfãos")
@@ -334,9 +335,9 @@ def main():
 
             elif choice == "2":
                 git_pull_submodules()
-                if not install_dependencies():
-                    print("\n❌ Instalação de dependências falhou; containers não criados.")
-                    break
+                # Sem instalação de dependências no host: o build das imagens
+                # já corre 'npm ci' (frontend) e 'uv sync --no-dev' (backend),
+                # e o compose não monta volumes de código.
                 run_servers_docker()
                 break
 

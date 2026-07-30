@@ -56,7 +56,7 @@ def install_dependencies():
     print("\n=== Instalando dependências ===\n")
 
     steps = [
-        ("backend", ["uv", "sync", "--extra", "dev", "--extra", "test"]),
+        ("backend", ["uv", "sync"]),
         ("frontend", ["npm", "install"]),
     ]
 

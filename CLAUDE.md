@@ -32,14 +32,14 @@ dadosgov/
 
 ### Mapeamento de entidades (Backend → Frontend)
 
-| Backend (udata/core/)     | API endpoint            | Frontend type  | Frontend page          |
-| ------------------------- | ----------------------- | -------------- | ---------------------- |
-| `dataset/models.py`       | `/api/1/datasets/`      | `Dataset`      | `pages/datasets/`      |
-| `organization/models.py`  | `/api/1/organizations/` | `Organization` | `pages/organizations/` |
-| `reuse/models.py`         | `/api/1/reuses/`        | `Reuse`        | `pages/reuses/`        |
-| `dataservices/models.py`  | `/api/1/dataservices/`  | —              | `pages/admin/`         |
-| `discussions/models.py`   | `/api/1/discussions/`   | —              | —                      |
-| `topic/models.py`         | `/api/2/topics/`        | —              | `pages/themes/`        |
+| Backend (udata/core/)     | API endpoint            | Frontend type  | Frontend page (rota)      |
+| ------------------------- | ----------------------- | -------------- | ------------------------- |
+| `dataset/models.py`       | `/api/1/datasets/`      | `Dataset`      | `(pages)/datasets/`       |
+| `organization/models.py`  | `/api/1/organizations/` | `Organization` | `(pages)/organizations/`  |
+| `reuse/models.py`         | `/api/1/reuses/`        | `Reuse`        | `(pages)/reuses/`         |
+| `dataservices/models.py`  | `/api/1/dataservices/`  | —              | `(admin)/admin/`          |
+| `discussions/models.py`   | `/api/1/discussions/`   | —              | —                         |
+| `topic/models.py`         | `/api/2/topics/`        | —              | `(pages)/themes/`         |
 | `post/models.py`          | `/api/1/posts/`         | —              | —                      |
 | `user/models.py`          | `/api/1/users/`         | —              | —                      |
 | `contact_point/models.py` | `/api/1/contacts/`      | —              | —                      |
@@ -68,7 +68,7 @@ udata/core/<module>/
 
 ```
 src/
-├── app/pages/<feature>/
+├── app/[locale]/(pages)/<feature>/   # route group — sem segmento /pages na URL
 │   └── page.tsx             # Rota (server ou client component)
 ├── components/<feature>/
 │   ├── <Feature>Client.tsx  # Componente principal com estado ('use client')

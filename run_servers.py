@@ -49,6 +49,39 @@ def git_pull_submodules():
             print(f"  ⚠ {repo}: {result.stderr.strip() or 'erro ao executar git pull'}")
 
 
+def install_dependencies():
+    """Instala as dependências dos dois projetos para o modo de desenvolvimento
+    local: 'uv sync' no backend e 'npm install' no frontend. Devolve True se
+    ambas as instalações terminarem com sucesso. (No modo Docker não é usado:
+    o build das imagens já instala as dependências.)"""
+    print("\n=== Instalando dependências ===\n")
+
+    steps = [
+        ("backend", ["uv", "sync"]),
+        ("frontend", ["npm", "install"]),
+    ]
+
+    for repo, cmd in steps:
+        print(f"A instalar dependências do {repo} ({' '.join(cmd)})...")
+        try:
+            result = subprocess.run(
+                cmd,
+                cwd=repo,
+                stdout=sys.stdout,
+                stderr=sys.stderr,
+            )
+        except FileNotFoundError:
+            print(f"  ❌ {repo}: comando '{cmd[0]}' não encontrado no PATH.")
+            return False
+
+        if result.returncode != 0:
+            print(f"  ❌ {repo}: falha ao instalar dependências.")
+            return False
+        print(f"  ✓ {repo}: dependências instaladas.")
+
+    return True
+
+
 def stop_normal_processes():
     """Para processos normais que possam estar rodando nas portas 7000 e 3000"""
     print("Verificando e liberando portas 7000 e 3000...")
@@ -262,9 +295,11 @@ def show_menu():
     print("=" * 50)
     print("\nEscolha o modo de execução:")
     print("\n  1. Modo de Desenvolvimento (foreground)")
+    print("     - Instala dependências (uv sync + npm install) antes de iniciar")
     print("     - Servidores rodam no terminal atual")
     print("     - Frontend em modo dev (npm run dev)")
     print("\n  2. Modo Docker (produção)")
+    print("     - Dependências instaladas no build das imagens (npm ci / uv sync)")
     print("     - Backend com gunicorn (4 workers)")
     print("     - Reconstrói as imagens (sem hot-reload, sem volumes de código)")
     print("     - Limpa containers parados, imagens dangling, volumes órfãos")
@@ -289,6 +324,9 @@ def main():
 
             elif choice == "1":
                 git_pull_submodules()
+                if not install_dependencies():
+                    print("\n❌ Instalação de dependências falhou; servidores não iniciados.")
+                    break
                 # Liberta as portas antes de iniciar
                 stop_normal_processes()
                 time.sleep(1)
@@ -297,6 +335,9 @@ def main():
 
             elif choice == "2":
                 git_pull_submodules()
+                # Sem instalação de dependências no host: o build das imagens
+                # já corre 'npm ci' (frontend) e 'uv sync --no-dev' (backend),
+                # e o compose não monta volumes de código.
                 run_servers_docker()
                 break
 

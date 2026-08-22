@@ -93,16 +93,22 @@ vermelhos.
 Para vigiar um ambiente durante uma janela de deploy. Um tick sem novidade deve reportar-se
 como *noop* — assim as observações silenciosas colapsam no terminal em vez de o encherem.
 
-### Agendado (cron)
+### Agendado (cron) — opção disponível, deliberadamente não usada
 
-Prepara-se com `/schedule`. Os dois candidatos deste projeto:
+**Não há nada agendado neste projeto, por decisão.** `/triage-sprint` e `/deploy-check` são
+comandos normais: corre-se quando se quer, escrevendo-os. O cron seria apenas um despertador
+por cima deles — não acrescenta capacidade nenhuma, só remove o "quando" das mãos de quem
+trabalha. O mesmo vale para o `/loop`: só arranca quando é escrito.
+
+Se algum dia se quiser agendar, prepara-se com `/schedule`. Candidatos naturais, caso a
+decisão mude:
 
 | Quando | O quê |
 | --- | --- |
 | Dias de semana, 08:30 | `/triage-sprint` — sprint sem critérios de aceitação, itens parados, promoções pendentes |
 | Dias de semana, 09:00 | `/deploy-check ppr` — saúde do ambiente antes do dia começar |
 
-Regras para qualquer cron neste projeto:
+Regras que se aplicariam a qualquer cron neste projeto:
 
 - **Read-only por omissão.** Um cron não transiciona tickets, não faz merge, não faz push para
   `main`. Produz relatório; a decisão é humana.
@@ -130,10 +136,13 @@ turnos futuros.
 
 ---
 
-## 4. Estado por implementar
+## 4. Decisões deliberadas e pendências
 
-- Os `CLAUDE.md` de `backend/` e `frontend/` ainda afirmam que o `gh` não está instalado. São
-  ficheiros dos repos-submódulo: precisam de um `chore/` + PR em cada repo para serem
-  corrigidos.
-- Os crons acima estão desenhados mas **não registados** — registá-los inicia execuções
-  autónomas, portanto é uma decisão explícita.
+**Decidido:** nada corre por agendamento. Todo o trabalho recorrente é invocado à mão
+(`/triage-sprint`, `/deploy-check`, `/loop /watch-pr`). Não é uma pendência — é a opção
+tomada, e é reversível a qualquer momento com `/schedule`.
+
+**Pendente:** a instrução condicional sobre o `gh` está aplicada no monorepo e proposta nos
+dois submódulos — PRs [udata-pt#222](https://github.com/amagovpt/udata-pt/pull/222) e
+[dadosgov-fe#580](https://github.com/amagovpt/dadosgov-fe/pull/580), à espera de integração em
+`develop`. Até lá, os `CLAUDE.md` desses repos continuam a afirmar que o `gh` não existe.

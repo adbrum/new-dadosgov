@@ -48,6 +48,13 @@ def main() -> None:
             f"e nao commitado(s) -> falta correr `{SUITES[sub][1]}`"
         )
 
+    lock = os.path.join(ROOT, ".claude", "state", "fix-loop.lock")
+    if os.path.exists(lock):
+        notes.append(
+            "um fix-loop continua ATIVO: a superficie de teste fica congelada para a proxima "
+            "sessao -> `python3 .claude/hooks/fix-loop-state.py end`"
+        )
+
     if notes:
         json.dump({"systemMessage": "Verificacao em falta:\n- " + "\n- ".join(notes)}, sys.stdout)
 

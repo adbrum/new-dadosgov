@@ -16,7 +16,7 @@ REPOS = {"backend": "amagovpt/udata-pt", "frontend": "amagovpt/dadosgov-fe"}
 PROTECTED = {"develop", "tst", "ppr", "main"}
 
 
-def sh(cmd: list[str], cwd: str, timeout: int = 15) -> str:
+def sh(cmd: list[str], cwd: str, timeout: int = 5) -> str:
     try:
         return subprocess.run(
             cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout
@@ -42,7 +42,7 @@ def main() -> None:
                 "--limit", "10", "--json", "number,title,baseRefName,headRefName",
             ],
             path,
-            timeout=25,
+            timeout=10,
         )
         try:
             for pr in json.loads(prs or "[]"):

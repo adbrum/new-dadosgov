@@ -20,21 +20,21 @@ the order.**
    first**, outside the loop, where test files are still editable. A loop with no red test
    cannot prove anything — any change would look green.
 
-2. **`... attempt`** before each try. It refuses past the cap (2). When it refuses, stop.
-
-3. **Fix source only.** The `PreToolUse` guard denies writes to test paths via Edit, Write and
-   Bash while the lock is held. If you conclude the *test* is wrong, that is a legitimate
+2. **Fix source only.** The `PreToolUse` guard denies writes — via Edit, Write and Bash — to
+   test files *and* to the runner configuration (`vitest.config.ts`, `pyproject.toml`,
+   `conftest.py`, `factories.py`, …), because narrowing what runs removes failures just as
+   effectively as deleting an assertion. If you conclude the *test* is wrong, that is a legitimate
    finding but **not your call**: stop and report it to the user with the reasoning.
 
-4. **`... verify`**. It enforces, and prints a verdict:
-   - no test file touched since the baseline commit (asked of git, so it catches writes made
-     outside the hook too)
-   - no weakening markers introduced (`.skip`, `.only`, `@pytest.mark.skip`, `xfail`, `it.todo`)
-   - the test count did not drop
-   - every baseline failure now passes
-   - no new failure appeared
+3. **`... verify`**. Each call consumes one of the two attempts and refuses past the cap.
+   It enforces, and prints a verdict:
+   - **the suite exits 0** — the runner's exit code is the authority, never a parsed summary
+   - no test file or runner config touched since the baseline commit (asked of git, so it
+     catches writes made outside the hook too; a git failure aborts rather than passing)
+   - no weakening markers inside the frozen surface (`.skip`, `.only`, `xfail`, `--ignore`, …)
+   - the collected-test count did not drop and the skipped count did not rise
 
-5. **`... end`** to release the lock. Never leave a session with the lock held — it blocks
+4. **`... end`** to release the lock. Never leave a session with the lock held — it blocks
    legitimate test editing for whoever comes next. If `status` shows a stale lock, end it.
 
 ## When verify says REPROVADO
@@ -46,7 +46,11 @@ insisting past it is how a loop degenerates into weakening the suite.
 
 ## What this does and does not guarantee
 
-It guarantees the test was not adulterated: the expectation that failed before passes now,
-untouched. It does **not** guarantee the source fix is good — a loop can satisfy a correct
+It guarantees the test was not adulterated: the suite that was red is green, with the test
+files and the runner configuration untouched. Two things it does **not** guarantee. First,
+this process can release its own lock (`end`) — cheating is visible and effortful, not
+impossible, which is why releases are logged and why the real authority is the CI job that
+compares test counts against the base branch. Second, it does not guarantee the source fix is
+good — a loop can satisfy a correct
 test with bad code (a hardcoded return, a swallowed exception, a widened type). Say so when
 reporting, and leave the PR review in place: that is where this class of problem is caught.

@@ -21,7 +21,7 @@ A ordem importa: sem harness sólido, um loop só amplifica erros.
 
 | Evento | Script | O que faz |
 | --- | --- | --- |
-| `PreToolUse` / `Bash(git *)` | `guard-protected-branch.py` | **Nega** commit/push/merge/rebase/reset --hard em `backend/` ou `frontend/` quando o submódulo está em `develop`, `tst`, `ppr` ou `main`. Nega force-push em qualquer sítio. |
+| `PreToolUse` / `Bash` | `guard-protected-branch.py` | **Nega** commit/push/merge/rebase/reset --hard em `backend/` ou `frontend/` quando o submódulo está em `develop`, `tst`, `ppr` ou `main`. O alvo vem do **`cwd` do payload** e de todos os `-C`/`cd` do comando — ler só o texto deixava passar `cd backend` numa chamada e `git commit` na seguinte. Nega force-push em qualquer sítio (mas não confunde um heredoc que só menciona o comando com a sua execução). O monorepo está fora de âmbito, por opção. |
 | `PostToolUse` / `Write\|Edit` | `lint-changed-file.py` | `uv run ruff check --fix` + `ruff format` em `backend/**.py` (~0,5 s); `npx eslint --fix` em `frontend/**.ts(x)` (~2 s). O que não é auto-corrigível volta ao modelo como contexto, para ser corrigido no mesmo turno. |
 | `SessionStart` | `session-context.py` | Injeta o estado real: branch e ficheiros modificados de cada submódulo, PRs abertos em cada repo, e o fluxo de promoção. Elimina a suposição errada mais comum — "em que branch e em que repo estou". |
 | `PreToolUse` / `Edit\|Write\|Bash` | `guard-test-surface.py` | Enquanto existir `.claude/state/fix-loop.lock`, **nega** escritas em ficheiros de teste (ver secção 2). Inerte sem lock. |
@@ -97,26 +97,31 @@ como *noop* — assim as observações silenciosas colapsam no terminal em vez d
 ### Loop de correção guardado (`/fix-loop`)
 
 Um loop com o objetivo "ficar verde" tem uma solução degenerada: enfraquecer o teste. Apaga a
-asserção, marca `it.skip`, alarga o matcher — fica verde e o bug fica lá. O `/fix-loop` retira
-a capacidade em vez de pedir contenção.
+asserção, marca `it.skip`, estreita o `include` do runner — fica verde e o bug fica lá. O
+`/fix-loop` retira a capacidade em vez de pedir contenção.
 
 | Garantia | Como é imposta |
 | --- | --- |
-| Testes não editáveis durante o loop | `PreToolUse` (`guard-test-surface.py`) nega escritas em caminhos de teste via Edit, Write **e** Bash, enquanto existir `.claude/state/fix-loop.lock` |
-| Um fix só conta com transição vermelho→verde | `fix-loop-state.py start` grava a **identidade** do teste que falha antes de qualquer alteração; `verify` exige que passe |
-| Sem loop sem falha inicial | `start` recusa arrancar se nada falha — não há nada a provar |
-| O número de testes não desce | `verify` compara a contagem com a baseline |
-| Escritas feitas fora do hook são apanhadas | `verify` pergunta ao **git** que ficheiros mudaram desde o commit da baseline |
-| Marcas de enfraquecimento | `verify` nega `.skip`, `.only`, `@pytest.mark.skip`, `xfail`, `it.todo` no diff |
-| O loop tem fim | 2 tentativas; depois `attempt` recusa e o loop tem de escrever o diagnóstico |
+| O veredicto assenta no **exit code** do runner | `verify` exige `code == 0`. Nunca numa regex sobre o output: a primeira versão dava APROVADO quando o output não era parseável (um import quebrado, um timeout, o runner ausente) |
+| Testes **e configuração** não editáveis durante o loop | `PreToolUse` (`guard-test-surface.py`) nega escritas em testes, `conftest.py`, `factories.py`, `vitest.config.ts`, `playwright.config.ts`, `pyproject.toml`, `pytest.ini`, `setup.cfg`, `tox.ini` — congelar só os testes não bastava, porque estreitar a seleção do runner remove falhas igualmente bem |
+| Sem loop sem falha inicial | `start` recusa se a suite já estiver verde, ou se não conseguiu correr |
+| Escritas fora do hook são apanhadas | `verify` pergunta ao **git** o que mudou desde o commit da baseline — e **aborta** se o git falhar, em vez de passar vazio |
+| Contagem de testes não desce, skipped não sobe | `verify` compara com a baseline (backend via `pytest --collect-only`, que é o único sítio onde a contagem aparece) |
+| Marcas de enfraquecimento | Procuradas **só** na superfície congelada, senão o `.skip(offset)` de paginação MongoEngine em código-fonte dava falso positivo |
+| O loop tem fim | 2 tentativas, consumidas pelo próprio `verify` — antes o contador era voluntário e nada o impunha |
 
-Validado com um bug real: um teste verde-mas-adulterado (`it.skip` injetado com a suite a 0
-falhas e a contagem intacta, porque o vitest conta os skipped) foi **reprovado** pelas defesas
-de git e de padrão. Um loop que só perguntasse "está verde?" teria aceitado.
+Regressões cobertas em `.claude/hooks/tests/test_guards.py` (21 casos, um por buraco
+encontrado em revisão): `python3 .claude/hooks/tests/test_guards.py`.
 
-**O que isto não garante:** que o fix ao código-fonte seja bom. Congelar os testes elimina a
-batota pelo lado da expectativa; um retorno hardcoded ou uma exceção engolida satisfazem um
-teste correto e só a review do PR os apanha. Por isso o merge continua fora do loop.
+**O limite honesto:** este processo pode libertar o seu próprio lock, e a mensagem de negação
+até diz como. Torna a batota visível e trabalhosa, não impossível — por isso o `end` fica
+registado em `.claude/state/fix-loop.log`.
+
+**A autoridade que o agente não alcança é o CI.** `dadosgov-fe/.github/workflows/tests.yml`
+corre a suite em cada PR e falha se a contagem de testes descer ou os skipped subirem em
+relação à base. Só é um *gate* se estiver marcado como required nas branch protection rules —
+caso contrário é um sinal. O backend ainda não tem equivalente: a suite é pesada e já tem
+falhas conhecidas em `develop`, portanto precisa de abordagem própria.
 
 Por omissão está **inativo**: sem lock, o hook é inerte e o `/watch-pr` reporta sem corrigir.
 O autofix é opt-in explícito (`/watch-pr --autofix`).

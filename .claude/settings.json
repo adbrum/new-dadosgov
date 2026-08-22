@@ -92,7 +92,6 @@
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/guard-protected-branch.py\"",
-            "if": "Bash(git *)",
             "timeout": 20,
             "statusMessage": "A validar a branch de destino..."
           }
@@ -129,7 +128,7 @@
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/session-context.py\"",
-            "timeout": 45
+            "timeout": 60
           }
         ]
       }

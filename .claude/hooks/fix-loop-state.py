@@ -1,26 +1,28 @@
 #!/usr/bin/env python3
 """State machine for a guarded fix loop.
 
-The point of this file is that the loop's guarantees are code, not prose. A loop asked
-to turn a suite green can always weaken the suite instead; these subcommands make that
-mechanically impossible to do unnoticed:
+The guarantees live here as code rather than prose. A loop asked to turn a suite green can
+always weaken the suite instead; these subcommands are what make that impossible to do
+unnoticed.
 
-  start   capture the baseline BEFORE any source change — which tests fail, how many
-          tests exist, and the exact commit — then take the lock that freezes the
-          test surface (see guard-test-surface.py).
-  attempt claim one of a bounded number of attempts; refuses past the cap.
-  verify  re-measure and enforce, in this order:
-            1. no test file was touched since the baseline commit (git, not patterns)
-            2. no weakening markers were introduced (skip/only/xfail, deleted asserts)
-            3. the test count did not drop
-            4. every baseline failure now passes
-            5. no new failure appeared
-  end     release the lock.
+  start   measure the baseline BEFORE any source change — the suite must actually be red,
+          and the test/skip counts and commit are recorded — then take the lock that freezes
+          the test surface (see guard-test-surface.py).
+  verify  re-measure and enforce, consuming one of a bounded number of attempts:
+            0. the suite exits 0  (the authority is the runner's exit code, never a regex)
+            1. no test file or runner config touched since the baseline commit (asked of git)
+            2. no weakening marker introduced in test or config files
+            3. the collected-test count did not drop
+            4. the skipped-test count did not rise
+  end     release the lock (also logs the release, since releasing is itself a way out).
   status  print the current state.
 
-Exit code 0 means the check passed, 1 means it failed, 2 means misuse. verify prints a
-verdict block meant to be pasted into a report — a failed verify is a legitimate final
-answer, not something to retry around.
+Exit code 0 means the check passed, 1 means it failed, 2 means misuse. A failed verify is a
+legitimate final answer — the attempt cap exists so that insisting is not an option.
+
+Design limit, stated because it matters: this process can release its own lock. It makes
+cheating visible and effortful, not impossible. The authority that cannot be reached from
+here is CI — see .github/workflows/tests.yml in the frontend repo.
 """
 
 import argparse
@@ -29,35 +31,51 @@ import os
 import re
 import subprocess
 import sys
+from datetime import datetime, timezone
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 STATE_DIR = os.path.join(ROOT, ".claude", "state")
 LOCK = os.path.join(STATE_DIR, "fix-loop.lock")
+LOG = os.path.join(STATE_DIR, "fix-loop.log")
 MAX_ATTEMPTS = 2
 
 REPOS = {
     "frontend": {
         "dir": os.path.join(ROOT, "frontend"),
         "run": ["npx", "vitest", "run"],
+        "count": None,  # taken from the run output's "Tests ... (N)" line
     },
     "backend": {
         "dir": os.path.join(ROOT, "backend"),
         "run": ["uv", "run", "pytest", "-q"],
+        "count": ["uv", "run", "pytest", "--collect-only", "-q"],
     },
 }
 
-TEST_PATH = re.compile(
-    r"(/tests?/|/__tests__/|(^|/)test_[^/]*\.py$|\.spec\.(ts|tsx|js)$|\.test\.(ts|tsx|js|py)$)"
+# Files whose content decides what is tested or asserted. Freezing the test files alone is
+# not enough: narrowing the runner's include/addopts removes failures just as effectively.
+FROZEN = re.compile(
+    r"("
+    r"/tests?/|/__tests__/|(^|/)test_[^/]*\.py|(^|/)conftest\.py"
+    r"|\.spec\.(ts|tsx|js)|\.test\.(ts|tsx|js|py)"
+    r"|(^|/)vitest\.config\.[cm]?ts|(^|/)playwright\.config\.[cm]?ts|(^|/)jest\.config"
+    r"|(^|/)pyproject\.toml|(^|/)pytest\.ini|(^|/)setup\.cfg|(^|/)tox\.ini|(^|/)coverage\.rc"
+    r"|(^|/)factories\.py"
+    r")"
 )
+
+# Only applied to the frozen surface above, so ordinary source using MongoEngine's
+# .skip(offset) for pagination is not mistaken for a disabled test.
 WEAKENING = [
-    (re.compile(r"^\+.*\.(skip|only)\s*\("), "adicionou .skip/.only"),
-    (re.compile(r"^\+.*@pytest\.mark\.(skip|xfail)"), "adicionou skip/xfail no pytest"),
-    (re.compile(r"^\+.*\b(xfail|pytest\.skip)\b"), "adicionou xfail/pytest.skip"),
-    (re.compile(r"^\+.*it\.todo\b"), "converteu um teste em it.todo"),
+    (re.compile(r"^\+.*\.(skip|only|todo)\s*\("), "adicionou .skip/.only/.todo"),
+    (re.compile(r"^\+.*@pytest\.mark\.(skip|skipif|xfail)"), "adicionou skip/skipif/xfail"),
+    (re.compile(r"^\+.*\b(pytest\.skip|pytest\.xfail)\b"), "adicionou pytest.skip/xfail"),
+    (re.compile(r"^\+.*(--ignore|--deselect|-k\s)"), "estreitou a selecao do runner"),
 ]
 
 
-def sh(cmd, cwd, timeout=900):
+def sh(cmd, cwd, timeout=1800):
+    """Run a command. Returns (returncode, output). 124 = timeout, 127 = missing binary."""
     try:
         p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout)
         return p.returncode, p.stdout + p.stderr
@@ -70,8 +88,12 @@ def sh(cmd, cwd, timeout=900):
 def load_state():
     if not os.path.exists(LOCK):
         return None
-    with open(LOCK) as fh:
-        return json.load(fh)
+    try:
+        with open(LOCK) as fh:
+            return json.load(fh)
+    except Exception as exc:
+        print(f"AVISO: lock ilegivel ({exc}).", file=sys.stderr)
+        return {"repo": "?", "corrupt": True}
 
 
 def save_state(state):
@@ -80,92 +102,99 @@ def save_state(state):
         json.dump(state, fh, indent=2)
 
 
+def log(line: str) -> None:
+    os.makedirs(STATE_DIR, exist_ok=True)
+    with open(LOG, "a") as fh:
+        fh.write(f"{datetime.now(timezone.utc).isoformat()} {line}\n")
+
+
 def measure(repo: str, scope: list[str]):
-    """Run the suite and return (failures, total_tests, raw_output)."""
+    """Run the suite. Returns (code, total, skipped, out).
+
+    `code` is the authority: 0 means the runner itself says everything passed. total/skipped
+    are best-effort and only ever used for the "did not shrink" comparisons.
+    """
     cfg = REPOS[repo]
     code, out = sh(cfg["run"] + scope, cfg["dir"])
 
-    failures = []
+    skipped = None
     total = None
 
     if repo == "frontend":
-        m = re.search(r"Tests\s+(?:(\d+) failed \| )?(\d+) passed(?: \| (\d+) skipped)?\s+\((\d+)\)", out)
-        if m:
-            total = int(m.group(4))
-        failures = sorted(set(re.findall(r"(?:FAIL|×)\s+(\S+\.(?:test|spec)\.[a-z]+)\s*>\s*(.+?)\s*$", out, re.M)))
-        failures = [f"{f[0]} :: {f[1]}" for f in failures]
+        line = re.search(r"Tests\s+(.*?)\((\d+)\)", out)
+        if line:
+            total = int(line.group(2))
+            sk = re.search(r"(\d+) skipped", line.group(1))
+            skipped = int(sk.group(1)) if sk else 0
     else:
-        m = re.search(r"(\d+) (?:passed|failed)", out)
-        collected = re.search(r"(\d+) tests? collected", out)
-        if collected:
-            total = int(collected.group(1))
-        failures = sorted(set(re.findall(r"^(FAILED|ERROR)\s+(\S+)", out, re.M)))
-        failures = [f[1] for f in failures]
+        sk = re.search(r"(\d+) skipped", out)
+        skipped = int(sk.group(1)) if sk else 0
+        ccode, cout = sh(cfg["count"] + scope, cfg["dir"])
+        if ccode in (0, 5):
+            m = re.search(r"(\d+)(?:/\d+)? tests? collected", cout)
+            if m:
+                total = int(m.group(1))
 
-    return failures, total, out, code
+    return code, total, skipped, out
 
 
 def cmd_start(args):
     if load_state():
         print("Ja existe um fix-loop ativo. Termina-o primeiro: fix-loop-state.py end", file=sys.stderr)
         return 2
+
     repo = args.repo
     cfg = REPOS[repo]
     scope = args.scope or []
 
-    code, head = sh(["git", "rev-parse", "HEAD"], cfg["dir"])
+    rc, head = sh(["git", "rev-parse", "HEAD"], cfg["dir"], timeout=30)
     head = head.strip()
+    if rc != 0 or not re.fullmatch(r"[0-9a-f]{40}", head):
+        print(f"Nao consegui resolver o HEAD de {repo}: {head!r}. Abortado.", file=sys.stderr)
+        return 2
 
     print(f"A medir a baseline de {repo} (pode demorar)...")
-    failures, total, out, _ = measure(repo, scope)
+    code, total, skipped, out = measure(repo, scope)
 
-    if not failures:
+    if code == 0:
         print(
-            "\nNENHUM teste falha na baseline.\n"
-            "Um fix-loop sem falha inicial nao tem nada para provar: qualquer alteracao ficaria\n"
-            "'verde' sem demonstrar que corrigiu algo. Escreve primeiro o teste que reproduz o\n"
-            "problema (fora do loop, onde os testes ainda podem ser editados), e so depois arranca.",
+            "\nA SUITE ESTA VERDE. Um fix-loop sem falha inicial nao tem nada para provar:\n"
+            "qualquer alteracao ficaria 'verde' sem demonstrar que corrigiu algo. Escreve\n"
+            "primeiro o teste que reproduz o problema (fora do loop, onde os testes ainda\n"
+            "podem ser editados) e so depois arranca.",
             file=sys.stderr,
         )
         return 1
+    if code in (124, 127):
+        print(
+            f"\nA suite nao correu (codigo {code}: {out.strip()[:200]}). Sem uma medicao real\n"
+            "nao ha baseline, e sem baseline o loop nao pode provar nada. Corrige a execucao\n"
+            "dos testes primeiro.",
+            file=sys.stderr,
+        )
+        return 2
 
     state = {
         "repo": repo,
         "scope": scope,
         "baseline_commit": head,
-        "baseline_failures": failures,
+        "baseline_exit_code": code,
         "baseline_total": total,
+        "baseline_skipped": skipped,
         "attempts": 0,
         "max_attempts": MAX_ATTEMPTS,
+        "started_at": datetime.now(timezone.utc).isoformat(),
     }
     save_state(state)
+    log(f"START repo={repo} commit={head[:12]} exit={code} total={total} skipped={skipped}")
+
     print(f"\nBaseline registada e superficie de teste CONGELADA (lock: {LOCK}).")
-    print(f"  commit .......... {head[:12]}")
-    print(f"  testes totais ... {total}")
-    print(f"  a falhar ({len(failures)}):")
-    for f in failures:
-        print(f"    - {f}")
-    print(f"\n  tentativas permitidas: {MAX_ATTEMPTS}")
+    print(f"  commit ............ {head[:12]}")
+    print(f"  exit code da suite  {code}  (vermelha, como tem de ser)")
+    print(f"  testes recolhidos . {total if total is not None else 'indeterminado'}")
+    print(f"  skipped ........... {skipped if skipped is not None else 'indeterminado'}")
+    print(f"\n  tentativas: {MAX_ATTEMPTS} (cada `verify` consome uma)")
     print("  Corrige APENAS codigo-fonte. Depois: fix-loop-state.py verify")
-    return 0
-
-
-def cmd_attempt(args):
-    state = load_state()
-    if not state:
-        print("Nenhum fix-loop ativo.", file=sys.stderr)
-        return 2
-    if state["attempts"] >= state["max_attempts"]:
-        print(
-            f"Limite de {state['max_attempts']} tentativas esgotado. PARA aqui: escreve o "
-            "diagnostico do que tentaste e porque falhou, e devolve a decisao ao utilizador. "
-            "Insistir e como o loop degenera.",
-            file=sys.stderr,
-        )
-        return 1
-    state["attempts"] += 1
-    save_state(state)
-    print(f"Tentativa {state['attempts']}/{state['max_attempts']}.")
     return 0
 
 
@@ -174,67 +203,97 @@ def cmd_verify(args):
     if not state:
         print("Nenhum fix-loop ativo.", file=sys.stderr)
         return 2
+    if state.get("corrupt"):
+        print("Lock corrompido. Termina o loop (`end`) e recomeca.", file=sys.stderr)
+        return 2
+
+    if state["attempts"] >= state["max_attempts"]:
+        print(
+            f"Limite de {state['max_attempts']} tentativas esgotado. PARA aqui: escreve o "
+            "diagnostico do que tentaste, o que a falha diz e a tua hipotese, e devolve a "
+            "decisao ao utilizador. Insistir e como o loop degenera.",
+            file=sys.stderr,
+        )
+        return 1
+
+    state["attempts"] += 1
+    save_state(state)
 
     repo = state["repo"]
     cfg = REPOS[repo]
+    base = state["baseline_commit"]
     problems = []
 
-    # 1. the test surface must be untouched since the baseline commit — asked of git,
-    #    not inferred from patterns, so it also catches writes made outside Edit/Write.
-    _, changed = sh(["git", "diff", "--name-only", state["baseline_commit"]], cfg["dir"])
-    _, untracked = sh(["git", "ls-files", "--others", "--exclude-standard"], cfg["dir"])
+    # 1. the frozen surface must be untouched — asked of git, so it also catches writes made
+    #    outside the Edit/Write/Bash paths the hook can see. A git failure here must abort the
+    #    verdict, never pass vacuously.
+    rc_names, changed = sh(["git", "diff", "--name-only", base], cfg["dir"], timeout=60)
+    rc_untracked, untracked = sh(
+        ["git", "ls-files", "--others", "--exclude-standard"], cfg["dir"], timeout=60
+    )
+    rc_diff, diff = sh(["git", "diff", base], cfg["dir"], timeout=120)
+    if rc_names != 0 or rc_untracked != 0 or rc_diff != 0:
+        print(
+            f"\nABORTADO: o git falhou ao comparar com a baseline {base[:12]} "
+            f"(codigos {rc_names}/{rc_untracked}/{rc_diff}). Sem essa comparacao as verificacoes "
+            "1 e 2 passariam vazias, portanto nao emito veredicto.",
+            file=sys.stderr,
+        )
+        return 2
+
     touched = [f for f in (changed + "\n" + untracked).splitlines() if f.strip()]
-    test_touched = [f for f in touched if TEST_PATH.search(f)]
-    if test_touched:
+    frozen_touched = [f for f in touched if FROZEN.search(f)]
+    if frozen_touched:
         problems.append(
-            "Ficheiros de teste alterados durante o loop (o fix tem de estar no codigo-fonte): "
-            + ", ".join(test_touched)
+            "Superficie congelada alterada (o fix tem de estar no codigo-fonte): "
+            + ", ".join(frozen_touched)
         )
 
-    # 2. weakening markers introduced anywhere in the diff
-    _, diff = sh(["git", "diff", state["baseline_commit"]], cfg["dir"])
-    for line in diff.splitlines():
-        for pattern, label in WEAKENING:
-            if pattern.search(line):
-                problems.append(f"Marca de enfraquecimento no diff ({label}): {line.strip()[:120]}")
+    # 2. weakening markers, looked for ONLY inside the frozen surface
+    rc_fdiff, frozen_diff = sh(
+        ["git", "diff", base, "--"] + (frozen_touched or ["."]), cfg["dir"], timeout=120
+    )
+    if rc_fdiff == 0 and frozen_touched:
+        for line in frozen_diff.splitlines():
+            for pattern, label in WEAKENING:
+                if pattern.search(line):
+                    problems.append(f"Marca de enfraquecimento ({label}): {line.strip()[:120]}")
 
     print(f"A re-medir {repo}...")
-    failures, total, out, _ = measure(repo, state["scope"])
+    code, total, skipped, out = measure(repo, state["scope"])
 
-    # 3. the number of tests must not drop
-    base_total = state.get("baseline_total")
-    if base_total and total is not None and total < base_total:
-        problems.append(
-            f"O numero de testes desceu: {base_total} -> {total}. Testes removidos contam como "
-            "enfraquecimento mesmo com a suite verde."
-        )
+    # 0. the runner's exit code is the authority
+    if code != 0:
+        detail = {124: "timeout", 127: "runner nao encontrado"}.get(code, f"codigo {code}")
+        problems.append(f"A suite NAO esta verde ({detail}). Ultimas linhas:\n    " + "\n    ".join(out.strip().splitlines()[-8:]))
 
-    # 4. every baseline failure must now pass
-    still_failing = [f for f in state["baseline_failures"] if f in failures]
+    # 3 / 4. the suite must not have shrunk, nor gained skips
+    base_total, base_skipped = state.get("baseline_total"), state.get("baseline_skipped")
+    if base_total is not None and total is not None and total < base_total:
+        problems.append(f"Testes recolhidos desceram: {base_total} -> {total}.")
+    if base_total is not None and total is None:
+        problems.append("Nao consegui contar os testes agora, mas havia contagem na baseline.")
+    if base_skipped is not None and skipped is not None and skipped > base_skipped:
+        problems.append(f"Testes skipped aumentaram: {base_skipped} -> {skipped}.")
 
-    # 5. no new failure
-    new_failures = [f for f in failures if f not in state["baseline_failures"]]
-    if new_failures:
-        problems.append("Falhas NOVAS introduzidas: " + ", ".join(new_failures[:5]))
-
-    ok = not problems and not still_failing
-    print("\n" + "=" * 64)
+    ok = not problems
+    print("\n" + "=" * 66)
     print("VERDICTO DO FIX-LOOP:", "APROVADO" if ok else "REPROVADO")
-    print("=" * 64)
-    print(f"  repo ................. {repo}")
-    print(f"  tentativas ........... {state['attempts']}/{state['max_attempts']}")
-    print(f"  testes ............... {base_total} -> {total}")
-    print(f"  falhas da baseline ... {len(state['baseline_failures'])}")
-    print(f"  ainda a falhar ....... {len(still_failing)}")
-    for f in still_failing:
-        print(f"      - {f}")
+    print("=" * 66)
+    print(f"  repo .............. {repo}")
+    print(f"  tentativa ......... {state['attempts']}/{state['max_attempts']}")
+    print(f"  exit code ......... {state['baseline_exit_code']} -> {code}")
+    print(f"  testes ............ {base_total} -> {total}")
+    print(f"  skipped ........... {base_skipped} -> {skipped}")
     for p in problems:
         print(f"  PROBLEMA: {p}")
+    log(f"VERIFY repo={repo} attempt={state['attempts']} ok={ok} exit={code} total={total}")
     if ok:
-        print("\n  Provado: as falhas registadas antes da alteracao passam agora, sem testes")
-        print("  tocados, sem marcas de enfraquecimento e sem regressoes.")
-        print("  A review do PR continua a ser necessaria: isto prova que o teste nao foi")
-        print("  adulterado, nao que o fix ao codigo-fonte seja bom.")
+        print("\n  Provado: a suite que estava vermelha esta verde, sem tocar em testes nem na")
+        print("  configuracao do runner, sem marcas de enfraquecimento, sem perder testes e")
+        print("  sem novos skips.")
+        print("  NAO provado: que o fix ao codigo-fonte seja bom. Um retorno hardcoded satisfaz")
+        print("  um teste correto tao bem como o fix certo — isso e o que a review do PR apanha.")
         print("\n  Termina o loop com: fix-loop-state.py end")
     return 0 if ok else 1
 
@@ -243,9 +302,15 @@ def cmd_end(args):
     if not os.path.exists(LOCK):
         print("Nenhum fix-loop ativo.")
         return 0
-    state = load_state()
-    os.remove(LOCK)
+    state = load_state() or {}
+    try:
+        os.remove(LOCK)
+    except OSError as exc:
+        print(f"Nao consegui remover o lock: {exc}", file=sys.stderr)
+        return 2
+    log(f"END repo={state.get('repo')} attempts={state.get('attempts')}")
     print(f"Fix-loop terminado ({state.get('repo')}). Superficie de teste destravada.")
+    print(f"Registo em {LOG} — libertar o lock e, em si, uma saida, por isso fica anotado.")
     return 0
 
 
@@ -262,14 +327,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    p_start = sub.add_parser("start", help="capture the baseline and freeze the test surface")
+    p_start = sub.add_parser("start", help="measure the baseline and freeze the test surface")
     p_start.add_argument("repo", choices=sorted(REPOS))
     p_start.add_argument("scope", nargs="*", help="optional test paths to narrow the run")
     p_start.set_defaults(func=cmd_start)
 
     for name, fn, helptext in (
-        ("attempt", cmd_attempt, "claim one bounded attempt"),
-        ("verify", cmd_verify, "enforce the guarantees and print a verdict"),
+        ("verify", cmd_verify, "enforce the guarantees, consuming one attempt"),
         ("end", cmd_end, "release the lock"),
         ("status", cmd_status, "print the current state"),
     ):

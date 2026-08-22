@@ -97,6 +97,17 @@
             "statusMessage": "A validar a branch de destino..."
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/guard-test-surface.py\"",
+            "timeout": 20,
+            "statusMessage": "A verificar o congelamento dos testes..."
+          }
+        ]
       }
     ],
     "PostToolUse": [

@@ -24,6 +24,7 @@ A ordem importa: sem harness sólido, um loop só amplifica erros.
 | `PreToolUse` / `Bash(git *)` | `guard-protected-branch.py` | **Nega** commit/push/merge/rebase/reset --hard em `backend/` ou `frontend/` quando o submódulo está em `develop`, `tst`, `ppr` ou `main`. Nega force-push em qualquer sítio. |
 | `PostToolUse` / `Write\|Edit` | `lint-changed-file.py` | `uv run ruff check --fix` + `ruff format` em `backend/**.py` (~0,5 s); `npx eslint --fix` em `frontend/**.ts(x)` (~2 s). O que não é auto-corrigível volta ao modelo como contexto, para ser corrigido no mesmo turno. |
 | `SessionStart` | `session-context.py` | Injeta o estado real: branch e ficheiros modificados de cada submódulo, PRs abertos em cada repo, e o fluxo de promoção. Elimina a suposição errada mais comum — "em que branch e em que repo estou". |
+| `PreToolUse` / `Edit\|Write\|Bash` | `guard-test-surface.py` | Enquanto existir `.claude/state/fix-loop.lock`, **nega** escritas em ficheiros de teste (ver secção 2). Inerte sem lock. |
 | `Stop` | `stop-verify.py` | Antes de o turno fechar, diz que suite de testes ficou em dívida para os ficheiros efetivamente tocados. Não corre pytest (leva minutos) — só impede que a verificação seja silenciosamente saltada. |
 
 Todos os scripts saem sempre com código 0 excepto o guard, que devolve uma decisão `deny`
@@ -92,6 +93,33 @@ vermelhos.
 
 Para vigiar um ambiente durante uma janela de deploy. Um tick sem novidade deve reportar-se
 como *noop* — assim as observações silenciosas colapsam no terminal em vez de o encherem.
+
+### Loop de correção guardado (`/fix-loop`)
+
+Um loop com o objetivo "ficar verde" tem uma solução degenerada: enfraquecer o teste. Apaga a
+asserção, marca `it.skip`, alarga o matcher — fica verde e o bug fica lá. O `/fix-loop` retira
+a capacidade em vez de pedir contenção.
+
+| Garantia | Como é imposta |
+| --- | --- |
+| Testes não editáveis durante o loop | `PreToolUse` (`guard-test-surface.py`) nega escritas em caminhos de teste via Edit, Write **e** Bash, enquanto existir `.claude/state/fix-loop.lock` |
+| Um fix só conta com transição vermelho→verde | `fix-loop-state.py start` grava a **identidade** do teste que falha antes de qualquer alteração; `verify` exige que passe |
+| Sem loop sem falha inicial | `start` recusa arrancar se nada falha — não há nada a provar |
+| O número de testes não desce | `verify` compara a contagem com a baseline |
+| Escritas feitas fora do hook são apanhadas | `verify` pergunta ao **git** que ficheiros mudaram desde o commit da baseline |
+| Marcas de enfraquecimento | `verify` nega `.skip`, `.only`, `@pytest.mark.skip`, `xfail`, `it.todo` no diff |
+| O loop tem fim | 2 tentativas; depois `attempt` recusa e o loop tem de escrever o diagnóstico |
+
+Validado com um bug real: um teste verde-mas-adulterado (`it.skip` injetado com a suite a 0
+falhas e a contagem intacta, porque o vitest conta os skipped) foi **reprovado** pelas defesas
+de git e de padrão. Um loop que só perguntasse "está verde?" teria aceitado.
+
+**O que isto não garante:** que o fix ao código-fonte seja bom. Congelar os testes elimina a
+batota pelo lado da expectativa; um retorno hardcoded ou uma exceção engolida satisfazem um
+teste correto e só a review do PR os apanha. Por isso o merge continua fora do loop.
+
+Por omissão está **inativo**: sem lock, o hook é inerte e o `/watch-pr` reporta sem corrigir.
+O autofix é opt-in explícito (`/watch-pr --autofix`).
 
 ### Agendado (cron) — opção disponível, deliberadamente não usada
 

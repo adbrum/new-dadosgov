@@ -106,7 +106,9 @@ git -C <repo> checkout -b <type>/ledg-<number>-<short-english-description>
 - Types: `feature/` `bugfix/` `hotfix/` `chore/` `release/`
 - `kebab-case`, **English only**, ticket number included — e.g.
   `bugfix/ledg-2296-harvester-producer-admin-scope`
-- Propose the name and get a yes before creating it.
+- State the name and create it — do not spend a round-trip confirming it. Renaming before the
+  PR is `git branch -m`, so a wrong guess costs nothing; say so when you state it. Fold any
+  genuine choice (approach, commit strategy) into a single question earlier instead.
 
 ## Phase 5 — Implement, point by point
 
@@ -135,10 +137,12 @@ Ask once, at the start, whether the user wants **automatic** commits per point o
 **approve** each one. If approve: show `git -C <repo> diff --stat` plus the proposed message
 and a short "como testar no browser" (URL to open, what to click, what to expect), then wait.
 
-**Backend only — `CHANGELOG.md` is mandatory.** Once the implementation is done, add an entry
-at the top of `## Unreleased`: bold one-line summary plus indented sub-bullets explaining the
-why/how. Never reference a PR number or a Jira id there, and never edit an entry that was
-already promoted.
+**`CHANGELOG.md` is mandatory in BOTH repos** — `backend/CHANGELOG.md` and
+`frontend/CHANGELOG.md` carry the same convention. Once the implementation is done, add an
+entry at the top of `## Unreleased`: bold one-line summary plus indented sub-bullets explaining
+the why/how. Never reference a PR number or a Jira id there (no `LEDG-XXXX`), and never edit an
+entry that was already promoted — that is what makes the same line diverge between environment
+branches and turn an auto-mergeable entry into a conflict.
 
 ## Phase 6 — Verification gate
 

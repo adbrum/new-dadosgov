@@ -163,6 +163,33 @@ Then walk the **critérios de aceitação** one by one and mark `[x]` / `[ ]`, e
 file, function or test that satisfies it. An unsatisfied criterion is reported as
 unsatisfied — never silently dropped.
 
+## Phase 6.5 — Independent review (advisory)
+
+Run this on the diff **before pushing**. A finding after the PR is open costs a force-push or
+a follow-up commit and spends the human reviewer's attention on something the machine could
+have caught.
+
+1. **`/code-review`** over the diff. Delegate it to a **fresh-context subagent** — you just
+   wrote this code and will tend to defend your own choices; a reviewer that never saw the
+   decisions being made is a qualitatively different read. Frame it adversarially: ask it to
+   refute that the change is correct.
+2. **`/security-review`, but only when the diff touches a sensitive surface.** This fork's
+   incident history is concentrated: harvester HTTP (SSRF), authenticated POSTs (CSRF/session),
+   the `/r/<id>` download proxy, uploads, SAML, permissions. Trigger on paths matching
+   `auth`, `saml`, `upload`, `proxy`, `harvest`, `permissions`, `csrf` — otherwise skip it and
+   say you skipped it.
+3. **Advisory, not blocking.** A finding is a judgement, not a fact. Fix the ones you agree
+   with; for the ones you reject, say so **with the reason** in the report and the PR body. A
+   gate that blocks on judgements is a gate people learn to route around.
+4. **Never resolve a finding by removing the check that raised it.** That is the same
+   degeneration as weakening a test, in different clothing — if the honest fix is bigger than
+   the ticket, report it as a follow-up instead of neutering the signal.
+5. After the PR exists, `/code-review --comment <pr>` is optional: it leaves the findings
+   inline so the human reviewer starts on cleared ground.
+
+Report what the review found, what you changed because of it, and what you deliberately did
+not — that last part is the one worth reading.
+
 ## Phase 7 — PR into develop
 
 ```bash

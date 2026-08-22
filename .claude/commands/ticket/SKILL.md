@@ -7,5 +7,10 @@ Ticket: $ARGUMENTS
 
 Invoke the `jira-ticket-workflow` skill and follow it from Phase 1 to Phase 9.
 
-If `$ARGUMENTS` is empty, ask which ticket. If it is a bare number (`2296`), read it as
-`LEDG-2296`.
+Accept any of these forms in `$ARGUMENTS` and normalize to the `LEDG-<n>` key:
+
+- `LEDG-2296` — use as is
+- `2296` — a bare number is read as `LEDG-2296`
+- `https://ticapp.atlassian.net/browse/LEDG-2296` — take the key from the URL
+
+If `$ARGUMENTS` is empty, ask which ticket.

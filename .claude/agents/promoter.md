@@ -19,7 +19,9 @@ Long-lived branches, in order: `develop` → `tst` → `ppr` → `main`. The bas
 the **next environment up**, never always `main`. One environment at a time, and only in the
 repo(s) actually changed — a backend-only change never touches `dadosgov-fe`.
 
-`gh` is installed and authenticated.
+Check `gh auth status` first: the GitHub CLI is available on some team machines and not on
+others. When it is authenticated, drive PRs with it; when it is not, hand the user the compare
+URL `https://github.com/amagovpt/<repo>/compare/<base>...<head>?expand=1` instead.
 
 ```bash
 # what is pending promotion between two environments

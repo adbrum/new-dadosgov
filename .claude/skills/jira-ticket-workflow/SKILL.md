@@ -26,7 +26,7 @@ commit before moving on, and nothing is reported as done that was not verified.
 | Backend repo | `amagovpt/udata-pt` → `backend/` (udata, Flask, MongoEngine, Celery) |
 | Frontend repo | `amagovpt/dadosgov-fe` → `frontend/` (Next.js App Router, TypeScript) |
 | Environment branches | `develop` → `tst` → `ppr` → `main` (both repos, independently) |
-| `gh` CLI | installed and authenticated |
+| `gh` CLI | check with `gh auth status` — present on some team machines, not all |
 
 `backend/` and `frontend/` are **independent git repositories** mounted as submodules.
 Always target one explicitly (`git -C backend …`) — never assume the cwd repo.

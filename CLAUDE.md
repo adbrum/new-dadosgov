@@ -120,8 +120,8 @@ Cada repo tem branches de ambiente de longa duração — `develop`, `tst`, `ppr
 
 - A base de cada PR é sempre o **ambiente seguinte**, não sempre `main`.
 - **Fazer o fluxo só no(s) repo(s) efetivamente alterado(s)** — uma alteração só de backend passa por este fluxo apenas em `udata-pt`; o frontend fica intocado, e vice-versa.
-- O GitHub CLI (`gh`) **está instalado e autenticado** nesta máquina. Abrir PRs com `gh pr create --repo amagovpt/<repo> --base <ambiente> --head <branch>`; acompanhar CI com `gh pr checks` / `gh run watch`. Fallback (se `gh` falhar): URL de comparação `https://github.com/amagovpt/<repo>/compare/<base>...<head>?expand=1`.
-- Os `CLAUDE.md` de `backend/` e `frontend/` ainda afirmam o contrário (que `gh` não existe) — são ficheiros dos repos-submódulo e só podem ser corrigidos por PR nesses repos.
+- **Abrir PRs** — verificar primeiro com `gh auth status`. Se o GitHub CLI estiver autenticado: `gh pr create --repo amagovpt/<repo> --base <ambiente> --head <branch>`, e acompanhar o CI com `gh pr checks` / `gh run watch`. Caso contrário, abrir pelo URL de comparação `https://github.com/amagovpt/<repo>/compare/<base>...<head>?expand=1`. Não assumir nenhum dos casos: o `gh` está instalado em algumas máquinas da equipa e não noutras.
+- A mesma regra condicional está a ser aplicada aos `CLAUDE.md` dos submódulos: PRs [udata-pt#222](https://github.com/amagovpt/udata-pt/pull/222) e [dadosgov-fe#580](https://github.com/amagovpt/dadosgov-fe/pull/580), ambos para `develop`. Até serem integrados, esses ficheiros continuam a afirmar que o `gh` não existe.
 
 ## Regras Gerais
 

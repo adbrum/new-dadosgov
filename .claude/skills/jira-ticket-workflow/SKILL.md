@@ -1,301 +1,217 @@
 ---
 name: jira-ticket-workflow
 description: >
-  Structured Jira ticket-driven development workflow specific to the dadosgov project.
-  Triggers when the user says "work on ticket", "pick up ticket", "implement TICKET-XX",
-  or provides a ticket ID from the project's Jira-style backlog. Handles frontend/backend
-  selection, branch creation in the correct separated repository, and incremental commits
-  per ticket point.
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash
+  Ticket-to-PR workflow for the dadosgov monorepo (dados.gov.pt). Triggers on a Jira key
+  from project LEDG (e.g. LEDG-2296), or when the user says "trabalhar no ticket",
+  "pega no ticket", "implementa LEDG-XXXX", "work on ticket". Reads the ticket from Jira,
+  searches precedents, picks the right submodule repo, branches from develop, implements
+  point by point with one commit each, gates on lint+tests, opens the PR into develop and
+  closes the loop back in Jira.
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash, mcp__atlassian__getJiraIssue, mcp__atlassian__searchJiraIssuesUsingJql, mcp__atlassian__getTransitionsForJiraIssue, mcp__atlassian__transitionJiraIssue, mcp__atlassian__addCommentToJiraIssue, mcp__atlassian__addWorklogToJiraIssue
 ---
 
-# Jira Ticket Workflow — dadosgov
+# Ticket → PR — dadosgov
 
-You are a Senior Software Engineer & Automation Agent working on the **dadosgov** project
-(Portal de Dados Abertos — dados.gov.pt). This skill defines a disciplined, incremental
-development workflow: read ticket → choose repo → create branch → implement each point → commit.
+Disciplined, incremental delivery on the **dadosgov** monorepo. One concern at a time,
+always committed, always verified. The philosophy: each implementation point gets its own
+commit before moving on, and nothing is reported as done that was not verified.
 
-The core philosophy: **one concern at a time, always committed**. Each implementation point
-gets its own commit before moving on.
+## Constants
+
+| Item | Value |
+| --- | --- |
+| Jira site | `ticapp.atlassian.net` |
+| Jira cloudId | `0d1d9259-29f0-46ff-bb50-522a373f8daf` |
+| Jira project | `LEDG` — "L11 - Evol&Man.dados.gov" |
+| Backend repo | `amagovpt/udata-pt` → `backend/` (udata, Flask, MongoEngine, Celery) |
+| Frontend repo | `amagovpt/dadosgov-fe` → `frontend/` (Next.js App Router, TypeScript) |
+| Environment branches | `develop` → `tst` → `ppr` → `main` (both repos, independently) |
+| `gh` CLI | installed and authenticated |
+
+`backend/` and `frontend/` are **independent git repositories** mounted as submodules.
+Always target one explicitly (`git -C backend …`) — never assume the cwd repo.
+
+> A `PreToolUse` hook (`.claude/hooks/guard-protected-branch.py`) **denies** any commit,
+> push, merge or rebase on `develop|tst|ppr|main` in either submodule, and denies
+> force-push everywhere. If you get that denial, you forgot to create the working branch.
 
 ---
 
-## Project Structure
+## Phase 1 — Load the ticket
+
+If the user gave a key (`LEDG-2296`), fetch it:
 
 ```
-<PROJECT_ROOT>/
-├── frontend/     ← Next.js app (git submodule)
-│   remotes:
-│     origin    → git@github.com:adbrum/udata_agora.git
-│     newdadosgov → git@github.com:adbrum/dadosgov.git
-│
-└── backend/      ← udata/Flask app (git submodule)
-    remotes:
-      origin    → git@github.com:amagovpt/udata-pt.git
-      newdadosgov → git@github.com:adbrum/dadosgov.git
+mcp__atlassian__getJiraIssue(cloudId: "0d1d9259-29f0-46ff-bb50-522a373f8daf", issueIdOrKey: "LEDG-2296")
 ```
 
-Each is a **git submodule** (which operates as an independent git repository) with its own branches and remotes. Always `cd`
-into the correct submodule directory before running any git commands.
+If the user gave no key, ask for it — do not guess. To find one, search:
 
----
+```
+mcp__atlassian__searchJiraIssuesUsingJql(cloudId: …, jql: "project = LEDG AND sprint in openSprints() AND assignee = currentUser() ORDER BY rank")
+```
 
-## Execution Flow
+Parse and restate, in the ticket's own language:
 
-### Phase 1: Ticket Identification
+- **Descrição / contexto**
+- **O que deve ser feito** — number the implementation points yourself if the ticket does not
+- **Critérios de aceitação** — these are the exit gate; if the ticket has none, ask the user
+  what "done" means before writing code
 
-**Ask the user:** "What is the ticket name or ID? (e.g. TICKET-05)"
+Fallback when Jira is unreachable: the local backlog `docs/jira-tickets-frontend-backend.md`
+(header format `## TICKET-XX: <title>`). Say explicitly that you used the fallback.
 
-Do not proceed until provided. Then:
+**Confirm the restatement with the user before touching code.**
 
-1. **Search the ticket** in the project's local backlog:
+## Phase 2 — Search precedents (mandatory, never skip)
 
-   ```
-   <PROJECT_ROOT>/docs/jira-tickets-frontend-backend.md
-   ```
-
-   Use `grep` or `Read` to find the ticket section by its ID (e.g. `## TICKET-05`).
-
-2. **Read and parse** the full ticket:
-   - **Descrição** (Description & context)
-   - **Contexto Arquitetural** (Architectural context)
-   - **O que deve ser feito** (What needs to be done — numbered list of implementation points)
-   - **Critérios de Aceitação** (Acceptance criteria)
-
-3. **Summarize your understanding** back to the user in a concise list. Confirm before proceeding.
-
-> If the ticket ID is not found in the doc, inform the user and ask them to provide the
-> description manually or check the ticket ID.
-
----
-
-### Phase 2: Frontend or Backend?
-
-**Ask the user:** "Is this ticket for the **frontend** or **backend**?"
-
-- **Frontend** → work in `<PROJECT_ROOT>/frontend/`
-  - Stack: Next.js, TypeScript
-  - Tests: Playwright (`npm run test:e2e`)
-  - Main files: `src/services/api.ts`, `src/types/api.ts`, `src/components/`, `src/app/`
-
-- **Backend** → work in `<PROJECT_ROOT>/backend/`
-  - Stack: udata / Flask / Python
-  - Tests: pytest (`uv run pytest <path>`)
-  - Follow existing udata module conventions
-
-Set `REPO_DIR` to the chosen directory. All subsequent git commands run from `REPO_DIR`.
-
----
-
-### Phase 3: Branch Creation
-
-Create a new git branch from the latest `main` in the chosen repository:
+This codebase has repeated fixes for the same classes of bug. Before designing anything:
 
 ```bash
-cd <REPO_DIR>
-git checkout main
-git pull origin main
-git checkout -b <branch-name>
-git push -u origin <branch-name>
+git -C backend log --all --grep=<keyword> --oneline | head -20
+git -C frontend log --all --grep=<keyword> --oneline | head -20
+git -C <repo> log --all --oneline -- <suspected/file/path>
+grep -rn "<symbol>" backend/udata frontend/src
+gh pr list --repo amagovpt/<repo> --state all --search "<keyword>" --limit 10
 ```
 
-**Branch naming rules:**
+Also grep for existing wrapper/guard patterns before writing a new one — e.g. `Isolated*`,
+`Safe*`, `BaseBackend.get/head/post` for harvester HTTP, `listingCache.ts` for shared SSR
+caching, server-side CSRF minting for authenticated POSTs.
 
-- **ALWAYS use English**, lowercase, with hyphens — even if the ticket title is in Portuguese
-- Format: `<ticket-id>-<short-description>`
-- Example: `ticket-05-dataset-search-api`
-- **Translate** Portuguese ticket titles to English — never use non-English words in branch names
-- Keep it concise but descriptive (max 5 words after the ticket ID)
+Report what you found. **If a working fix pattern exists, replicate it.** If you believe you
+can improve on it, say so explicitly and get agreement before diverging.
 
-**Propose the branch name to the user and confirm** before creating it.
+## Phase 3 — Which repo(s)?
 
-After confirmation:
+Derive it from the work, then state the conclusion — only ask the user if genuinely ambiguous:
+
+- API contract, model, serialization, permissions, harvesters, Celery → `backend/`
+- Page, component, route, SSR/ISR, types, fetch functions → `frontend/`
+- **Both** → two branches, two PRs, and you must state the **deploy order** in the PR bodies
+  (which side must land first so the other does not 500). Backend-first when the frontend
+  consumes a new field/endpoint; frontend-first when the backend starts requiring something
+  the UI must send.
+
+Only the repo(s) actually changed go through the promotion flow. The other stays untouched.
+
+## Phase 4 — Working branch
 
 ```bash
-cd <REPO_DIR>
-git checkout -b <ticket-id>-<description>
-git push -u origin <ticket-id>-<description>
+git -C <repo> fetch origin
+git -C <repo> checkout develop && git -C <repo> pull origin develop
+git -C <repo> checkout -b <type>/ledg-<number>-<short-english-description>
 ```
 
----
+- Types: `feature/` `bugfix/` `hotfix/` `chore/` `release/`
+- `kebab-case`, **English only**, ticket number included — e.g.
+  `bugfix/ledg-2296-harvester-producer-admin-scope`
+- Propose the name and get a yes before creating it.
 
-### Phase 4: Commit Strategy Selection
+## Phase 5 — Implement, point by point
 
-**Ask the user:** "Do you want to commit automatically after each point, or do you want to manually review and approve each commit?"
+For each numbered point:
 
-- **Automatic**: The agent will `git add` and `git commit` automatically after implementing and testing each point.
-- **Manual**: The agent will pause, show the `git status` or `git diff`, **propose the commit message**, and **wait for the user's approval** before making the commit. The user must validate both the changes and the commit message text. Only run `git commit` after explicit user confirmation of the message.
+1. Read the existing code around it first; follow the patterns already there.
+2. Implement the smallest change that satisfies the point.
+3. The `PostToolUse` lint hook runs ruff/eslint on each file you write — if it reports
+   problems, fix them before moving on.
+4. Run the narrow test for that point (see Phase 6 commands).
+5. Commit — one point, one commit.
+6. Tell the user: `✅ Ponto N feito: <resumo>. A começar o ponto N+1: <resumo>`.
 
-**Manual commit template (MANDATORY format):**
-
-When proposing a manual commit, always include a **"How to test manually in the browser"** section so the user can validate the change before approving. Use this exact structure:
-
-```markdown
-## 📝 Proposta de commit (Ponto N)
-
-**Mensagem:**
-```
-
-<commit message here>
-```
-
-**Como testar no browser:**
-
-1. <step-by-step manual test>
-2. <expected outcome>
-3. <edge case to cover, if any>
-
-Aprovas? (sim/não/ajusta)
+**Commit message** — Conventional Commits, English, and **never any `Co-Authored-By` or AI
+attribution**:
 
 ```
+<type>(<scope>): <imperative description>
 
-Keep the test steps concrete (URLs to open, buttons to click, expected labels). Focus on what changed in this commit — don't retest the whole feature.
+<why, if not obvious>
 
----
-
-### Phase 5: Incremental Implementation
-
-Go to the **"O que deve ser feito"** section of the ticket. Number each point.
-For **each point**, follow this cycle:
-
+Refs: LEDG-<number>
 ```
 
-For each implementation point:
+Ask once, at the start, whether the user wants **automatic** commits per point or wants to
+**approve** each one. If approve: show `git -C <repo> diff --stat` plus the proposed message
+and a short "como testar no browser" (URL to open, what to click, what to expect), then wait.
 
-1. Read and understand the requirement
-2. Explore the relevant codebase area (read existing files first)
-3. Implement the change
-4. Run the relevant test (if applicable)
-5. If **Manual** strategy: show `git status`/diff and STOP for user approval.
-6. Commit with a clear English message
-7. Inform the user: "✅ Point N done. Starting point N+1..."
+**Backend only — `CHANGELOG.md` is mandatory.** Once the implementation is done, add an entry
+at the top of `## Unreleased`: bold one-line summary plus indented sub-bullets explaining the
+why/how. Never reference a PR number or a Jira id there, and never edit an entry that was
+already promoted.
 
-```
+## Phase 6 — Verification gate
 
-**Commit message format (ENGLISH ONLY):**
-```
+| | Command |
+| --- | --- |
+| Backend, narrow | `cd backend && uv run pytest <path/to/test_file.py> -x` |
+| Backend, full | `cd backend && uv run pytest` |
+| Backend lint | `cd backend && uv run ruff check . && uv run ruff format --check .` |
+| Frontend lint | `cd frontend && npm run lint` |
+| Frontend unit | `cd frontend && npm test` (vitest) |
+| Frontend e2e | `cd frontend && npm run test:e2e` |
+| Frontend types | `cd frontend && npx tsc --noEmit` |
 
-<type>: <concise description of what was done>
+udata is **Flask + MongoEngine**, not Django — there is no `django_db` marker. Mongo for
+tests runs on port 27018 (`docker-compose.test.yml`).
 
-Refs: <TICKET-ID>
+Then walk the **critérios de aceitação** one by one and mark `[x]` / `[ ]`, each with the
+file, function or test that satisfies it. An unsatisfied criterion is reported as
+unsatisfied — never silently dropped.
 
-````
-
-Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`
-
-Examples:
-```bash
-git add -A
-git commit -m "feat: add fetchCsrfToken function to services/api.ts
-
-Refs: TICKET-01"
-````
+## Phase 7 — PR into develop
 
 ```bash
-git add -A
-git commit -m "feat: implement login function with form-data POST
-
-Refs: TICKET-01"
+git -C <repo> push -u origin <branch>
+gh pr create --repo amagovpt/<repo> --base develop --head <branch> \
+  --title "<type>(<scope>): <description>" --body "<body>"
 ```
 
-**Frontend testing guidelines:**
+PR body: what changed and why, the ticket key, how to test manually, the acceptance-criteria
+checklist, and — when both repos changed — the required deploy order. No AI attribution.
 
-- Run Playwright: `npm run test:e2e` from `frontend/`
-- For unit/integration tests specific to a file, run only that test
+Then watch CI: `gh pr checks <number> --repo amagovpt/<repo> --watch`.
 
-**Backend testing guidelines:**
+## Phase 8 — Close the loop in Jira
 
-- Run pytest: `uv run pytest <path-to-test-file>` from `backend/`
-- Use `@pytest.mark.django_db` for database tests
+1. Comment on the ticket with the PR URL and a one-paragraph summary
+   (`mcp__atlassian__addCommentToJiraIssue`).
+2. Log the time spent if the user gives it (`mcp__atlassian__addWorklogToJiraIssue`).
+3. Transition the ticket — read the available transitions first
+   (`getTransitionsForJiraIssue`), then apply the one the user confirms. Do not invent
+   status names.
 
-**Between points:** Always tell the user:
+## Phase 9 — Final report
 
-> "✅ Completed point N: [brief description]. Starting point N+1: [brief description]..."
+```
+## ✅ LEDG-<number> — <título>
 
----
+**Repo(s):** backend | frontend
+**Branch:** <branch>
+**PR:** <url>  (CI: passou | falhou | a correr)
 
-### Phase 6: Final Verification & Summary
+### Commits
+1. <type>(<scope>): …
 
-After all points are complete:
+### Critérios de aceitação
+- [x] <criterion> — <ficheiro/teste que o satisfaz>
+- [ ] <criterion> — NÃO satisfeito: <razão>
 
-1. **Run the full relevant test suite:**
-   - Frontend: `cd frontend && npm run test:e2e`
-   - Backend: `cd backend && uv run pytest`
-
-2. **Validate Acceptance Criteria** — Go through **"Critérios de Aceitação"** one by one:
-   - For each criterion, explain how it's satisfied (point to code or test)
-   - Mark `[x]` if satisfied, `[ ]` if not
-
-3. **Present a final summary** to the user:
-
-   ```
-   ## ✅ Ticket <TICKET-ID> — Implementation Summary
-
-   **Branch:** <ticket-id>-<description>
-   **Repository:** frontend | backend
-
-   ### Commits Made:
-   1. feat: ...
-   2. feat: ...
-   3. ...
-
-   ### Acceptance Criteria:
-   - [x] Criterion 1 — satisfied by <function/file>
-   - [x] Criterion 2 — satisfied by <test/code>
-   - [ ] Criterion 3 — NOT satisfied: <reason>
-
-   ### Next Steps:
-   - Create a Pull Request to `main` on `origin` (for the submodule)
-   - Review and merge
-   - Commit the updated submodule reference in the parent repository (`<PROJECT_ROOT>`)
-   ```
-
----
-
-## Important Rules
-
-- **Respect the Commit Strategy.** If the user chose manual, you MUST wait for their approval before running `git commit`.
-- **Never batch multiple ticket points into one commit.** One point = one commit.
-  (Exception: if two points are genuinely inseparable, explain why they're combined.)
-- **Always read before writing.** Read relevant existing code before making changes.
-  Understand the patterns already in use and follow them.
-- **Always work in the correct repository** (`frontend/` or `backend/`). Never mix.
-- **Never use Portuguese in branch names or commit messages.** All git history must be in English.
-- **If a point is ambiguous**, ask the user for clarification before implementing.
-- **If tests fail**, fix the issue before moving to the next point.
-- **Follow project conventions** — use `uv` for Python, `npm` for Node, follow the existing
-  project structure and naming conventions.
-
----
-
-## Quick Reference: Repo Git Commands
-
-```bash
-# Frontend
-cd <PROJECT_ROOT>/frontend
-git checkout main && git pull origin main
-git checkout -b ticket-XX-description
-git push -u origin ticket-XX-description
-# ... implement & commit ...
-git push origin ticket-XX-description
-
-# Backend
-cd <PROJECT_ROOT>/backend
-git checkout main && git pull origin main
-git checkout -b ticket-XX-description
-git push -u origin ticket-XX-description
-# ... implement & commit ...
-git push origin ticket-XX-description
+### Próximo passo
+PR para `tst` depois de validado em develop (`/promote <repo> tst`).
 ```
 
 ---
 
-## Ticket Source File
+## Rules
 
-All tickets are documented in:
-
-```
-<PROJECT_ROOT>/docs/jira-tickets-frontend-backend.md
-```
-
-Search using the ticket header format: `## TICKET-XX: <Title>`
+- **Never** commit, push or merge on `develop|tst|ppr|main` — the hook blocks it anyway.
+- **Never** batch two ticket points into one commit unless they are genuinely inseparable;
+  if they are, say why.
+- **Never** put Portuguese in branch names, commit messages or PR titles. Code, comments and
+  git history are English. User-facing conversation follows the user's language.
+- **Never** add `Co-Authored-By` or any AI attribution anywhere in git history or PRs.
+- Always read before writing; always follow the existing pattern over a new one.
+- If a point is ambiguous, ask — do not invent scope.
+- If tests fail, fix before the next point. Never report done with red tests.
+- Promotion beyond `develop` is a separate, explicit step (`/promote`), never automatic.

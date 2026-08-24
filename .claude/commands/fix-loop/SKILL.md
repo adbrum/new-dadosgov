@@ -26,7 +26,7 @@ the order.**
    effectively as deleting an assertion. If you conclude the *test* is wrong, that is a legitimate
    finding but **not your call**: stop and report it to the user with the reasoning.
 
-3. **`... verify`**. Each call consumes one of the two attempts and refuses past the cap.
+3. **`... verify`**. Each call consumes one of the four attempts and refuses past the cap.
    It enforces, and prints a verdict:
    - **the suite exits 0** — the runner's exit code is the authority, never a parsed summary
    - no test file or runner config touched since the baseline commit (asked of git, so it

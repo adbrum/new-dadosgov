@@ -37,7 +37,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 STATE_DIR = os.path.join(ROOT, ".claude", "state")
 LOCK = os.path.join(STATE_DIR, "fix-loop.lock")
 LOG = os.path.join(STATE_DIR, "fix-loop.log")
-MAX_ATTEMPTS = 2
+MAX_ATTEMPTS = 4
 
 REPOS = {
     "frontend": {

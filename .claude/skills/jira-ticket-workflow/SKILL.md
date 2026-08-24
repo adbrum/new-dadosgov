@@ -4,17 +4,18 @@ description: >
   Ticket-to-PR workflow for the dadosgov monorepo (dados.gov.pt). Triggers on a Jira key
   from project LEDG (e.g. LEDG-2296), or when the user says "trabalhar no ticket",
   "pega no ticket", "implementa LEDG-XXXX", "work on ticket". Reads the ticket from Jira,
-  searches precedents, picks the right submodule repo, branches from develop, implements
-  point by point with one commit each, gates on lint+tests, opens the PR into develop and
-  closes the loop back in Jira.
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash, mcp__atlassian__getJiraIssue, mcp__atlassian__searchJiraIssuesUsingJql, mcp__atlassian__getTransitionsForJiraIssue, mcp__atlassian__transitionJiraIssue, mcp__atlassian__addCommentToJiraIssue, mcp__atlassian__addWorklogToJiraIssue
+  searches precedents, picks the right submodule repo, gets a written plan approved before
+  any code, branches from develop, implements point by point with one commit each, gates on
+  lint+tests, opens the PR into develop and closes the loop back in Jira.
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash, Agent, ExitPlanMode, mcp__atlassian__getJiraIssue, mcp__atlassian__searchJiraIssuesUsingJql, mcp__atlassian__getTransitionsForJiraIssue, mcp__atlassian__transitionJiraIssue, mcp__atlassian__addCommentToJiraIssue, mcp__atlassian__addWorklogToJiraIssue
 ---
 
 # Ticket → PR — dadosgov
 
 Disciplined, incremental delivery on the **dadosgov** monorepo. One concern at a time,
-always committed, always verified. The philosophy: each implementation point gets its own
-commit before moving on, and nothing is reported as done that was not verified.
+always committed, always verified. The philosophy: the plan is agreed before any code is
+written, each implementation point gets its own commit before moving on, and nothing is
+reported as done that was not verified.
 
 ## Constants
 
@@ -27,6 +28,8 @@ commit before moving on, and nothing is reported as done that was not verified.
 | Frontend repo | `amagovpt/dadosgov-fe` → `frontend/` (Next.js App Router, TypeScript) |
 | Environment branches | `develop` → `tst` → `ppr` → `main` (both repos, independently) |
 | `gh` CLI | check with `gh auth status` — present on some team machines, not all |
+| Planning model | **Fable 5** (`claude-fable-5`) — Phase 4 only |
+| Implementation model | **Opus 5** (`claude-opus-5`) — every other phase |
 
 `backend/` and `frontend/` are **independent git repositories** mounted as submodules.
 Always target one explicitly (`git -C backend …`) — never assume the cwd repo.
@@ -34,6 +37,30 @@ Always target one explicitly (`git -C backend …`) — never assume the cwd rep
 > A `PreToolUse` hook (`.claude/hooks/guard-protected-branch.py`) **denies** any commit,
 > push, merge or rebase on `develop|tst|ppr|main` in either submodule, and denies
 > force-push everywhere. If you get that denial, you forgot to create the working branch.
+
+## Model split — plan with Fable 5, code with Opus 5
+
+**The plan (Phase 4) is written by Fable 5. Everything that touches the repo — Phases 5 to 10
+— runs on Opus 5.** Two different models read the same ticket differently; the split is there
+so the plan is not written by the same head that is about to defend it in code.
+
+The session itself stays on **Opus 5**. Phase 4 is delegated to a Fable subagent:
+
+```
+Agent(subagent_type: "Plan", model: "fable", description: "Plan LEDG-<n>",
+      prompt: "<ticket restatement + Phase 2 precedents + Phase 3 repo decision + the plan
+               template and rules from Phase 4>")
+```
+
+- The subagent has **no conversation context** — the prompt must carry the ticket, the
+  precedents you found and the repo decision, or it will plan blind.
+- The plan comes back as a report; **you** present it to the user for approval and **you**
+  implement it. Never let the planner write code, and never start coding on Opus before the
+  Fable plan is approved.
+- If the user prefers to drive the split by hand (`/model fable` → plan → `/model opus` →
+  code), that is equivalent — say which mode you are using.
+- If Fable is unavailable, say so explicitly and ask whether to plan on Opus instead. Do not
+  silently downgrade the split.
 
 ---
 
@@ -95,7 +122,60 @@ Derive it from the work, then state the conclusion — only ask the user if genu
 
 Only the repo(s) actually changed go through the promotion flow. The other stays untouched.
 
-## Phase 4 — Working branch
+## Phase 4 — Plan (approval gate)
+
+Write the plan **before creating the branch**. A plan rejected on paper costs a paragraph;
+a plan rejected after three commits costs the commits. If you are in plan mode, this phase
+ends with `ExitPlanMode`; otherwise post the plan and wait for an explicit "ok".
+
+**This phase runs on Fable 5** — see *Model split* above. Delegate it, then review what comes
+back before showing it to the user: a plan naming a file that does not exist is your error to
+catch, not the user's.
+
+The plan is the bridge between the ticket (Phase 1) and the code: every numbered point gets
+a concrete landing site in the repo, justified by what Phase 2 found.
+
+```
+## Plano — LEDG-<number>
+
+**Repo(s):** backend | frontend | ambos (backend primeiro)
+
+### Ponto 1 — <resumo do ponto do ticket>
+- **Ficheiros:** `backend/udata/core/<x>/api.py` (`<função/símbolo>`), …
+- **Alteração:** <a mudança mais pequena que satisfaz o ponto>
+- **Precedente:** <commit/PR/ficheiro que já resolve isto assim> — ou "sem precedente"
+- **Prova:** <teste que passa a existir/correr, ou o passo manual no browser>
+- **Commit:** `<type>(<scope>): <descrição>`
+
+### Ponto 2 — …
+
+### Fora de âmbito
+- <o que o ticket parece pedir mas não vais fazer, e porquê>
+
+### Riscos / dúvidas
+- <o que pode partir, migrações necessárias, ordem de deploy entre repos>
+```
+
+Rules for the plan:
+
+- **One point, one commit, one proof.** If a point has no test and no browser step that
+  proves it, say so in the plan — that is a gap the user should see before you code, not a
+  detail to discover at Phase 7.
+- **Name real files and symbols**, verified by reading them in Phases 2–3. A plan that says
+  "ajustar as permissões" without a path is not a plan.
+- **Carry the precedent forward.** If Phase 2 found a working pattern, the plan says which
+  point replicates it. If you intend to diverge, the plan is where you argue for it.
+- **State what you are not doing.** Scope the user did not ask for is scope you do not add.
+- **Fold every open question into this one message** — including whether commits are
+  automatic per point or approved one by one (Phase 6). This should be the last round-trip
+  before code.
+- Keep it proportional: a one-line CSS fix gets a three-line plan, not this template.
+
+If the plan changes mid-implementation — a point turns out to be impossible, or a fourth
+point appears — **stop and say so** with the revised plan. Silently drifting from an approved
+plan is the failure this phase exists to prevent.
+
+## Phase 5 — Working branch
 
 ```bash
 git -C <repo> fetch origin
@@ -107,10 +187,10 @@ git -C <repo> checkout -b <type>/ledg-<number>-<short-english-description>
 - `kebab-case`, **English only**, ticket number included — e.g.
   `bugfix/ledg-2296-harvester-producer-admin-scope`
 - State the name and create it — do not spend a round-trip confirming it. Renaming before the
-  PR is `git branch -m`, so a wrong guess costs nothing; say so when you state it. Fold any
-  genuine choice (approach, commit strategy) into a single question earlier instead.
+  PR is `git branch -m`, so a wrong guess costs nothing; say so when you state it. Any genuine
+  choice (approach, commit strategy) belongs in the Phase 4 plan, not in a question here.
 
-## Phase 5 — Implement, point by point
+## Phase 6 — Implement, point by point
 
 For each numbered point:
 
@@ -118,7 +198,7 @@ For each numbered point:
 2. Implement the smallest change that satisfies the point.
 3. The `PostToolUse` lint hook runs ruff/eslint on each file you write — if it reports
    problems, fix them before moving on.
-4. Run the narrow test for that point (see Phase 6 commands).
+4. Run the narrow test for that point (see Phase 7 commands).
 5. Commit — one point, one commit.
 6. Tell the user: `✅ Ponto N feito: <resumo>. A começar o ponto N+1: <resumo>`.
 
@@ -133,9 +213,10 @@ attribution**:
 Refs: LEDG-<number>
 ```
 
-Ask once, at the start, whether the user wants **automatic** commits per point or wants to
-**approve** each one. If approve: show `git -C <repo> diff --stat` plus the proposed message
-and a short "como testar no browser" (URL to open, what to click, what to expect), then wait.
+The commit strategy — **automatic** per point or **approve** each one — was settled with the
+plan in Phase 4; do not ask again. If approve: show `git -C <repo> diff --stat` plus the
+proposed message and a short "como testar no browser" (URL to open, what to click, what to
+expect), then wait.
 
 **`CHANGELOG.md` is mandatory in BOTH repos** — `backend/CHANGELOG.md` and
 `frontend/CHANGELOG.md` carry the same convention. Once the implementation is done, add an
@@ -144,7 +225,7 @@ the why/how. Never reference a PR number or a Jira id there (no `LEDG-XXXX`), an
 entry that was already promoted — that is what makes the same line diverge between environment
 branches and turn an auto-mergeable entry into a conflict.
 
-## Phase 6 — Verification gate
+## Phase 7 — Verification gate
 
 | | Command |
 | --- | --- |
@@ -163,7 +244,7 @@ Then walk the **critérios de aceitação** one by one and mark `[x]` / `[ ]`, e
 file, function or test that satisfies it. An unsatisfied criterion is reported as
 unsatisfied — never silently dropped.
 
-## Phase 6.5 — Independent review (advisory)
+## Phase 7.5 — Independent review (advisory)
 
 Run this on the diff **before pushing**. A finding after the PR is open costs a force-push or
 a follow-up commit and spends the human reviewer's attention on something the machine could
@@ -190,7 +271,7 @@ have caught.
 Report what the review found, what you changed because of it, and what you deliberately did
 not — that last part is the one worth reading.
 
-## Phase 7 — PR into develop
+## Phase 8 — PR into develop
 
 ```bash
 git -C <repo> push -u origin <branch>
@@ -203,7 +284,7 @@ checklist, and — when both repos changed — the required deploy order. No AI 
 
 Then watch CI: `gh pr checks <number> --repo amagovpt/<repo> --watch`.
 
-## Phase 8 — Close the loop in Jira
+## Phase 9 — Close the loop in Jira
 
 1. Comment on the ticket with the PR URL and a one-paragraph summary
    (`mcp__atlassian__addCommentToJiraIssue`).
@@ -212,7 +293,7 @@ Then watch CI: `gh pr checks <number> --repo amagovpt/<repo> --watch`.
    (`getTransitionsForJiraIssue`), then apply the one the user confirms. Do not invent
    status names.
 
-## Phase 9 — Final report
+## Phase 10 — Final report
 
 ```
 ## ✅ LEDG-<number> — <título>
@@ -237,6 +318,9 @@ PR para `tst` depois de validado em develop (`/promote <repo> tst`).
 ## Rules
 
 - **Never** commit, push or merge on `develop|tst|ppr|main` — the hook blocks it anyway.
+- **Never** write code before the Phase 4 plan is approved, and never drift from it in
+  silence — a changed plan is re-stated and re-approved.
+- **Never** plan and code on the same model: Phase 4 is Fable 5, Phases 5–10 are Opus 5.
 - **Never** batch two ticket points into one commit unless they are genuinely inseparable;
   if they are, say why.
 - **Never** put Portuguese in branch names, commit messages or PR titles. Code, comments and

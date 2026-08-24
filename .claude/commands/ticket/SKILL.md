@@ -5,7 +5,13 @@ description: Work a Jira LEDG ticket end to end — read it, find precedents, br
 
 Ticket: $ARGUMENTS
 
-Invoke the `jira-ticket-workflow` skill and follow it from Phase 1 to Phase 9.
+Invoke the `jira-ticket-workflow` skill and follow it from Phase 1 to Phase 10.
+
+Two gates matter above the rest:
+
+- **Phase 4 is an approval gate** — no code before the user says ok.
+- **Phase 4 runs on Fable 5** (delegated subagent), everything that touches the repo runs on
+  Opus 5.
 
 Accept any of these forms in `$ARGUMENTS` and normalize to the `LEDG-<n>` key:
 

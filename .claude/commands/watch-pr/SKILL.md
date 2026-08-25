@@ -12,6 +12,9 @@ This command is **one tick of a loop**. Do exactly one pass and then decide:
 2. Classify each PR:
    - **a correr** → nothing to report. Reply in one line and schedule the next tick as a noop.
    - **verde e aprovado** → report that it is ready to merge. Do **not** merge; merging is the user's call.
+   - **merged** → name the next step explicitly: `/promote <repo> tst`, and `/deploy-check tst`
+     once that deploy lands. If the PR closed a `LEDG-XXXX` ticket, say whether its Jira
+     status still needs moving.
    - **verde, sem review** → report that it is waiting on review.
    - **vermelha** → run `gh run view <run-id> --repo <repo> --log-failed`, summarize the real failing assertion, and say whether it looks like a code problem or infrastructure flake.
      - By default **do not push a fix** — report and let the user decide.

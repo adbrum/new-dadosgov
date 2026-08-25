@@ -16,3 +16,5 @@ Steps the agent must follow:
 3. Show that list to the user and get a yes before opening anything.
 4. `gh pr create --repo amagovpt/<repo> --base <target> --head <source> --title "chore(promote): <source> -> <target>" --body "<what is being promoted, ticket keys, how to verify in <target>, deploy order if the other repo also changed>"`
 5. Report the PR URL and the CI status. Never merge.
+6. Name the next step: `/loop 8m /watch-pr <repo> <pr>` to follow it, and `/deploy-check
+   <ambiente>` after the deploy lands.

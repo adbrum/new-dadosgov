@@ -6,6 +6,7 @@ The monorepo aggregates two independent repos with their own environment branche
 This states it up front instead of letting the model infer it.
 """
 
+import glob
 import json
 import os
 import subprocess
@@ -51,6 +52,25 @@ def main() -> None:
                 )
         except Exception:
             pass
+
+    # An in-flight ticket whose state file nobody reads is the restart-blind problem all
+    # over again: the loop's memory exists, but the new session does not know to look.
+    for path in sorted(glob.glob(os.path.join(ROOT, ".claude", "state", "ticket-*.json"))):
+        try:
+            with open(path) as fh:
+                st = json.load(fh)
+        except Exception:
+            continue
+        done = sum(1 for x in st.get("points", []) if x.get("status") == "done")
+        resolved = sum(1 for c in st.get("criteria", []) if c.get("status") != "pending")
+        branches = ", ".join(f"{r}:{b}" for r, b in (st.get("branch") or {}).items()) or "-"
+        lines.append(
+            f"- TICKET EM CURSO {st.get('ticket')}: fase={st.get('phase')}"
+            f"{' (PAUSADO)' if st.get('paused') else ''}, pontos={done}/{len(st.get('points', []))}, "
+            f"criterios={resolved}/{len(st.get('criteria', []))}, branch={branches}"
+            f" -> retoma com /ticket {st.get('ticket')}; o ficheiro de estado prevalece sobre a"
+            " memoria da conversa, e o git prevalece sobre o ficheiro."
+        )
 
     lines.append(
         "Fluxo: branch a partir de develop -> PR para develop -> tst -> ppr -> main, "

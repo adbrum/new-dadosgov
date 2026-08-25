@@ -107,6 +107,17 @@
             "statusMessage": "A verificar o congelamento dos testes..."
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/guard-ticket-workflow.py\"",
+            "timeout": 30,
+            "statusMessage": "A validar o estado do ticket..."
+          }
+        ]
       }
     ],
     "PostToolUse": [

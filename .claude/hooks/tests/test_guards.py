@@ -18,6 +18,9 @@ HOOKS = os.path.join(ROOT, ".claude", "hooks")
 LOCK = os.path.join(ROOT, ".claude", "state", "fix-loop.lock")
 BRANCH_GUARD = "guard-protected-branch.py"
 SURFACE_GUARD = "guard-test-surface.py"
+TICKET_GUARD = "guard-ticket-workflow.py"
+TICKET_KEY = "LEDG-9999"
+TICKET_STATE = os.path.join(ROOT, ".claude", "state", f"ticket-{TICKET_KEY}.json")
 
 
 def call(hook: str, payload: dict) -> str:
@@ -78,6 +81,100 @@ SURFACE_CASES = [
 ]
 
 
+def ticket_state(**overrides) -> dict:
+    """A minimal but complete ticket state; each case overrides just what it exercises."""
+    state = {
+        "ticket": TICKET_KEY, "title": "guard regression", "source": "jira",
+        "phase": "approved", "paused": False, "repos": ["backend"],
+        "deploy_order": None, "branch": {}, "plan_digest": "sha256:deadbeef",
+        "plan_delegated_to_fable": True, "precedents": [], "points": [],
+        "criteria": [{"id": 1, "text": "criterio", "status": "met", "evidence": "test"}],
+        "verified": {}, "review": {"ran": True, "accepted": [], "rejected": []},
+        "pr": {}, "overrides": [],
+    }
+    state.update(overrides)
+    return state
+
+
+def write_ticket(state: dict) -> None:
+    os.makedirs(os.path.dirname(TICKET_STATE), exist_ok=True)
+    with open(TICKET_STATE, "w") as fh:
+        json.dump(state, fh)
+
+
+def backend_branch() -> str:
+    return current_branch(BE)
+
+
+# Each case carries its own state, because what is being tested IS the state->decision map.
+def TICKET_CASES() -> list:
+    on_branch = ticket_state(branch={"backend": backend_branch()})
+    good_msg = 'git commit -m "fix(admin): widen the producer scope" -m "Refs: LEDG-9999"'
+    return [
+        # 1. the approval gate: no source before the plan is approved
+        ("#T1  Edit em backend/ com plano por aprovar", ticket_state(phase="planned"),
+         edit(os.path.join(BE, "udata/core/dataset/api.py")), "DENY"),
+        ("#T2  Edit em backend/ com plano aprovado", ticket_state(phase="approved"),
+         edit(os.path.join(BE, "udata/core/dataset/api.py")), "PASS"),
+        ("#T3  ticket pausado desliga o gate", ticket_state(phase="planned", paused=True),
+         edit(os.path.join(BE, "udata/core/dataset/api.py")), "PASS"),
+        # the harness itself must never be frozen by a ticket
+        ("#T4  Edit em .claude/ nunca e bloqueado", ticket_state(phase="planned"),
+         edit(os.path.join(ROOT, ".claude/hooks/x.py")), "PASS"),
+        # 2. branch shape
+        ("#T5  branch bem formada", ticket_state(),
+         bash("git checkout -b bugfix/ledg-9999-producer-scope", BE), "PASS"),
+        ("#T6  branch sem o prefixo ledg-", ticket_state(),
+         bash("git checkout -b bugfix/2296-producer-scope", BE), "DENY"),
+        ("#T7  branch de outro ticket", ticket_state(),
+         bash("git checkout -b bugfix/ledg-1111-outro", BE), "DENY"),
+        ("#T8  branch antes do plano aprovado", ticket_state(phase="planned"),
+         bash("git checkout -b bugfix/ledg-9999-producer-scope", BE), "DENY"),
+        # 3. commit messages, checked at the cheap moment
+        ("#T9  commit sem trailer Refs:", ticket_state(),
+         bash('git commit -m "fix(admin): widen the producer scope"', BE), "DENY"),
+        ("#T10 commit nao-Conventional", ticket_state(),
+         bash('git commit -m "arranjar o scope" -m "Refs: LEDG-9999"', BE), "DENY"),
+        ("#T11 commit com Co-Authored-By", ticket_state(),
+         bash(good_msg + ' -m "Co-Authored-By: alguem <a@b.c>"', BE), "DENY"),
+        # the narrow attribution regex must not reject a commit that merely names .claude/
+        ("#T12 commit que menciona .claude/ passa", ticket_state(),
+         bash('git commit -m "chore(admin): read .claude/hooks config" -m "Refs: LEDG-9999"', BE),
+         "PASS"),
+        ("#T13 commit correto", ticket_state(), bash(good_msg, BE), "PASS"),
+        ("#T14 commit fora do ticket (frontend nao listado)", ticket_state(),
+         bash('git commit -m "chore: x"', ROOT), "PASS"),
+        # 4. the push gate
+        ("#T15 push sem verify", on_branch, bash("git push -u origin HEAD", BE), "DENY"),
+        ("#T16 push numa branch nao registada", ticket_state(),
+         bash("git push -u origin HEAD", BE), "PASS"),
+        ("#T17 push com override armado",
+         ticket_state(branch={"backend": backend_branch()},
+                      overrides=[{"gate": "push", "reason": "ensaio", "consumed": False}]),
+         bash("git push -u origin HEAD", BE), "PASS"),
+    ]
+
+
+def run_ticket_group() -> int:
+    print("\n--- guard-ticket-workflow (estado por caso) ---")
+    failures = 0
+    for label, state, payload, expected in TICKET_CASES():
+        write_ticket(state)
+        got = call(TICKET_GUARD, payload)
+        ok = got == expected
+        failures += 0 if ok else 1
+        print(f"  {'ok   ' if ok else 'FALHA'} {label:52} esperado={expected} obtido={got}")
+    if os.path.exists(TICKET_STATE):
+        os.remove(TICKET_STATE)
+    # and it must be completely inert once no ticket is active
+    got = call(TICKET_GUARD, edit(os.path.join(BE, "udata/core/dataset/api.py")))
+    ok = got == "PASS"
+    failures += 0 if ok else 1
+    print(f"  {'ok   ' if ok else 'FALHA'} {'#T18 inerte sem ticket ativo':52} "
+          f"esperado=PASS obtido={got}")
+    return failures
+
+
 def run_group(title: str, hook: str, cases: list, with_lock: bool) -> int:
     if with_lock:
         os.makedirs(os.path.dirname(LOCK), exist_ok=True)
@@ -108,6 +205,7 @@ def main() -> int:
     had_lock = os.path.exists(LOCK)
     failures = run_group("guard-protected-branch", BRANCH_GUARD, BRANCH_CASES, with_lock=False)
     failures += run_group("guard-test-surface (lock held)", SURFACE_GUARD, SURFACE_CASES, with_lock=True)
+    failures += run_ticket_group()
 
     if os.path.exists(LOCK) and not had_lock:
         os.remove(LOCK)
@@ -116,7 +214,7 @@ def main() -> int:
     if failures:
         print(f"{failures} CASO(S) A FALHAR")
         return 1
-    print(f"TODOS OS {len(BRANCH_CASES) + len(SURFACE_CASES)} CASOS PASSAM")
+    print(f"TODOS OS {len(BRANCH_CASES) + len(SURFACE_CASES) + len(TICKET_CASES()) + 1} CASOS PASSAM")
     return 0
 
 

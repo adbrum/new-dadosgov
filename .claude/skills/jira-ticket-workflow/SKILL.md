@@ -38,6 +38,23 @@ Two things are enforced, not requested — expect a denial rather than a reminde
 `guard-protected-branch.py` separately denies any commit/push/merge on `develop|tst|ppr|main`
 and any force-push. That denial means you forgot to create the working branch.
 
+## Several tickets at once
+
+One ticket per session. Two tickets can share the monorepo, but not a submodule checkout —
+one checkout is one branch, and two backend suites share one Mongo test database.
+
+- `claim LEDG-<n> --repos <repos>` at Phase 3 is what frees the other submodule for another
+  session, and what refuses a second ticket aiming at the same checkout.
+- When it refuses, give this ticket its own tree:
+  `python3 .claude/hooks/ticket-worktree.py create LEDG-<n> --repos <repos>`. It creates a
+  worktree per submodule, links the untracked `.env` files the suites need, installs
+  dependencies, and records the path as `workdir`.
+- **The session still runs from the monorepo root.** The worktree is a path in the ticket's
+  state, not a second project — the guards, the suites and the lint hook all read it from
+  there. `ticket-state.py doctor` prints where everything resolved to.
+- `ticket-worktree.py list` shows every ticket tree and whether it is dirty; `remove` refuses
+  while work is uncommitted or unpushed.
+
 ## Language — one rule
 
 **English** in every git artefact: branch names, commit messages, PR titles **and bodies**,
@@ -219,12 +236,18 @@ drifting in silence stops being an available move; then present the revised plan
 
 ## Phase 5 — Working branch
 
+`<tree>` below is this ticket's checkout: `<repo>` normally, or `<workdir>/<repo>` when the
+ticket has its own worktree — `ticket-state.py status LEDG-<n>` shows which.
+
 ```bash
-git -C <repo> fetch origin
-git -C <repo> checkout develop && git -C <repo> pull origin develop
-git -C <repo> checkout -b <type>/ledg-<number>-<short-english-description>
+git -C <tree> fetch origin
+git -C <tree> checkout -b <type>/ledg-<number>-<short-english-description> origin/develop
 python3 .claude/hooks/ticket-state.py branch LEDG-<number> <repo> <branch>
 ```
+
+**Never `checkout develop` here.** Branching straight off `origin/develop` is one command
+instead of two, and worktrees share the ref namespace: with a second checkout in play,
+`checkout develop` fails with *"develop is already checked out"*.
 
 `feature|bugfix|hotfix|chore|release`, kebab-case, English, ticket number included — e.g.
 `bugfix/ledg-2296-harvester-producer-admin-scope`. State the name and create it; renaming

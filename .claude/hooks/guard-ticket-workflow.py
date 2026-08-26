@@ -102,8 +102,15 @@ def active_states() -> list:
                 state = json.load(fh)
         except Exception:
             continue  # unreadable state cannot be defended deterministically
-        if not state.get("paused"):
-            states.append(state)
+        if state.get("paused"):
+            continue
+        # A state carries the root it was started in. Normally that is this one, since the
+        # state directory lives under it -- but a shared or symlinked state directory must
+        # not let one checkout's tickets police another's files.
+        root = state.get("root")
+        if root and os.path.realpath(root) != os.path.realpath(ROOT):
+            continue
+        states.append(state)
     return states
 
 
@@ -131,19 +138,72 @@ def resolve(path: str, base: str):
         return None
 
 
-def repo_of(cmd: str, cwd: str):
-    """Which submodule the command acts on, from every source available."""
+def repo_dir(state: dict, repo: str) -> str:
+    """Where this ticket's copy of `repo` is: its worktree when it has one, else the checkout."""
+    workdir = state.get("workdir")
+    return os.path.realpath(
+        os.path.join(workdir, repo) if workdir else os.path.join(ROOT, repo)
+    )
+
+
+def claimed_repos(state: dict) -> list:
+    """Which submodules this ticket speaks for.
+
+    An empty `repos` means Phase 3 has not run yet, and an undecided ticket speaks for
+    both -- the conservative reading, and the one that keeps the Phase 4 gate shut before
+    anyone knows where the code will land. Once `claim`/`plan-approved` records the repos,
+    the ticket stops policing the one it does not touch, which is what lets a second
+    session work the other repo at the same time.
+    """
+    return [r for r in (state.get("repos") or SUBMODULES) if r in SUBMODULES]
+
+
+def trees(states: list) -> list:
+    """(repo, path, owners) for every checkout any active ticket could be working in.
+
+    The primary checkout is always listed, so a repo nobody claimed is still recognised
+    as that repo -- it simply has no owner, and a gate with no owner has nothing to say.
+    """
+    seen = {}
+    for state in states:
+        for repo in claimed_repos(state):
+            seen.setdefault((repo, repo_dir(state, repo)), []).append(state)
+    for repo in SUBMODULES:
+        seen.setdefault((repo, os.path.realpath(os.path.join(ROOT, repo))), [])
+    return [(repo, path, owners) for (repo, path), owners in seen.items()]
+
+
+def inside(path, tree: str) -> bool:
+    return bool(path) and (path == tree or path.startswith(tree + os.sep))
+
+
+def tree_of_path(path, states: list):
+    """The (repo, path, owners) tuple containing this file, longest match first.
+
+    Longest first because a worktree may sit under the primary checkout: without it,
+    `<primary>/backend` would swallow a path inside `.claude/worktrees/…/backend`.
+    """
+    for repo, tree, owners in sorted(trees(states), key=lambda t: -len(t[1])):
+        if inside(path, tree):
+            return repo, tree, owners
+    return None, None, []
+
+
+def tree_of_command(cmd: str, cwd: str, states: list):
+    """Same, for a Bash command: the target comes from cwd, `git -C` and `cd` alike."""
     candidates = {resolve(cwd, ROOT)}
     for match in DASH_C.findall(cmd):
         candidates.add(resolve(match, cwd))
     for match in CD_ANY.findall(cmd):
         candidates.add(resolve(match, cwd))
-    for sub in SUBMODULES:
-        sub_path = os.path.realpath(os.path.join(ROOT, sub))
-        for candidate in candidates:
-            if candidate and (candidate == sub_path or candidate.startswith(sub_path + os.sep)):
-                return sub
-    return None
+    for repo, tree, owners in sorted(trees(states), key=lambda t: -len(t[1])):
+        if any(inside(c, tree) for c in candidates):
+            return repo, tree, owners
+    return None, None, []
+
+
+def unapproved(states: list) -> list:
+    return [s for s in states if s.get("phase") in ("started", "planned")]
 
 
 def range_base(sub_path: str):
@@ -304,26 +364,30 @@ def main() -> None:
     tool = payload.get("tool_name", "")
     tool_input = payload.get("tool_input", {})
     cwd = payload.get("cwd") or ROOT
-    unapproved = [s for s in states if s.get("phase") in ("started", "planned")]
 
     if tool in ("Edit", "Write", "NotebookEdit"):
-        if not unapproved:
-            return
         raw = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
         path = resolve(raw, cwd) if raw else None
         if not path:
             return
-        for sub in SUBMODULES:
-            sub_path = os.path.realpath(os.path.join(ROOT, sub))
-            if path == sub_path or path.startswith(sub_path + os.sep):
-                keys = ", ".join(s["ticket"] for s in unapproved)
-                deny(
-                    f"Escrita em {sub}/ bloqueada: o plano de {keys} ainda nao foi aprovado. "
-                    "A Fase 4 e um gate — nada de codigo antes do ok do utilizador.\n\n"
-                    "Depois da aprovacao: python3 .claude/hooks/ticket-state.py plan-approved "
-                    f"{unapproved[0]['ticket']} --repos <repo> --point '…' <<'PLAN' … PLAN\n"
-                    f"Para trabalho fora do ticket: ticket-state.py pause {unapproved[0]['ticket']}"
-                )
+        sub, _, owners = tree_of_path(path, states)
+        if not sub:
+            return
+        # Only the tickets that own THIS tree of THIS repo have a say. That is the whole
+        # difference between one session at a time and several: a ticket still waiting for
+        # its plan used to lock both submodules for every other ticket too.
+        blocking = unapproved(owners)
+        if not blocking:
+            return
+        keys = ", ".join(s["ticket"] for s in blocking)
+        first = blocking[0]["ticket"]
+        deny(
+            f"Escrita em {sub}/ bloqueada: o plano de {keys} ainda nao foi aprovado. "
+            "A Fase 4 e um gate — nada de codigo antes do ok do utilizador.\n\n"
+            "Depois da aprovacao: python3 .claude/hooks/ticket-state.py plan-approved "
+            f"{first} --repos <repo> --point '…' <<'PLAN' … PLAN\n"
+            f"Para trabalho fora do ticket: ticket-state.py pause {first}"
+        )
         return
 
     if tool != "Bash":
@@ -340,16 +404,17 @@ def main() -> None:
         if not cmd.strip():
             return
 
-    repo = repo_of(cmd, cwd)
+    repo, sub_path, owners = tree_of_command(cmd, cwd, states)
     if not repo:
         return
-    sub_path = os.path.realpath(os.path.join(ROOT, repo))
+    if not owners:
+        return  # a checkout no active ticket claims: nothing here to enforce
 
     match = NEW_BRANCH.search(cmd)
     if match:
         name = match.group(1)
         parsed = BRANCH_RE.match(name)
-        expected = {s["ticket"].split("-")[1] for s in states}
+        expected = {s["ticket"].split("-")[1] for s in owners}
         if not parsed:
             deny(
                 f"Nome de branch invalido: {name!r}.\nFormato: "
@@ -361,7 +426,7 @@ def main() -> None:
                 f"A branch {name!r} refere LEDG-{parsed.group(2)}, mas o(s) ticket(s) ativo(s) "
                 f"sao: {', '.join('LEDG-' + n for n in sorted(expected))}."
             )
-        if unapproved:
+        if unapproved(owners):
             deny(
                 "Branch de trabalho antes do plano aprovado — a Fase 5 vem depois do gate da "
                 "Fase 4. Aprova o plano primeiro (ticket-state.py plan-approved)."
@@ -371,7 +436,7 @@ def main() -> None:
     if GIT_PUSH.search(cmd):
         rc, branch = sh(["git", "branch", "--show-current"], sub_path)
         branch = branch.strip()
-        for state in states:
+        for state in owners:
             if state.get("branch", {}).get(repo) == branch and branch:
                 check_push(state, repo, sub_path)
         return
@@ -382,7 +447,7 @@ def main() -> None:
             return  # -F or editor: the push gate re-checks every message deterministically
         full = "\n\n".join(messages)
         first = full.splitlines()[0] if full.splitlines() else ""
-        keys = {s["ticket"] for s in states if repo in (s.get("repos") or [repo])}
+        keys = {s["ticket"] for s in owners}
         problems = []
         if not CONVENTIONAL.match(first):
             problems.append(f"a primeira linha nao e Conventional Commits: {first!r}")

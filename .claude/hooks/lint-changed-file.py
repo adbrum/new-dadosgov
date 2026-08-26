@@ -9,6 +9,7 @@ additionalContext so they get fixed in the same turn instead of surfacing in CI.
 Always exits 0 — a broken linter must not block the edit.
 """
 
+import glob
 import json
 import os
 import subprocess
@@ -41,6 +42,28 @@ def run(cmd: list[str], cwd: str) -> tuple[int, str]:
         return 0, ""
 
 
+def tree_for(path: str, repo: str):
+    """The checkout of `repo` that holds this file: a ticket's worktree, or the primary one.
+
+    Without this the hook simply did not fire for a file inside a per-ticket worktree --
+    no lint, no feedback, and silence looks exactly like "nothing to report".
+    """
+    trees = [os.path.realpath(os.path.join(ROOT, repo))]
+    for state_file in glob.glob(os.path.join(ROOT, ".claude", "state", "ticket-*.json")):
+        try:
+            with open(state_file) as fh:
+                workdir = json.load(fh).get("workdir")
+        except Exception:
+            continue
+        if workdir:
+            trees.append(os.path.realpath(os.path.join(workdir, repo)))
+    # longest first: a worktree may live under the primary checkout
+    for tree in sorted(set(trees), key=len, reverse=True):
+        if path.startswith(tree + os.sep):
+            return tree
+    return None
+
+
 def main() -> None:
     try:
         payload = json.load(sys.stdin)
@@ -57,10 +80,10 @@ def main() -> None:
 
     problems: list[str] = []
 
-    backend = os.path.realpath(os.path.join(ROOT, "backend"))
-    frontend = os.path.realpath(os.path.join(ROOT, "frontend"))
+    backend = tree_for(path, "backend")
+    frontend = tree_for(path, "frontend")
 
-    if path.startswith(backend + os.sep) and path.endswith(".py"):
+    if backend and path.endswith(".py"):
         rel = os.path.relpath(path, backend)
         for cmd in (
             ["uv", "run", "ruff", "check", "--fix", rel],
@@ -70,9 +93,7 @@ def main() -> None:
             if code != 0 and out:
                 problems.append(f"$ {' '.join(cmd)}\n{out}")
 
-    elif path.startswith(frontend + os.sep) and path.endswith(
-        (".ts", ".tsx", ".js", ".jsx", ".mjs")
-    ):
+    elif frontend and path.endswith((".ts", ".tsx", ".js", ".jsx", ".mjs")):
         rel = os.path.relpath(path, frontend)
         code, out = run(["npx", "eslint", "--fix", rel], frontend)
         if code != 0 and out:

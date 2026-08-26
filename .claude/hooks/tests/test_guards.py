@@ -123,9 +123,14 @@ def ticket_state(**overrides) -> dict:
     return state
 
 
+def state_path(key: str) -> str:
+    return os.path.join(ROOT, ".claude", "state", f"ticket-{key}.json")
+
+
 def write_ticket(state: dict) -> None:
-    os.makedirs(os.path.dirname(TICKET_STATE), exist_ok=True)
-    with open(TICKET_STATE, "w") as fh:
+    path = state_path(state["ticket"])
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as fh:
         json.dump(state, fh)
 
 
@@ -207,6 +212,48 @@ def run_ticket_group() -> int:
     return failures
 
 
+# Two tickets at once. The old guard imposed every active state on every write, so one
+# ticket waiting for its plan locked both submodules for all the others -- which is exactly
+# why parallel sessions were impossible. Ownership is per repo and per checkout now.
+def PARALLEL_CASES() -> list:
+    waiting = ticket_state(ticket="LEDG-9997", phase="planned", repos=["backend"])
+    working = ticket_state(ticket="LEDG-9996", phase="approved", repos=["frontend"])
+    worktree = os.path.join(ROOT, ".claude", "worktrees", "ledg-9997")
+    moved = ticket_state(
+        ticket="LEDG-9997", phase="planned", repos=["backend"], workdir=worktree
+    )
+    return [
+        ("#T20 outro repo nao e bloqueado por um plano pendente", [waiting, working],
+         edit(os.path.join(FE, "src/components/X.tsx")), "PASS"),
+        ("#T21 o repo do ticket pendente continua bloqueado", [waiting, working],
+         edit(os.path.join(BE, "udata/core/dataset/api.py")), "DENY"),
+        ("#T22 a arvore do ticket e a que ele bloqueia", [moved],
+         edit(os.path.join(worktree, "backend/udata/core/dataset/api.py")), "DENY"),
+        ("#T23 o checkout principal fica livre quando o ticket saiu", [moved],
+         edit(os.path.join(BE, "udata/core/dataset/api.py")), "PASS"),
+        ("#T24 commit aceita o Refs do ticket que detem a arvore", [waiting, working],
+         bash('git commit -m "fix(x): y" -m "Refs: LEDG-9996"', FE), "PASS"),
+        ("#T25 commit com o Refs do ticket do outro repo", [waiting, working],
+         bash('git commit -m "fix(x): y" -m "Refs: LEDG-9997"', FE), "DENY"),
+    ]
+
+
+def run_parallel_group() -> int:
+    print("\n--- guard-ticket-workflow (dois tickets ao mesmo tempo) ---")
+    failures = 0
+    for label, states, payload, expected in PARALLEL_CASES():
+        for state in states:
+            write_ticket(state)
+        got = call(TICKET_GUARD, payload)
+        ok = got == expected
+        failures += 0 if ok else 1
+        print(f"  {'ok   ' if ok else 'FALHA'} {label:52} esperado={expected} obtido={got}")
+        for state in states:
+            if os.path.exists(state_path(state["ticket"])):
+                os.remove(state_path(state["ticket"]))
+    return failures
+
+
 def run_group(title: str, hook: str, cases: list, with_lock: bool) -> int:
     if with_lock:
         os.makedirs(os.path.dirname(LOCK), exist_ok=True)
@@ -239,6 +286,7 @@ def main() -> int:
     failures = run_group("guard-protected-branch", BRANCH_GUARD, BRANCH_CASES, with_lock=False)
     failures += run_group("guard-test-surface (lock held)", SURFACE_GUARD, SURFACE_CASES, with_lock=True)
     failures += run_ticket_group()
+    failures += run_parallel_group()
 
     if os.path.exists(LOCK) and not had_lock:
         os.remove(LOCK)
@@ -247,7 +295,10 @@ def main() -> int:
     if failures:
         print(f"{failures} CASO(S) A FALHAR")
         return 1
-    print(f"TODOS OS {len(BRANCH_CASES) + len(SURFACE_CASES) + len(TICKET_CASES()) + 1} CASOS PASSAM")
+    total = (
+        len(BRANCH_CASES) + len(SURFACE_CASES) + len(TICKET_CASES()) + len(PARALLEL_CASES()) + 1
+    )
+    print(f"TODOS OS {total} CASOS PASSAM")
     return 0
 
 

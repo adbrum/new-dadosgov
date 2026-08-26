@@ -191,6 +191,7 @@ def cmd_start(args):
         "paused": False,
         "repos": [],
         "workdir": None,
+        "root": ROOT,
         "deploy_order": None,
         "branch": {},
         "plan_digest": None,
@@ -297,6 +298,16 @@ def cmd_plan_approved(args):
         )
         return 1
     repos = [r.strip() for r in args.repos.split(",") if r.strip()]
+    clashes = collisions(args.key, repos, state.get("workdir"))
+    if clashes:
+        print(
+            "Outro ticket esta a trabalhar a mesma arvore: "
+            + ", ".join(f"{t} em {r}/" for t, r in clashes)
+            + f". Da a {args.key} a sua propria arvore antes de aprovar o plano "
+            "(ticket-worktree.py create).",
+            file=sys.stderr,
+        )
+        return 1
     unknown = [r for r in repos if r not in SUITES]
     if unknown:
         print(f"Repos desconhecidos: {unknown} (esperado backend|frontend).", file=sys.stderr)
@@ -424,6 +435,14 @@ def is_shell_wrapper(line: str) -> bool:
 def cmd_verify(args):
     state = require(args.key)
     cfg = SUITES[args.repo]
+    workdir = repo_dir(state, args.repo)
+    if not os.path.isdir(workdir):
+        print(
+            f"A arvore deste ticket para {args.repo} nao existe: {workdir}. "
+            "Corre `ticket-worktree.py create` ou limpa o `workdir` do estado.",
+            file=sys.stderr,
+        )
+        return 2
 
     exclusive = cfg.get("exclusive")
     if exclusive:
@@ -441,7 +460,7 @@ def cmd_verify(args):
             )
             return 2
 
-    rc, head = sh(["git", "rev-parse", "HEAD"], cfg["dir"], 30)
+    rc, head = sh(["git", "rev-parse", "HEAD"], workdir, 30)
     head = head.strip()
     if rc != 0 or not re.fullmatch(r"[0-9a-f]{40}", head):
         print("Nao consegui resolver o HEAD — sem HEAD nao ha nada a que ligar o verde.", file=sys.stderr)
@@ -450,14 +469,14 @@ def cmd_verify(args):
     problems = []
     for lint_cmd in cfg["lint"]:
         print(f"$ {' '.join(lint_cmd)}")
-        code, out = sh(lint_cmd, cfg["dir"], 900)
+        code, out = sh(lint_cmd, workdir, 900)
         if code != 0:
             tail = "\n    ".join(out.strip().splitlines()[-10:])
             problems.append(f"$ {' '.join(lint_cmd)} -> {code}\n    {tail}")
 
     test_cmd = cfg["test"] + (args.scope or [])
     print(f"$ {' '.join(test_cmd)}")
-    code, out = sh(test_cmd, cfg["dir"])
+    code, out = sh(test_cmd, workdir)
     if code != 0:
         detail = {124: "timeout", 127: "runner nao encontrado"}.get(code, f"exit {code}")
         tail = "\n    ".join(out.strip().splitlines()[-15:])
@@ -635,6 +654,77 @@ def cmd_end(args):
     log(f"END {args.key} abandon={bool(args.abandon)}")
     print(f"Ticket {args.key} fechado (arquivado em ticket-{args.key}.json.done).")
     print("Os guards do ticket voltam a estar inertes.")
+    return 0
+
+
+def other_active(key: str) -> list:
+    """Every other ticket still in flight in this root."""
+    out = []
+    for f in sorted(glob.glob(os.path.join(STATE_DIR, "ticket-*.json"))):
+        try:
+            with open(f) as fh:
+                st = json.load(fh)
+        except Exception:
+            continue
+        if st.get("ticket") != key and not st.get("paused"):
+            out.append(st)
+    return out
+
+
+def collisions(key: str, repos: list, workdir) -> list:
+    """Tickets already working the same repo in the same tree.
+
+    Same repo in a *different* tree is exactly what the worktrees are for, so it is not a
+    collision -- what cannot be shared is one checkout, because it can only be on one
+    branch, and one Mongo test database.
+    """
+    mine = {repo: os.path.realpath(os.path.join(workdir, repo)) if workdir else SUITES[repo]["dir"]
+            for repo in repos}
+    clashes = []
+    for st in other_active(key):
+        for repo in st.get("repos") or []:
+            if repo in mine and os.path.realpath(repo_dir(st, repo)) == os.path.realpath(mine[repo]):
+                clashes.append((st["ticket"], repo))
+    return clashes
+
+
+def cmd_claim(args):
+    """Say which repos this ticket touches, as soon as Phase 3 knows.
+
+    Two things follow from it. The guard stops locking the submodule this ticket does not
+    touch, so another session can work that one at the same time -- before this, one ticket
+    waiting for its plan froze both repos for everybody. And a second ticket aiming at the
+    same checkout is refused here, with the command that gives it its own.
+    """
+    state = require(args.key)
+    repos = [r.strip() for r in args.repos.split(",") if r.strip()]
+    unknown = [r for r in repos if r not in SUITES]
+    if unknown:
+        print(f"Repos desconhecidos: {', '.join(unknown)} (esperado backend|frontend).", file=sys.stderr)
+        return 2
+    workdir = os.path.abspath(args.workdir) if args.workdir else state.get("workdir")
+    if workdir and not os.path.isdir(workdir):
+        print(f"A arvore {workdir} nao existe.", file=sys.stderr)
+        return 2
+    clashes = collisions(args.key, repos, workdir)
+    if clashes:
+        print(
+            "Ja ha outro ticket a trabalhar a mesma arvore:\n  "
+            + "\n  ".join(f"{t} em {r}/" for t, r in clashes)
+            + "\n\nUm checkout so pode estar numa branch, e as duas suites de backend partilham "
+            "a mesma BD de teste. Da a este ticket a sua propria arvore:\n  "
+            f"python3 .claude/hooks/ticket-worktree.py create {args.key} "
+            f"--repos {','.join(repos)}",
+            file=sys.stderr,
+        )
+        return 1
+    state["repos"] = repos
+    if workdir:
+        state["workdir"] = workdir
+    save(state)
+    log(f"CLAIM {args.key} repos={','.join(repos)} workdir={workdir or '-'}")
+    print(f"{args.key} reclama {', '.join(repos)}" + (f" em {workdir}" if workdir else " no checkout principal") + ".")
+    print("O outro submodulo deixa de estar bloqueado por este ticket.")
     return 0
 
 
@@ -841,6 +931,12 @@ def main() -> int:
     p = sub.add_parser("status", help="print one ticket, or a summary of all active ones")
     p.add_argument("key", nargs="?")
     p.set_defaults(func=cmd_status)
+
+    p = sub.add_parser("claim", help="declare which repos (and which tree) this ticket touches")
+    p.add_argument("key")
+    p.add_argument("--repos", required=True, help="backend | frontend | backend,frontend")
+    p.add_argument("--workdir", help="the per-ticket worktree, when it has one")
+    p.set_defaults(func=cmd_claim)
 
     p = sub.add_parser("park", help="stop this ticket with the decision it awaits written down")
     p.add_argument("key")

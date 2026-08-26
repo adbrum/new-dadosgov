@@ -28,7 +28,6 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 
-from harness_patterns import CONVENTIONAL  # noqa: F401  (imported for parity of tooling)
 from harness_root import harness_root
 
 ROOT = harness_root()

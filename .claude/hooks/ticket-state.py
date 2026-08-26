@@ -30,7 +30,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 
-from harness_root import harness_root  # local: sits beside this hook
+from harness_root import FILE_ROOT, candidates, harness_root  # local: sits beside this hook
 
 ROOT = harness_root()
 STATE_DIR = os.path.join(ROOT, ".claude", "state")
@@ -591,6 +591,51 @@ def cmd_end(args):
     return 0
 
 
+def cmd_doctor(args):
+    """Which tree the hooks and this CLI each think they are guarding.
+
+    The failure this catches is the silent one: when the hook processes resolve one
+    root and the CLI another, the guards read an empty state directory and behave
+    exactly as they would with no ticket in flight. Nothing errors; the gates simply
+    stop existing. So print every candidate and say plainly when they disagree.
+    """
+    chosen = harness_root()
+    print("Raiz do harness")
+    for var, value in candidates():
+        if value is None:
+            mark, note = "  ", "nao definido"
+        elif not os.path.isdir(os.path.join(value, ".claude", "hooks")):
+            mark, note = "!!", "definido mas NAO tem .claude/hooks — ignorado"
+        else:
+            mark, note = ("->" if os.path.abspath(value) == chosen else "  "), "ok"
+        print(f"  {mark} {var:22} {value or '-'}   ({note})")
+    print(f"\n  escolhida:      {chosen}")
+    print(f"  estado:         {STATE_DIR}  ({'existe' if os.path.isdir(STATE_DIR) else 'ainda nao existe'})")
+    for repo, cfg in SUITES.items():
+        print(f"  {repo + ':':15} {cfg['dir']}  ({'existe' if os.path.isdir(cfg['dir']) else 'AUSENTE'})")
+
+    problems = []
+    for var, value in candidates()[:-1]:
+        if value and not os.path.isdir(os.path.join(value, ".claude", "hooks")):
+            problems.append(f"{var} aponta para {value}, que nao e um checkout do harness")
+    if chosen != FILE_ROOT:
+        problems.append(
+            f"a raiz escolhida ({chosen}) nao e a do ficheiro ({FILE_ROOT}) — os hooks e a CLI "
+            "so concordam enquanto ambos virem a mesma variavel de ambiente"
+        )
+    active = sorted(glob.glob(os.path.join(STATE_DIR, "ticket-*.json")))
+    print(f"\n  tickets ativos: {len(active)}")
+    for f in active:
+        print(f"    {os.path.basename(f)}")
+    if problems:
+        print("\nA CORRIGIR:")
+        for line in problems:
+            print(f"  - {line}")
+        return 1
+    print("\nTudo a apontar para o mesmo sitio.")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -682,6 +727,9 @@ def main() -> int:
     p = sub.add_parser("status", help="print one ticket, or a summary of all active ones")
     p.add_argument("key", nargs="?")
     p.set_defaults(func=cmd_status)
+
+    p = sub.add_parser("doctor", help="check that hooks and CLI agree on the harness root")
+    p.set_defaults(func=cmd_doctor)
 
     p = sub.add_parser("end", help="archive the ticket state")
     p.add_argument("key")

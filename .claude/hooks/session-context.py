@@ -12,7 +12,7 @@ import os
 import subprocess
 import sys
 
-from harness_root import harness_root  # local: sits beside this hook
+from harness_root import FILE_ROOT, candidates, harness_root  # local: sits beside this hook
 
 ROOT = harness_root()
 REPOS = {"backend": "amagovpt/udata-pt", "frontend": "amagovpt/dadosgov-fe"}
@@ -28,8 +28,31 @@ def sh(cmd: list[str], cwd: str, timeout: int = 5) -> str:
         return ""
 
 
+def root_warnings() -> list[str]:
+    """Say it out loud when the harness root is not where the scripts live.
+
+    A guard reading the wrong state directory does not fail — it finds no ticket and
+    behaves like there is nothing to enforce. That is invisible from inside the
+    session, so it gets announced here.
+    """
+    warnings = []
+    for var, value in candidates()[:-1]:
+        if value and not os.path.isdir(os.path.join(value, ".claude", "hooks")):
+            warnings.append(
+                f"- ATENCAO: {var}={value} nao e um checkout do harness e esta a ser ignorado."
+                " Corre `python3 .claude/hooks/ticket-state.py doctor`."
+            )
+    if harness_root() != FILE_ROOT:
+        warnings.append(
+            f"- ATENCAO: o estado do harness esta em {harness_root()}/.claude/state, nao em"
+            f" {FILE_ROOT}. Confirma com `ticket-state.py doctor` antes de confiar nos gates."
+        )
+    return warnings
+
+
 def main() -> None:
     lines = ["Estado git do monorepo dadosgov (hook session-context):"]
+    lines.extend(root_warnings())
     for sub, repo in REPOS.items():
         path = os.path.join(ROOT, sub)
         if not os.path.isdir(path):

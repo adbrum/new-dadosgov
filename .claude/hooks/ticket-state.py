@@ -349,6 +349,24 @@ def cmd_point(args):
     return 0
 
 
+SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "fish"}
+
+
+def is_shell_wrapper(line: str) -> bool:
+    """True for a `pgrep -af` hit that is a shell running a -c script, not the run itself.
+
+    `pgrep -f` matches anywhere in the command line, so anything whose script text merely
+    mentions the pattern looks like a running suite: this guard's own wait loops, an editor
+    task, a grep. A real run always owns a process whose executable is the runner
+    (`uv run pytest`, `.venv/bin/python .venv/bin/pytest`), so dropping shell wrappers can
+    never hide one -- it only stops the guard from tripping over descriptions of itself.
+    """
+    parts = line.split()
+    if len(parts) < 3:
+        return False
+    return os.path.basename(parts[1]) in SHELLS and "-c" in parts[2:4]
+
+
 def cmd_verify(args):
     state = require(args.key)
     cfg = SUITES[args.repo]
@@ -356,7 +374,9 @@ def cmd_verify(args):
     exclusive = cfg.get("exclusive")
     if exclusive:
         rc, out = sh(["pgrep", "-af", exclusive], ROOT, 15)
-        running = [ln for ln in out.splitlines() if ln.strip()]
+        running = [
+            ln for ln in out.splitlines() if ln.strip() and not is_shell_wrapper(ln)
+        ]
         if rc == 0 and running:
             print(
                 f"Ja ha uma corrida de {exclusive} em curso:\n  "

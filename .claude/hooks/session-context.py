@@ -89,13 +89,21 @@ def main() -> None:
         done = sum(1 for x in st.get("points", []) if x.get("status") == "done")
         resolved = sum(1 for c in st.get("criteria", []) if c.get("status") != "pending")
         branches = ", ".join(f"{r}:{b}" for r, b in (st.get("branch") or {}).items()) or "-"
+        parked = st.get("parked")
         lines.append(
             f"- TICKET EM CURSO {st.get('ticket')}: fase={st.get('phase')}"
-            f"{' (PAUSADO)' if st.get('paused') else ''}, pontos={done}/{len(st.get('points', []))}, "
+            f"{' (PAUSADO)' if st.get('paused') else ''}"
+            f"{' (ESTACIONADO: ' + parked['reason_code'] + ')' if parked else ''}"
+            f", pontos={done}/{len(st.get('points', []))}, "
             f"criterios={resolved}/{len(st.get('criteria', []))}, branch={branches}"
+            f"{', arvore=' + st['workdir'] if st.get('workdir') else ''}"
             f" -> retoma com /ticket {st.get('ticket')}; o ficheiro de estado prevalece sobre a"
             " memoria da conversa, e o git prevalece sobre o ficheiro."
         )
+        if parked:
+            # The whole point of parking is that the answer is owed by a human, so the
+            # question travels into the session that might be able to answer it.
+            lines.append(f"  DECISAO EM DIVIDA: {parked['question']}")
 
     lines.append(
         "Fluxo: branch a partir de develop -> PR para develop -> tst -> ppr -> main, "

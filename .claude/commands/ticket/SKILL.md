@@ -23,6 +23,24 @@ gh pr list --repo amagovpt/dadosgov-fe --state all --search "ledg-<n>" --limit 5
   Do not re-read the ticket, do not re-plan, and do not re-implement a point that already has
   a commit. **Git is the authority on what happened**; the state file supplies the approved
   plan and the criteria. If they disagree, say so and ask.
+- **`ESTACIONADO:<code>` in the status** → the previous session stopped on a decision only the
+  user can make. Show `parked.question` and `parked.diagnosis` **first** and get the answer;
+  then `ticket-state.py unpark LEDG-<n>` and continue at `parked.phase`. Answering the question
+  is the whole task — do not start implementing around it.
+
+## Working several tickets at once
+
+One ticket per session, and each session needs its own checkout of the repo it touches:
+
+```bash
+python3 .claude/hooks/ticket-worktree.py list                 # what is already claimed
+python3 .claude/hooks/ticket-worktree.py create LEDG-<n> --repos backend
+```
+
+`claim` refuses a second active ticket in the same repo without a worktree, and says which
+command creates one. The session still runs from the monorepo root — the worktree is a path
+recorded in the ticket's state (`workdir`), not a second project. `ticket-state.py doctor`
+prints where everything resolved to if anything looks off.
 
 Then follow `jira-ticket-workflow` to Phase 10.
 

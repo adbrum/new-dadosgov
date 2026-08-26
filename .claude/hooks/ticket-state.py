@@ -28,6 +28,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 
 from harness_root import FILE_ROOT, candidates, harness_root  # local: sits beside this hook
@@ -36,6 +37,21 @@ ROOT = harness_root()
 STATE_DIR = os.path.join(ROOT, ".claude", "state")
 LOG = os.path.join(STATE_DIR, "ticket.log")
 KEY_RE = re.compile(r"^LEDG-\d+$")
+
+# Why a ticket stopped, from a closed set: five parked tickets are only triageable if the
+# reason is a value you can group by, not a paragraph. Add a code here before using it.
+REASON_CODES = (
+    "no-criteria",  # the ticket never said what "done" means
+    "ambiguous-repo",  # the evidence does not say which submodule this lands in
+    "two-repo-order",  # both repos, and the deploy order is not derivable
+    "plan-audit-reprovado",  # the plan failed its audit twice
+    "fixloop-reprovado",  # /fix-loop ended REPROVADO, so the diagnosis is the answer
+    "review-finding",  # a review finding that cannot be fixed inside this ticket
+    "gh-unavailable",  # no authenticated gh, so the PR cannot be opened here
+    "attribution-deadlock",  # a commit in range carries AI attribution: the push gate is shut
+    "blocked-prerequisite",  # the blocked point is what the remaining points depend on
+    "other",  # anything else -- the question and the diagnosis carry the weight
+)
 
 SUITES = {
     "backend": {
@@ -85,9 +101,26 @@ def load(key: str):
 
 
 def save(state: dict) -> None:
+    """Write the whole file atomically -- a torn read disables that ticket's gates.
+
+    The reader (`guard-ticket-workflow.py`) treats unparseable state as "skip this
+    ticket", which is the right call for a guard that must not crash a tool call but
+    means a half-written file silently unlocks the repos. With several sessions
+    writing their own tickets this stopped being hypothetical, so: temp file in the
+    same directory, then os.replace, which is atomic on the same filesystem.
+    """
     os.makedirs(STATE_DIR, exist_ok=True)
-    with open(path_for(state["ticket"]), "w") as fh:
-        json.dump(state, fh, indent=2, ensure_ascii=False)
+    final = path_for(state["ticket"])
+    fd, tmp = tempfile.mkstemp(dir=STATE_DIR, prefix=".ticket-", suffix=".json")
+    try:
+        with os.fdopen(fd, "w") as fh:
+            json.dump(state, fh, indent=2, ensure_ascii=False)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, final)
+    except Exception:
+        os.unlink(tmp)
+        raise
 
 
 def require(key: str) -> dict:
@@ -113,13 +146,26 @@ def sh(cmd, cwd, timeout=1800):
         return 127, "<comando nao encontrado>"
 
 
+def repo_dir(state: dict, repo: str) -> str:
+    """Where this ticket's copy of `repo` lives.
+
+    A ticket worked in a per-ticket git worktree records that path once, in `workdir`;
+    everything that touches the repo -- the suites, the lint hook, the guards -- reads
+    it from here instead of assuming the primary checkout. No worktree, no change.
+    """
+    workdir = (state or {}).get("workdir")
+    return os.path.join(workdir, repo) if workdir else SUITES[repo]["dir"]
+
+
 def summary_line(state: dict) -> str:
     done = sum(1 for p in state["points"] if p["status"] == "done")
     resolved = sum(1 for c in state["criteria"] if c["status"] != "pending")
     branches = ", ".join(f"{r}:{b}" for r, b in state.get("branch", {}).items()) or "-"
+    parked = state.get("parked")
     return (
         f"{state['ticket']} fase={state['phase']}"
-        f"{' PAUSADO' if state.get('paused') else ''} "
+        f"{' PAUSADO' if state.get('paused') else ''}"
+        f"{' ESTACIONADO:' + parked['reason_code'] if parked else ''} "
         f"pontos={done}/{len(state['points'])} "
         f"criterios={resolved}/{len(state['criteria'])} branch={branches}"
     )
@@ -144,6 +190,7 @@ def cmd_start(args):
         "phase": "started",
         "paused": False,
         "repos": [],
+        "workdir": None,
         "deploy_order": None,
         "branch": {},
         "plan_digest": None,
@@ -591,6 +638,73 @@ def cmd_end(args):
     return 0
 
 
+def cmd_park(args):
+    """Stop this ticket with the decision it is waiting on written down.
+
+    Deliberately not a phase, and deliberately not `pause`. `pause` makes the guards
+    inert, which is the opposite of what is wanted here: a ticket that stopped before
+    its plan was approved must keep the repos locked while it waits. So the phase is
+    left exactly where it was and this is recorded alongside it -- the gates keep
+    behaving as they did, and every reader learns to say "parked".
+
+    What gets recorded is what a resume needs and what a human needs to answer the
+    question: the reason as a groupable code, the question itself, the diagnosis, and
+    the state of the work at the moment it stopped.
+    """
+    state = require(args.key)
+    diagnosis = "" if sys.stdin.isatty() else sys.stdin.read().strip()
+    if len(diagnosis) < 40:
+        print(
+            "Passa o diagnostico no stdin (heredoc): o que foi tentado, o que se sabe, e "
+            "porque e que a decisao nao e tua. Um park sem diagnostico e uma sessao "
+            "abandonada com outro nome.",
+            file=sys.stderr,
+        )
+        return 2
+    git_status = {}
+    for repo in state.get("repos") or list(SUITES):
+        workdir = repo_dir(state, repo)
+        if os.path.isdir(workdir):
+            _, out = sh(["git", "status", "--porcelain"], workdir, 30)
+            git_status[repo] = out.strip()
+    state["parked"] = {
+        "reason_code": args.reason_code,
+        "question": args.question,
+        "diagnosis": diagnosis,
+        "phase": state["phase"],
+        "branch": dict(state.get("branch") or {}),
+        "workdir": state.get("workdir"),
+        "plan_digest": state.get("plan_digest"),
+        "points_done": [
+            {"n": pt["n"], "commit": pt.get("commit")}
+            for pt in state["points"]
+            if pt["status"] == "done"
+        ],
+        "git_status": git_status,
+        "at": datetime.now(timezone.utc).isoformat(),
+    }
+    save(state)
+    log(f"PARK {args.key} code={args.reason_code} phase={state['phase']}")
+    print(f"{args.key} ESTACIONADO em fase={state['phase']} ({args.reason_code}).")
+    print(f"Decisao em divida: {args.question}")
+    print("Os gates continuam como estavam — um park nao desbloqueia nada.")
+    print(f"Retoma com /ticket {args.key} depois da resposta, ou `unpark {args.key}`.")
+    return 0
+
+
+def cmd_unpark(args):
+    state = require(args.key)
+    parked = state.pop("parked", None)
+    if not parked:
+        print(f"{args.key} nao esta estacionado.", file=sys.stderr)
+        return 1
+    save(state)
+    log(f"UNPARK {args.key} code={parked['reason_code']}")
+    print(f"{args.key} retomado (estava estacionado por {parked['reason_code']}).")
+    print(f"A pergunta era: {parked['question']}")
+    return 0
+
+
 def cmd_doctor(args):
     """Which tree the hooks and this CLI each think they are guarding.
 
@@ -727,6 +841,16 @@ def main() -> int:
     p = sub.add_parser("status", help="print one ticket, or a summary of all active ones")
     p.add_argument("key", nargs="?")
     p.set_defaults(func=cmd_status)
+
+    p = sub.add_parser("park", help="stop this ticket with the decision it awaits written down")
+    p.add_argument("key")
+    p.add_argument("--reason-code", required=True, choices=REASON_CODES)
+    p.add_argument("--question", required=True, help="the decision owed, with its options")
+    p.set_defaults(func=cmd_park)
+
+    p = sub.add_parser("unpark", help="clear the park after the decision is made")
+    p.add_argument("key")
+    p.set_defaults(func=cmd_unpark)
 
     p = sub.add_parser("doctor", help="check that hooks and CLI agree on the harness root")
     p.set_defaults(func=cmd_doctor)

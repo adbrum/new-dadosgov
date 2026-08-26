@@ -34,6 +34,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 
 from harness_root import harness_root  # local: sits beside this hook
@@ -107,8 +108,19 @@ def active_states() -> list:
 
 
 def save(state: dict) -> None:
-    with open(os.path.join(STATE_DIR, f"ticket-{state['ticket']}.json"), "w") as fh:
-        json.dump(state, fh, indent=2, ensure_ascii=False)
+    """Atomic for the same reason as in ticket-state.py: this guard is also a writer
+    (it marks a push override consumed), and a torn file reads as "no active ticket"."""
+    final = os.path.join(STATE_DIR, f"ticket-{state['ticket']}.json")
+    fd, tmp = tempfile.mkstemp(dir=STATE_DIR, prefix=".ticket-", suffix=".json")
+    try:
+        with os.fdopen(fd, "w") as fh:
+            json.dump(state, fh, indent=2, ensure_ascii=False)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, final)
+    except Exception:
+        os.unlink(tmp)
+        raise
 
 
 def resolve(path: str, base: str):

@@ -145,6 +145,11 @@ def TICKET_CASES() -> list:
          edit(os.path.join(BE, "udata/core/dataset/api.py")), "PASS"),
         ("#T3  ticket pausado desliga o gate", ticket_state(phase="planned", paused=True),
          edit(os.path.join(BE, "udata/core/dataset/api.py")), "PASS"),
+        # A park is not a pause: it stops one session, it does not unlock the repos.
+        ("#T19 ticket estacionado mantem o lock",
+         ticket_state(phase="planned", parked={"reason_code": "no-criteria",
+                                               "question": "o que e 'feito'?"}),
+         edit(os.path.join(BE, "udata/core/dataset/api.py")), "DENY"),
         # the harness itself must never be frozen by a ticket
         ("#T4  Edit em .claude/ nunca e bloqueado", ticket_state(phase="planned"),
          edit(os.path.join(REAL_ROOT, ".claude/hooks/x.py")), "PASS"),

@@ -33,7 +33,8 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 
-from harness_root import harness_root  # local: sits beside this hook
+from harness_patterns import FROZEN_PATH as FROZEN  # local: sits beside this hook
+from harness_root import harness_root
 
 ROOT = harness_root()
 STATE_DIR = os.path.join(ROOT, ".claude", "state")
@@ -56,15 +57,6 @@ REPOS = {
 
 # Files whose content decides what is tested or asserted. Freezing the test files alone is
 # not enough: narrowing the runner's include/addopts removes failures just as effectively.
-FROZEN = re.compile(
-    r"("
-    r"/tests?/|/__tests__/|(^|/)test_[^/]*\.py|(^|/)conftest\.py"
-    r"|\.spec\.(ts|tsx|js)|\.test\.(ts|tsx|js|py)"
-    r"|(^|/)vitest\.config\.[cm]?ts|(^|/)playwright\.config\.[cm]?ts|(^|/)jest\.config"
-    r"|(^|/)pyproject\.toml|(^|/)pytest\.ini|(^|/)setup\.cfg|(^|/)tox\.ini|(^|/)coverage\.rc"
-    r"|(^|/)factories\.py"
-    r")"
-)
 
 # Only applied to the frozen surface above, so ordinary source using MongoEngine's
 # .skip(offset) for pagination is not mistaken for a disabled test.

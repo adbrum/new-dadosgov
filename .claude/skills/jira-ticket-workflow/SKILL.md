@@ -113,6 +113,16 @@ branches, two PRs, and a **deploy order** stated in both PR bodies: backend firs
 frontend consumes a new field or endpoint, frontend first when the backend starts requiring
 something the UI must send. Only the repo(s) actually changed enter the promotion flow.
 
+Record the conclusion immediately — it is what stops this ticket from locking the repo it
+does not touch, and therefore what lets another session work that repo at the same time:
+
+```bash
+python3 .claude/hooks/ticket-state.py claim LEDG-<n> --repos backend
+```
+
+If it refuses, another ticket already holds that checkout: give this one its own tree with
+`ticket-worktree.py create LEDG-<n> --repos <repos>` and pass `--workdir`.
+
 ## Phase 4 — Plan (the approval gate)
 
 The plan is written **before the branch exists**: rejected on paper it costs a paragraph,
@@ -163,6 +173,34 @@ Rules for the plan:
 - **State what you are not doing.** Scope the user did not ask for is scope you do not add.
 - **Fold every open question into this one message.** It is the last round-trip before code.
 - Keep it proportional: a one-line CSS fix gets a three-line plan, not this template.
+
+### Audit it before showing it
+
+Two halves, and neither is the user's job:
+
+```bash
+python3 .claude/hooks/ticket-state.py plan-audit LEDG-<n> --repos <repos> <<'PLAN'
+<o plano tal como veio do subagente>
+PLAN
+```
+
+That settles the mechanical half deterministically — every path and symbol exists, every
+point has a **Prova** and a **Commit** line the Phase 6 gate will accept, nothing sits in the
+test surface, no path outside the ticket's repos. It exits 1 with the list; fix the plan and
+audit again. `plan-approved` refuses without a `pass` **on that exact plan text**, so a plan
+edited after its audit has to be re-audited.
+
+For the half a script cannot decide — right approach, precedent replicated, scope, whether
+the proofs prove anything — delegate to the read-only auditor, in the same message:
+
+```
+Agent(subagent_type: "plan-auditor", description: "Audit plan LEDG-<n>",
+      prompt: "<the plan, the ticket's criteria, the explorer's precedents, the repo decision>")
+```
+
+Show the user the plan **and** the auditor's verdict together. A REPROVADO you agree with is
+fixed before they read it; one you disagree with is presented with your reason — never
+silently dropped.
 
 In plan mode this ends with `ExitPlanMode`; otherwise post it and wait for an explicit "ok".
 **Only when the user approves**, record it — the plan text goes on stdin so its digest can

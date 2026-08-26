@@ -37,7 +37,8 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 
-from harness_root import harness_root  # local: sits beside this hook
+from harness_patterns import ATTRIBUTION, CONVENTIONAL  # local: sits beside this hook
+from harness_root import harness_root
 
 ROOT = harness_root()
 STATE_DIR = os.path.join(ROOT, ".claude", "state")
@@ -46,12 +47,8 @@ SUBMODULES = ("backend", "frontend")
 ENV_BRANCHES = ("develop", "tst", "ppr", "main")
 
 BRANCH_RE = re.compile(r"^(feature|bugfix|hotfix|chore|release)/ledg-(\d+)-[a-z0-9][a-z0-9-]*$")
-CONVENTIONAL = re.compile(
-    r"^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([^)]+\))?!?: \S"
-)
 # Deliberately narrow: a bare "claude" or "anthropic" would reject a legitimate commit that
 # mentions .claude/ or the claude-mem plugin. What is banned is the attribution itself.
-ATTRIBUTION = re.compile(r"(?i)co-authored-by\s*:|generated with [^\n]{0,30}claude|\U0001F916")
 
 NEW_BRANCH = re.compile(r"\bgit\b[^|;&]*\b(?:checkout\s+-b|switch\s+(?:-c|--create))\s+(\S+)")
 GIT_COMMIT = re.compile(r"\bgit\b[^|;&]*\bcommit\b")

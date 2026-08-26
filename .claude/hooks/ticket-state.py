@@ -31,7 +31,8 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 
-from harness_root import FILE_ROOT, candidates, harness_root  # local: sits beside this hook
+from harness_patterns import CONVENTIONAL, FROZEN_PATH  # local: sits beside this hook
+from harness_root import FILE_ROOT, candidates, harness_root
 
 ROOT = harness_root()
 STATE_DIR = os.path.join(ROOT, ".claude", "state")
@@ -289,6 +290,22 @@ def cmd_plan_approved(args):
             file=sys.stderr,
         )
         return 1
+    audit = state.get("plan_audit") or {}
+    if audit.get("verdict") != "pass" or audit.get("digest") != digest_of(plan_text):
+        why = (
+            "nunca foi auditado" if not audit
+            else "reprovou a auditoria" if audit.get("verdict") != "pass"
+            else "mudou desde a auditoria (o digest nao coincide)"
+        )
+        print(
+            f"O plano {why}. Corre primeiro:\n"
+            f"  python3 .claude/hooks/ticket-state.py plan-audit {args.key} "
+            f"--repos {args.repos} <<'PLAN' … PLAN\n"
+            "A auditoria e deterministica: caminhos e simbolos que existem, cada ponto com "
+            "prova e um commit que o gate da Fase 6 aceita, nada na superficie de teste.",
+            file=sys.stderr,
+        )
+        return 1
     if not state["plan_delegated_to_fable"] and not args.planned_on:
         print(
             "O plano nao passou por um subagente Fable (flag nao registada). Se o utilizador "
@@ -315,7 +332,7 @@ def cmd_plan_approved(args):
     state["phase"] = "approved"
     state["repos"] = repos
     state["deploy_order"] = args.deploy_order
-    state["plan_digest"] = "sha256:" + hashlib.sha256(plan_text.encode()).hexdigest()[:16]
+    state["plan_digest"] = digest_of(plan_text)
     state["points"] = [
         {
             "n": i + 1,
@@ -688,6 +705,135 @@ def collisions(key: str, repos: list, workdir) -> list:
     return clashes
 
 
+BACKTICKED = re.compile(r"`([^`\n]+)`")
+POINT_HEADING = re.compile(r"^#{2,4}\s*Ponto\s+(\d+)", re.MULTILINE)
+FICHEIROS = re.compile(r"^\s*[-*]\s*\*\*Ficheiros?:\*\*(.*)$", re.MULTILINE)
+FIELD = "**{}:**"
+PATHISH = re.compile(r"[/.]")
+
+
+def digest_of(plan_text: str) -> str:
+    return "sha256:" + hashlib.sha256(plan_text.encode()).hexdigest()[:16]
+
+
+def plan_paths(plan_text: str) -> list:
+    """Every backticked token in a `**Ficheiros:**` line that looks like a path, with the
+    symbols named in parentheses after it."""
+    found = []
+    for line in FICHEIROS.findall(plan_text):
+        current = None
+        for token in BACKTICKED.findall(line):
+            token = token.strip()
+            if PATHISH.search(token) and not token.endswith(("()", ")")):
+                current = token
+                found.append((token, []))
+            elif found and current:
+                found[-1][1].append(token.strip("()"))
+    return found
+
+
+def audit_plan(plan_text: str, repos: list, state: dict) -> tuple:
+    """The half of a plan review a script can settle. Returns (problems, notes).
+
+    Not a replacement for reading the plan -- a judgement call about whether the approach
+    is right stays a judgement call. But "names a file that does not exist", "a point with
+    no proof", "a commit line that the commit gate will reject at Phase 6" and "edits the
+    test surface" are all decidable here, and catching them before a human reads the plan
+    is the difference between one round-trip and three.
+    """
+    problems, notes = [], []
+
+    points = POINT_HEADING.split(plan_text)
+    if len(points) < 3:
+        problems.append("nenhum bloco '### Ponto N' — o plano nao esta na forma que a Fase 6 segue")
+    for number, body in zip(points[1::2], points[2::2]):
+        for field in ("Prova", "Commit"):
+            marker = FIELD.format(field)
+            if marker not in body:
+                problems.append(f"ponto {number}: falta {marker}")
+                continue
+            value = body.split(marker, 1)[1].splitlines()[0].strip(" `")
+            if not value:
+                problems.append(f"ponto {number}: {marker} esta vazio")
+            elif field == "Commit" and not CONVENTIONAL.match(value):
+                problems.append(
+                    f"ponto {number}: a linha de Commit nao passa o gate do Fase 6: {value!r}"
+                )
+
+    for path, symbols in plan_paths(plan_text):
+        repo = path.split("/", 1)[0] if "/" in path else None
+        if repo in SUITES:
+            rel = path.split("/", 1)[1]
+        else:
+            repo, rel = (repos[0] if len(repos) == 1 else None), path
+        if repo is None:
+            notes.append(f"{path}: nao consegui dizer a que repo pertence")
+            continue
+        if repo not in repos:
+            problems.append(f"{path} esta em {repo}/, que nao e um dos repos deste ticket ({', '.join(repos)})")
+            continue
+        if FROZEN_PATH.search(rel):
+            problems.append(
+                f"{path} e superficie de teste — um plano nao altera testes nem a configuracao "
+                "do runner para satisfazer um ponto"
+            )
+            continue
+        tree = repo_dir(state, repo)
+        full = os.path.join(tree, rel)
+        if os.path.exists(full):
+            for symbol in symbols:
+                bare = symbol.strip().rstrip("()")
+                if not bare:
+                    continue
+                rc, _ = sh(["git", "grep", "-q", "--", bare, "--", rel], tree, 30)
+                if rc != 0 and bare not in open(full, errors="ignore").read():
+                    problems.append(f"{path}: nao encontrei `{symbol}` no ficheiro")
+        elif os.path.isdir(os.path.dirname(full)):
+            notes.append(f"{path}: ainda nao existe (ficheiro novo)")
+        else:
+            problems.append(f"{path}: nem o ficheiro nem a pasta {os.path.dirname(rel)}/ existem")
+
+    return problems, notes
+
+
+def cmd_plan_audit(args):
+    state = require(args.key)
+    plan_text = "" if sys.stdin.isatty() else sys.stdin.read()
+    if len(plan_text.strip()) < 40:
+        print("Passa o texto do plano no stdin (heredoc).", file=sys.stderr)
+        return 2
+    repos = [r.strip() for r in args.repos.split(",") if r.strip()] or (state.get("repos") or [])
+    unknown = [r for r in repos if r not in SUITES]
+    if unknown or not repos:
+        print(f"--repos invalido: {args.repos!r} (esperado backend|frontend).", file=sys.stderr)
+        return 2
+
+    problems, notes = audit_plan(plan_text, repos, state)
+    verdict = "pass" if not problems else "fail"
+    state["plan_audit"] = {
+        "digest": digest_of(plan_text),
+        "verdict": verdict,
+        "problems": problems,
+        "notes": notes,
+        "repos": repos,
+        "at": datetime.now(timezone.utc).isoformat(),
+    }
+    save(state)
+    log(f"PLAN-AUDIT {args.key} verdict={verdict} problems={len(problems)}")
+
+    print(f"Auditoria do plano de {args.key}: {'APROVADO' if verdict == 'pass' else 'REPROVADO'}")
+    for note in notes:
+        print(f"  nota .... {note}")
+    for problem in problems:
+        print(f"  PROBLEMA  {problem}")
+    if verdict == "pass":
+        print("\nA parte verificavel esta consistente. O julgamento — abordagem certa,")
+        print("precedente replicado, ambito — continua a ser lido por quem aprova.")
+        return 0
+    print("\nCorrige o plano e volta a auditar. Sem `pass` neste digest, plan-approved recusa.")
+    return 1
+
+
 def cmd_claim(args):
     """Say which repos this ticket touches, as soon as Phase 3 knows.
 
@@ -931,6 +1077,11 @@ def main() -> int:
     p = sub.add_parser("status", help="print one ticket, or a summary of all active ones")
     p.add_argument("key", nargs="?")
     p.set_defaults(func=cmd_status)
+
+    p = sub.add_parser("plan-audit", help="check the verifiable half of a plan, deterministically")
+    p.add_argument("key")
+    p.add_argument("--repos", default="", help="backend | frontend | backend,frontend")
+    p.set_defaults(func=cmd_plan_audit)
 
     p = sub.add_parser("claim", help="declare which repos (and which tree) this ticket touches")
     p.add_argument("key")

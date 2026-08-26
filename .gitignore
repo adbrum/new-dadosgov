@@ -81,3 +81,6 @@ docs/ARCHITECTURE.pdf
 fs/
 # fix-loop runtime state (never committed)
 .claude/state/
+
+# per-ticket git worktrees (never committed)
+.claude/worktrees/

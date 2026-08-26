@@ -386,7 +386,7 @@ def cmd_verify(args):
             print(
                 f"Ja ha uma corrida de {exclusive} em curso:\n  "
                 + "\n  ".join(running[:5])
-                + "\n\nDuas corridas em backend/ partilham as BD Mongo de teste na porta 27018 e "
+                + "\n\nDuas corridas em backend/ partilham as BD Mongo de teste na porta 27017 e "
                 "fabricam regressoes uma a outra. Espera que termine em vez de arrancar outra.",
                 file=sys.stderr,
             )

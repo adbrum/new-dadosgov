@@ -42,7 +42,7 @@ cd backend && uv run pytest                                # full suite
 cd backend && uv run ruff check --fix . && uv run ruff format .
 ```
 
-Tests are **pytest + MongoDB on port 27018** (`docker-compose.test.yml`). udata is Flask, not
+Tests are **pytest + MongoDB on port 27017** (`udata/tests/plugin.py`; `docker-compose.test.yml` maps 27019 for the disposable stack). udata is Flask, not
 Django — there is no `django_db` marker. Migrations: `udata db upgrade`.
 
 Note: a `PostToolUse` hook already runs ruff on each file you write, and a `PreToolUse` hook

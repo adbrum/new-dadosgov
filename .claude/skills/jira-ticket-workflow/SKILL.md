@@ -244,7 +244,7 @@ this phase decides is **when** each level runs:
   CHANGELOG entries, draft the PR body and launch the Phase 7.5 review. The push depends on
   its exit code, not the other way round.
 - **Never two pytest runs at once in `backend/`** — they share the Mongo test databases on
-  port 27018 and fabricate regressions for each other. `ticket-state.py verify` refuses to
+  port 27017 and fabricate regressions for each other. `ticket-state.py verify` refuses to
   start a second one.
 
 The run that counts is the one the gate reads, and it must be green on the **final** HEAD —

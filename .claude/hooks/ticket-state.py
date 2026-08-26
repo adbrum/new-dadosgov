@@ -42,9 +42,14 @@ SUITES = {
             ["uv", "run", "ruff", "check", "."],
             ["uv", "run", "ruff", "format", "--check", "."],
         ],
-        "test": ["uv", "run", "pytest"],
-        # Two pytest processes in backend/ share the Mongo test databases on 27018 and
-        # fake regressions for each other. Never start a second one.
+        # -n 2 --dist loadscope, the same shape CI runs: about 4 minutes instead of 21.
+        # loadscope keeps a class or module on one worker, and the repo's pytest plugin
+        # gives each worker its own Mongo database, so the split is safe. Deliberately not
+        # `inv test --ci`, whose i18nc pre-task compiles translations into .mo files that
+        # are not git-ignored -- that would dirty the very working tree this gate inspects.
+        "test": ["uv", "run", "pytest", "-n", "2", "--dist", "loadscope"],
+        # Two pytest runs in backend/ share the Mongo test databases and fake regressions
+        # for each other. Never start a second one.
         "exclusive": "pytest",
     },
     "frontend": {

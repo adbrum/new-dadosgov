@@ -281,9 +281,11 @@ this phase decides is **when** each level runs:
 - **Once, before the push: full.** Start it in the background and, while it runs, write the
   CHANGELOG entries, draft the PR body and launch the Phase 7.5 review. The push depends on
   its exit code, not the other way round.
-- **Never two pytest runs at once in `backend/`** — they share the Mongo test databases on
-  port 27017 and fabricate regressions for each other. `ticket-state.py verify` refuses to
-  start a second one.
+- **Never two pytest runs at once in `backend/`** — they share the same Mongo test databases
+  and fabricate regressions for each other, in one checkout or across worktrees alike.
+  `verify` reserves the suite (pid + timestamp) and **refuses** rather than waits: end the
+  turn and run it again in a few minutes. A reservation whose process died is taken over
+  automatically, so a killed session never blocks anyone.
 
 The run that counts is the one the gate reads, and it must be green on the **final** HEAD —
 any later commit invalidates it:

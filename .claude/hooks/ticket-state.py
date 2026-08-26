@@ -449,6 +449,87 @@ def is_shell_wrapper(line: str) -> bool:
     return os.path.basename(parts[1]) in SHELLS and "-c" in parts[2:4]
 
 
+SUITE_CLAIM_MINUTES = 30
+
+
+def claim_path(repo: str) -> str:
+    return os.path.join(STATE_DIR, f"{repo}-suite.claim")
+
+
+def pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except Exception:
+        return False
+    return True
+
+
+def take_suite_claim(repo: str, key: str):
+    """Serialise the suites that cannot share a machine. Returns None, or why not.
+
+    Deliberately a claim and not a lock. `verify` runs inside a tool call with a timeout,
+    and when that call is killed the process group goes with it -- an flock would release
+    mid-pytest, letting a second run into the same Mongo databases, which is the exact
+    destruction being prevented. A claim file outlives the kill and is judged instead by
+    whether its pid is still alive, so a dead holder never blocks anyone.
+
+    And it refuses rather than waits: a blocked session should end its turn and come back,
+    not sit for four minutes holding a session open doing nothing.
+    """
+    path = claim_path(repo)
+    try:
+        with open(path) as fh:
+            held = json.load(fh)
+    except Exception:
+        held = None
+    if held:
+        age = (
+            datetime.now(timezone.utc) - datetime.fromisoformat(held["at"])
+        ).total_seconds() / 60
+        if held.get("pid") and pid_alive(held["pid"]) and age < SUITE_CLAIM_MINUTES:
+            wait = max(1, int(SUITE_CLAIM_MINUTES - age))
+            return (
+                f"A suite de {repo} esta reservada por {held.get('ticket')} "
+                f"(pid {held['pid']}, ha {int(age)} min).\n\n"
+                f"Duas corridas em {repo}/ partilham as mesmas BD Mongo de teste e fabricam "
+                "regressoes uma a outra. Nao esperes nesta chamada: termina o turno e volta a "
+                f"correr o verify dentro de ~{min(wait, 5)} min."
+            )
+        if held.get("pid") and not pid_alive(held["pid"]):
+            print(
+                f"(reserva de {held.get('ticket')} abandonada — pid {held['pid']} ja morreu, a assumir)"
+            )
+    os.makedirs(STATE_DIR, exist_ok=True)
+    with open(path, "w") as fh:
+        json.dump(
+            {
+                "ticket": key,
+                "repo": repo,
+                "pid": os.getpid(),
+                "at": datetime.now(timezone.utc).isoformat(),
+            },
+            fh,
+        )
+    return None
+
+
+def release_suite_claim(repo: str) -> None:
+    try:
+        with open(claim_path(repo)) as fh:
+            if json.load(fh).get("pid") != os.getpid():
+                return  # someone else's claim: never remove it
+    except Exception:
+        return
+    try:
+        os.remove(claim_path(repo))
+    except OSError:
+        pass
+
+
 def cmd_verify(args):
     state = require(args.key)
     cfg = SUITES[args.repo]
@@ -463,15 +544,22 @@ def cmd_verify(args):
 
     exclusive = cfg.get("exclusive")
     if exclusive:
+        refusal = take_suite_claim(args.repo, args.key)
+        if refusal:
+            print(refusal, file=sys.stderr)
+            return 2
+        # Belt and braces: the claim only knows about runs started through this gate. A
+        # pytest launched by hand, or by another checkout entirely, is only visible here.
         rc, out = sh(["pgrep", "-af", exclusive], ROOT, 15)
         running = [
             ln for ln in out.splitlines() if ln.strip() and not is_shell_wrapper(ln)
         ]
         if rc == 0 and running:
+            release_suite_claim(args.repo)
             print(
-                f"Ja ha uma corrida de {exclusive} em curso:\n  "
+                f"Ja ha uma corrida de {exclusive} em curso fora deste gate:\n  "
                 + "\n  ".join(running[:5])
-                + "\n\nDuas corridas em backend/ partilham as BD Mongo de teste na porta 27017 e "
+                + "\n\nDuas corridas em backend/ partilham as mesmas BD Mongo de teste e "
                 "fabricam regressoes uma a outra. Espera que termine em vez de arrancar outra.",
                 file=sys.stderr,
             )
@@ -483,6 +571,14 @@ def cmd_verify(args):
         print("Nao consegui resolver o HEAD — sem HEAD nao ha nada a que ligar o verde.", file=sys.stderr)
         return 2
 
+    try:
+        return run_suites(args, state, cfg, workdir, head)
+    finally:
+        if exclusive:
+            release_suite_claim(args.repo)
+
+
+def run_suites(args, state, cfg, workdir, head):
     problems = []
     for lint_cmd in cfg["lint"]:
         print(f"$ {' '.join(lint_cmd)}")

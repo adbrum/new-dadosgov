@@ -216,13 +216,20 @@ Duas coisas que uma árvore fresca não tem e que fazem as suites mentir em sil�
 / `npm ci` a sério — um `.venv` partilhado por symlink tem o `.pth` editável a apontar para o
 checkout principal, e os testes correriam contra o código errado).
 
-**A suite de backend serializa**, com árvores ou sem elas: `backend/udata/tests/plugin.py`
-fixa `udata_test_gw<N>` em `localhost:27017`. O `verify` reserva a suite (pid + timestamp) e
-**recusa em vez de esperar** — a sessão termina o turno e volta dentro de minutos; uma reserva
-cujo processo morreu é assumida automaticamente. Um `flock` seria pior: o `verify` corre dentro
-de uma chamada com timeout, e ao matar o grupo de processos o lock libertava-se **a meio do
-pytest**. Enquanto o `plugin.py` não aceitar a BD por ambiente (PR no `udata-pt`, com ticket
-próprio), o ganho real do paralelismo é **backend + frontend** e **N frontend**.
+**A suite de backend** partilha as BD de teste: `_clean_db` trunca todas as coleções entre
+testes, logo duas corridas com o mesmo nome de BD apagam os fixtures uma da outra a meio. O
+`verify` reserva a suite (pid + timestamp) e **recusa em vez de esperar** — a sessão termina o
+turno e volta dentro de minutos; uma reserva cujo processo morreu é assumida automaticamente.
+Um `flock` seria pior: o `verify` corre dentro de uma chamada com timeout, e ao matar o grupo
+de processos o lock libertava-se **a meio do pytest**.
+
+Um ticket com árvore própria deixa de serializar: o `verify` exporta
+`UDATA_TEST_MONGO_PREFIX=…/udata_test_<ticket>` e o `udata/tests/plugin.py` dá a cada corrida
+as suas BD. A reserva passa a ser por prefixo, e o `pgrep` só se aplica quando os nomes são os
+por omissão. **Isto é verificado, não assumido**: uma worktree cortada antes dessa alteração
+ter aterrado partilharia `udata-test` enquanto o harness acreditava o contrário — pior do que
+serializar — por isso o `verify` confirma que a árvore honra a variável antes de parar de
+serializar.
 
 ### Quando um ticket para: `park`
 
@@ -246,10 +253,10 @@ dois submódulos — PRs [udata-pt#222](https://github.com/amagovpt/udata-pt/pul
 [dadosgov-fe#580](https://github.com/amagovpt/dadosgov-fe/pull/580), à espera de integração em
 `develop`. Até lá, os `CLAUDE.md` desses repos continuam a afirmar que o `gh` não existe.
 
-**Pendente:** a suite de backend não é paralelizável enquanto
-`backend/udata/tests/plugin.py` fixar `mongodb://localhost:27017/udata_test_gw<N>`. Tornar o
-prefixo configurável por ambiente é uma alteração no `udata-pt`, com ticket e PR próprios; até
-lá o `verify` de backend serializa por reserva.
+**Pendente:** o `UDATA_TEST_MONGO_PREFIX` está feito no `udata-pt` mas ainda tem de subir a
+escada de ambientes (`develop → tst → ppr → main`). O `verify` já o usa quando a árvore o
+suporta e serializa quando não — portanto o paralelismo total das suites de backend só existe
+em árvores cortadas de um `develop` que já tenha essa alteração.
 
 **Pendente:** o modo autónomo (`/ticket auto`, sem os dois gates humanos) foi desenhado e
 adiado por opção — primeiro medir onde é que o loop interativo realmente para a pedir coisas,

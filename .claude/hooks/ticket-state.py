@@ -136,10 +136,13 @@ def require(key: str) -> dict:
     return state
 
 
-def sh(cmd, cwd, timeout=1800):
+def sh(cmd, cwd, timeout=1800, env=None):
     """Run a command. Returns (returncode, output). 124 = timeout, 127 = missing binary."""
     try:
-        p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout)
+        merged = {**os.environ, **env} if env else None
+        p = subprocess.run(
+            cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout, env=merged
+        )
         return p.returncode, p.stdout + p.stderr
     except subprocess.TimeoutExpired:
         return 124, "<timeout>"
@@ -452,8 +455,37 @@ def is_shell_wrapper(line: str) -> bool:
 SUITE_CLAIM_MINUTES = 30
 
 
-def claim_path(repo: str) -> str:
-    return os.path.join(STATE_DIR, f"{repo}-suite.claim")
+MONGO_PREFIX_VAR = "UDATA_TEST_MONGO_PREFIX"
+MONGO_PREFIX_BASE = "mongodb://localhost:27017/udata_test"
+
+
+def suite_isolation(state: dict, repo: str, workdir: str):
+    """(env, claim_suffix) so two checkouts of `repo` can run their suites at once.
+
+    The backend suite truncates every collection between tests, so two runs sharing a test
+    database wipe each other's fixtures. A ticket working in its own tree gets its own
+    database names, and only then is it safe to stop serialising.
+
+    The safety hinges on the tree actually honouring the variable: a worktree cut before
+    that change landed would silently share `udata-test` while this code believed the runs
+    were isolated -- worse than serialising. So it is checked, not assumed.
+    """
+    if repo != "backend" or not state.get("workdir"):
+        return {}, ""
+    plugin = os.path.join(workdir, "udata", "tests", "plugin.py")
+    try:
+        with open(plugin) as fh:
+            honours = MONGO_PREFIX_VAR in fh.read()
+    except OSError:
+        honours = False
+    if not honours:
+        return {}, ""
+    slug = re.sub(r"[^a-z0-9]+", "", state["ticket"].lower())
+    return {MONGO_PREFIX_VAR: f"{MONGO_PREFIX_BASE}_{slug}"}, f"-{slug}"
+
+
+def claim_path(repo: str, suffix: str = "") -> str:
+    return os.path.join(STATE_DIR, f"{repo}-suite{suffix}.claim")
 
 
 def pid_alive(pid: int) -> bool:
@@ -468,7 +500,7 @@ def pid_alive(pid: int) -> bool:
     return True
 
 
-def take_suite_claim(repo: str, key: str):
+def take_suite_claim(repo: str, key: str, suffix: str = ""):
     """Serialise the suites that cannot share a machine. Returns None, or why not.
 
     Deliberately a claim and not a lock. `verify` runs inside a tool call with a timeout,
@@ -480,7 +512,7 @@ def take_suite_claim(repo: str, key: str):
     And it refuses rather than waits: a blocked session should end its turn and come back,
     not sit for four minutes holding a session open doing nothing.
     """
-    path = claim_path(repo)
+    path = claim_path(repo, suffix)
     try:
         with open(path) as fh:
             held = json.load(fh)
@@ -517,15 +549,15 @@ def take_suite_claim(repo: str, key: str):
     return None
 
 
-def release_suite_claim(repo: str) -> None:
+def release_suite_claim(repo: str, suffix: str = "") -> None:
     try:
-        with open(claim_path(repo)) as fh:
+        with open(claim_path(repo, suffix)) as fh:
             if json.load(fh).get("pid") != os.getpid():
                 return  # someone else's claim: never remove it
     except Exception:
         return
     try:
-        os.remove(claim_path(repo))
+        os.remove(claim_path(repo, suffix))
     except OSError:
         pass
 
@@ -542,20 +574,26 @@ def cmd_verify(args):
         )
         return 2
 
+    env, suffix = suite_isolation(state, args.repo, workdir)
+    if env:
+        print(f"BD de teste isolada: {env[MONGO_PREFIX_VAR]}_gw<n>")
+
     exclusive = cfg.get("exclusive")
     if exclusive:
-        refusal = take_suite_claim(args.repo, args.key)
+        refusal = take_suite_claim(args.repo, args.key, suffix)
         if refusal:
             print(refusal, file=sys.stderr)
             return 2
-        # Belt and braces: the claim only knows about runs started through this gate. A
-        # pytest launched by hand, or by another checkout entirely, is only visible here.
-        rc, out = sh(["pgrep", "-af", exclusive], ROOT, 15)
+        # Belt and braces, and only where it still makes sense: with its own databases this
+        # run cannot be harmed by another one, so a pytest elsewhere is no longer a reason
+        # to refuse. Sharing the default names, it is the only thing that sees a run started
+        # outside this gate.
+        rc, out = sh(["pgrep", "-af", exclusive], ROOT, 15) if not env else (1, "")
         running = [
             ln for ln in out.splitlines() if ln.strip() and not is_shell_wrapper(ln)
         ]
         if rc == 0 and running:
-            release_suite_claim(args.repo)
+            release_suite_claim(args.repo, suffix)
             print(
                 f"Ja ha uma corrida de {exclusive} em curso fora deste gate:\n  "
                 + "\n  ".join(running[:5])
@@ -572,24 +610,24 @@ def cmd_verify(args):
         return 2
 
     try:
-        return run_suites(args, state, cfg, workdir, head)
+        return run_suites(args, state, cfg, workdir, head, env)
     finally:
         if exclusive:
-            release_suite_claim(args.repo)
+            release_suite_claim(args.repo, suffix)
 
 
-def run_suites(args, state, cfg, workdir, head):
+def run_suites(args, state, cfg, workdir, head, env=None):
     problems = []
     for lint_cmd in cfg["lint"]:
         print(f"$ {' '.join(lint_cmd)}")
-        code, out = sh(lint_cmd, workdir, 900)
+        code, out = sh(lint_cmd, workdir, 900, env)
         if code != 0:
             tail = "\n    ".join(out.strip().splitlines()[-10:])
             problems.append(f"$ {' '.join(lint_cmd)} -> {code}\n    {tail}")
 
     test_cmd = cfg["test"] + (args.scope or [])
     print(f"$ {' '.join(test_cmd)}")
-    code, out = sh(test_cmd, workdir)
+    code, out = sh(test_cmd, workdir, env=env)
     if code != 0:
         detail = {124: "timeout", 127: "runner nao encontrado"}.get(code, f"exit {code}")
         tail = "\n    ".join(out.strip().splitlines()[-15:])

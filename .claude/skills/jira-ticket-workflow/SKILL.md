@@ -304,11 +304,15 @@ this phase decides is **when** each level runs:
 - **Once, before the push: full.** Start it in the background and, while it runs, write the
   CHANGELOG entries, draft the PR body and launch the Phase 7.5 review. The push depends on
   its exit code, not the other way round.
-- **Never two pytest runs at once in `backend/`** — they share the same Mongo test databases
-  and fabricate regressions for each other, in one checkout or across worktrees alike.
-  `verify` reserves the suite (pid + timestamp) and **refuses** rather than waits: end the
-  turn and run it again in a few minutes. A reservation whose process died is taken over
-  automatically, so a killed session never blocks anyone.
+- **Never two pytest runs against the same Mongo test databases.** `_clean_db` truncates
+  every collection between tests, so two runs sharing a database name wipe each other's
+  fixtures. `verify` reserves the suite (pid + timestamp) and **refuses** rather than waits:
+  end the turn and run it again in a few minutes. A reservation whose process died is taken
+  over automatically, so a killed session never blocks anyone.
+  A ticket with its own worktree gets its own databases (`UDATA_TEST_MONGO_PREFIX`, honoured
+  by `udata/tests/plugin.py`) and then runs in parallel with the others — `verify` checks
+  that the tree really honours the variable before it stops serialising, because a worktree
+  cut before that change landed would share `udata-test` while believing otherwise.
 
 The run that counts is the one the gate reads, and it must be green on the **final** HEAD —
 any later commit invalidates it:

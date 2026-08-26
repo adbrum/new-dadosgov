@@ -165,7 +165,8 @@ blind. It never writes code.
 **Repo(s):** backend | frontend | ambos (backend primeiro)
 
 ### Ponto 1 — <resumo do ponto do ticket>
-- **Ficheiros:** `backend/udata/core/<x>/api.py` (`<função/símbolo>`), …
+- **Ficheiros:** `backend/udata/core/<x>/api.py` (`<função/símbolo>`, `+<símbolo novo>`), …
+- **Superfície de teste:** `<caminho de teste>` — <porque é legítimo>   ← só quando aplicável
 - **Alteração:** <a mudança mais pequena que satisfaz o ponto>
 - **Precedente:** <commit/PR/ficheiro que já resolve isto assim> — ou "sem precedente"
 - **Prova:** <teste que passa a existir/correr, ou o passo manual no browser>
@@ -185,7 +186,16 @@ Rules for the plan:
 - **One point, one commit, one proof.** A point with no test and no browser step that proves
   it is a gap the user should see now, not discover at Phase 7.
 - **Name real files and symbols**, verified by reading them. "Ajustar as permissões" without
-  a path is not a plan.
+  a path is not a plan. A symbol the point **adds** to an existing file is written `` `+nome` ``
+  — the audit then checks it does *not* already exist, which catches a plan written from a
+  stale reading of the tree. A qualified name (`Classe.campo`) resolves by its components.
+- **Touching a test file needs a declared reason.** The audit rejects a test path by default,
+  because editing a test is the degenerate way to make a point pass. Two exceptions are
+  legitimate and both must be declared on a `**Superfície de teste:**` line naming the file and
+  saying why: removing an `xfail(strict=True)` marker whose cause the same commit fixes (this
+  project requires it — a strict XPASS is red), and adding coverage that does not exist yet.
+  Changing an existing assertion is neither; if a test is wrong, that is a decision for the
+  user, not a line in a plan.
 - **Carry the precedent forward**; if you intend to diverge, this is where you argue for it.
 - **State what you are not doing.** Scope the user did not ask for is scope you do not add.
 - **Fold every open question into this one message.** It is the last round-trip before code.
@@ -202,8 +212,8 @@ PLAN
 ```
 
 That settles the mechanical half deterministically — every path and symbol exists, every
-point has a **Prova** and a **Commit** line the Phase 6 gate will accept, nothing sits in the
-test surface, no path outside the ticket's repos. It exits 1 with the list; fix the plan and
+point has a **Prova** and a **Commit** line the Phase 6 gate will accept, no undeclared path in
+the test surface, no path outside the ticket's repos. It exits 1 with the list; fix the plan and
 audit again. `plan-approved` refuses without a `pass` **on that exact plan text**, so a plan
 edited after its audit has to be re-audited.
 

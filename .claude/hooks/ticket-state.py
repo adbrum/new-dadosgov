@@ -305,7 +305,8 @@ def cmd_plan_approved(args):
             f"  python3 .claude/hooks/ticket-state.py plan-audit {args.key} "
             f"--repos {args.repos} <<'PLAN' … PLAN\n"
             "A auditoria e deterministica: caminhos e simbolos que existem, cada ponto com "
-            "prova e um commit que o gate da Fase 6 aceita, nada na superficie de teste.",
+            "prova e um commit que o gate da Fase 6 aceita, e a superficie de teste so "
+            "quando declarada e justificada.",
             file=sys.stderr,
         )
         return 1
@@ -843,7 +844,10 @@ BACKTICKED = re.compile(r"`([^`\n]+)`")
 POINT_HEADING = re.compile(r"^#{2,4}\s*Ponto\s+(\d+)", re.MULTILINE)
 FICHEIROS = re.compile(r"^\s*[-*]\s*\*\*Ficheiros?:\*\*(.*)$", re.MULTILINE)
 FIELD = "**{}:**"
-PATHISH = re.compile(r"[/.]")
+# A path has a separator or a short extension. `Model.field` is a symbol, not a file:
+# a bare `[/.]` read every dotted symbol as a missing file and reported it as one.
+PATHISH = re.compile(r"/|\.[A-Za-z0-9]{1,5}$")
+TEST_SURFACE = re.compile(r"^\s*[-*]?\s*\*\*Superf[ií]cie de teste:\*\*(.*)$", re.MULTILINE)
 
 
 def digest_of(plan_text: str) -> str:
@@ -866,6 +870,32 @@ def plan_paths(plan_text: str) -> list:
     return found
 
 
+def declared_test_surface(plan_text: str) -> dict:
+    """Test paths the plan says it will touch, mapped to the justification it gives.
+
+    Editing a test so a point passes is the degenerate solution this audit exists to catch,
+    and it stays a problem. But two legitimate reasons to name a test file survive that
+    rule: removing an `xfail(strict=True)` marker whose cause the same commit fixes -- which
+    this project requires, because a strict XPASS is red -- and adding coverage that does not
+    exist yet. Neither is allowed to pass unremarked: the plan has to name the file and say
+    why on its own line, so whoever approves the plan reads the exception.
+    """
+    declared = {}
+    for line in TEST_SURFACE.findall(plan_text):
+        reason = BACKTICKED.sub(" ", line).strip(" -\u2014:,\t")
+        for token in BACKTICKED.findall(line):
+            token = token.strip()
+            if PATHISH.search(token):
+                # Two points may both touch one test file for different reasons; keep both,
+                # so the note the approver reads does not silently lose one of them.
+                prior = declared.get(token)
+                if prior and reason and reason not in prior:
+                    declared[token] = f"{prior} | {reason}"
+                else:
+                    declared[token] = prior or reason
+    return declared
+
+
 def audit_plan(plan_text: str, repos: list, state: dict) -> tuple:
     """The half of a plan review a script can settle. Returns (problems, notes).
 
@@ -876,6 +906,7 @@ def audit_plan(plan_text: str, repos: list, state: dict) -> tuple:
     is the difference between one round-trip and three.
     """
     problems, notes = [], []
+    declared = declared_test_surface(plan_text)
 
     points = POINT_HEADING.split(plan_text)
     if len(points) < 3:
@@ -907,21 +938,54 @@ def audit_plan(plan_text: str, repos: list, state: dict) -> tuple:
             problems.append(f"{path} esta em {repo}/, que nao e um dos repos deste ticket ({', '.join(repos)})")
             continue
         if FROZEN_PATH.search(rel):
-            problems.append(
-                f"{path} e superficie de teste — um plano nao altera testes nem a configuracao "
-                "do runner para satisfazer um ponto"
-            )
+            reason = declared.get(path) or declared.get(rel)
+            if not reason:
+                problems.append(
+                    f"{path} e superficie de teste — um plano nao altera testes nem a "
+                    "configuracao do runner para satisfazer um ponto. Se a alteracao e remover "
+                    "um marcador xfail cuja causa este plano corrige, ou acrescentar cobertura "
+                    "que nao existe, declara-o numa linha propria: "
+                    f"`**Superficie de teste:** `{path}` — <justificacao>`"
+                )
+            elif len(reason) < 15:
+                problems.append(
+                    f"{path}: a declaracao de superficie de teste nao traz justificacao"
+                )
+            else:
+                notes.append(f"{path}: superficie de teste declarada — {reason}")
             continue
         tree = repo_dir(state, repo)
         full = os.path.join(tree, rel)
         if os.path.exists(full):
+            blob = open(full, errors="ignore").read()
             for symbol in symbols:
                 bare = symbol.strip().rstrip("()")
+                # `+name` says the point ADDS this symbol to an existing file. Without it a
+                # plan could never describe an addition, and the check inverts usefully: a
+                # symbol claimed as new that already exists is a plan working from a stale
+                # reading of the tree.
+                adds = bare.startswith("+")
+                bare = bare.lstrip("+").strip()
                 if not bare:
                     continue
-                rc, _ = sh(["git", "grep", "-q", "--", bare, "--", rel], tree, 30)
-                if rc != 0 and bare not in open(full, errors="ignore").read():
-                    problems.append(f"{path}: nao encontrei `{symbol}` no ficheiro")
+                # A qualified name (`Class.field`) never appears verbatim in the source, so
+                # resolve it by its components -- otherwise the most precise way to name a
+                # symbol was the one the audit rejected.
+                parts = [bare] if "." not in bare else bare.split(".")
+                present = all(
+                    sh(["git", "grep", "-q", "--", part, "--", rel], tree, 30)[0] == 0
+                    or part in blob
+                    for part in parts
+                )
+                if adds and present:
+                    problems.append(
+                        f"{path}: `{bare}` esta marcado como novo (`+`) mas ja existe no ficheiro"
+                    )
+                elif not adds and not present:
+                    problems.append(
+                        f"{path}: nao encontrei `{symbol}` no ficheiro "
+                        f"(se e para acrescentar, escreve-o `+{bare}`)"
+                    )
         elif os.path.isdir(os.path.dirname(full)):
             notes.append(f"{path}: ainda nao existe (ficheiro novo)")
         else:

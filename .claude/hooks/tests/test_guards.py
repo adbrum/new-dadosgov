@@ -254,6 +254,92 @@ def run_parallel_group() -> int:
     return failures
 
 
+# --- plan-audit: the deterministic half of a Phase 4 review -------------------
+# Three false positives an audit of a real plan (LEDG-2328) produced, each of which made
+# the correct plan unapprovable. They are regression cases now, because the fix loosens a
+# gate and a loosened gate has to stay exactly as loose as intended.
+PLAN_HEAD = "## Plano — LEDG-9999\n\n**Repo(s):** backend\n\n"
+PLAN_TAIL = (
+    "- **Prova:** `test:udata/tests/test_discussions.py::test_x`\n"
+    "- **Commit:** `fix(discussions): align the notification field type`\n"
+)
+NOTIF = "backend/udata/core/discussions/notifications.py"
+TESTS = "backend/udata/tests/test_notifications_integrity.py"
+
+
+def plan(ficheiros: str, extra: str = "") -> str:
+    return (
+        PLAN_HEAD
+        + "### Ponto 1 — resumo\n"
+        + f"- **Ficheiros:** {ficheiros}\n"
+        + extra
+        + PLAN_TAIL
+    )
+
+
+def PLAN_AUDIT_CASES() -> list:
+    justified = (
+        f"- **Superfície de teste:** `{TESTS}` — remover o marcador xfail(strict=True) cuja "
+        "causa este ponto corrige; nenhuma asserção é alterada.\n"
+    )
+    return [
+        ("test surface, undeclared", plan(f"`{TESTS}`"), "FAIL", "superficie de teste"),
+        ("test surface, declared + justified", plan(f"`{TESTS}`", justified), "PASS", None),
+        (
+            "test surface, declaration without a reason",
+            plan(f"`{TESTS}`", f"- **Superfície de teste:** `{TESTS}` — n/a\n"),
+            "FAIL",
+            "nao traz justificacao",
+        ),
+        ("symbol that exists", plan(f"`{NOTIF}` (`DiscussionStatus`)"), "PASS", None),
+        (
+            "qualified symbol resolves by component",
+            plan(f"`{NOTIF}` (`DiscussionNotificationDetails.message_id`)"),
+            "PASS",
+            None,
+        ),
+        (
+            "new symbol marked with +",
+            plan(f"`{NOTIF}` (`+cleanup_discussion_notifications`)"),
+            "PASS",
+            None,
+        ),
+        (
+            "+ on a symbol that already exists",
+            plan(f"`{NOTIF}` (`+DiscussionStatus`)"),
+            "FAIL",
+            "ja existe no ficheiro",
+        ),
+        (
+            "symbol that does not exist and is not marked new",
+            plan(f"`{NOTIF}` (`cleanup_discussion_notifications`)"),
+            "FAIL",
+            "nao encontrei",
+        ),
+    ]
+
+
+def run_plan_audit_group() -> int:
+    key = "LEDG-9998"
+    write_ticket(ticket_state(ticket=key))
+    print("\n--- ticket-state.py plan-audit ---")
+    failures = 0
+    for label, plan_text, expected, needle in PLAN_AUDIT_CASES():
+        proc = subprocess.run(
+            ["python3", os.path.join(HOOKS, "ticket-state.py"), "plan-audit", key,
+             "--repos", "backend"],
+            input=plan_text, capture_output=True, text=True,
+        )
+        out = proc.stdout + proc.stderr
+        got = "PASS" if proc.returncode == 0 else "FAIL"
+        ok = got == expected and (needle is None or needle in out)
+        failures += 0 if ok else 1
+        detail = "" if ok or needle is None or needle in out else f" (falta {needle!r})"
+        print(f"  {'ok   ' if ok else 'FALHA'} {label:52} esperado={expected} obtido={got}{detail}")
+    os.remove(state_path(key))
+    return failures
+
+
 def run_group(title: str, hook: str, cases: list, with_lock: bool) -> int:
     if with_lock:
         os.makedirs(os.path.dirname(LOCK), exist_ok=True)
@@ -287,6 +373,7 @@ def main() -> int:
     failures += run_group("guard-test-surface (lock held)", SURFACE_GUARD, SURFACE_CASES, with_lock=True)
     failures += run_ticket_group()
     failures += run_parallel_group()
+    failures += run_plan_audit_group()
 
     if os.path.exists(LOCK) and not had_lock:
         os.remove(LOCK)
@@ -296,7 +383,8 @@ def main() -> int:
         print(f"{failures} CASO(S) A FALHAR")
         return 1
     total = (
-        len(BRANCH_CASES) + len(SURFACE_CASES) + len(TICKET_CASES()) + len(PARALLEL_CASES()) + 1
+        len(BRANCH_CASES) + len(SURFACE_CASES) + len(TICKET_CASES())
+        + len(PARALLEL_CASES()) + len(PLAN_AUDIT_CASES()) + 1
     )
     print(f"TODOS OS {total} CASOS PASSAM")
     return 0

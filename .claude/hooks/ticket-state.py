@@ -61,12 +61,16 @@ SUITES = {
             ["uv", "run", "ruff", "check", "."],
             ["uv", "run", "ruff", "format", "--check", "."],
         ],
-        # -n 2 --dist loadscope, the same shape CI runs: about 4 minutes instead of 21.
-        # loadscope keeps a class or module on one worker, and the repo's pytest plugin
-        # gives each worker its own Mongo database, so the split is safe. Deliberately not
+        # -n 2 --dist loadscope, the same shape CI runs: minutes instead of twenty.
+        # loadscope keeps a class or module on one worker and each worker gets its own Mongo
+        # database, but the split is NOT reliable here: udata/tests/apiv2/test_topics.py and
+        # the rate-limit families fail under xdist on origin/develop too, and pass serially.
+        # So a red xdist run is a question, not a verdict -- `serial` re-runs exactly the
+        # tests that failed, and only what fails twice counts. Deliberately not
         # `inv test --ci`, whose i18nc pre-task compiles translations into .mo files that
         # are not git-ignored -- that would dirty the very working tree this gate inspects.
         "test": ["uv", "run", "pytest", "-n", "2", "--dist", "loadscope"],
+        "serial": ["uv", "run", "pytest", "-p", "no:randomly"],
         # Two pytest runs in backend/ share the Mongo test databases and fake regressions
         # for each other. Never start a second one.
         "exclusive": "pytest",
@@ -122,6 +126,22 @@ def save(state: dict) -> None:
     except Exception:
         os.unlink(tmp)
         raise
+
+
+def save_keys(state: dict, *keys: str) -> dict:
+    """Write only `keys` back, onto whatever is on disk now.
+
+    save() writes the whole document, which is fine for a command that loads, mutates and
+    exits. `verify` is not that: it holds its state across a ten-minute suite, and the
+    workflow explicitly says to record the review and resolve the criteria while that runs.
+    Writing the whole document at the end therefore threw away everything written in
+    between. Re-read, copy across only what this command owns, save that.
+    """
+    fresh = load(state["ticket"]) or state
+    for key in keys:
+        fresh[key] = state[key]
+    save(fresh)
+    return fresh
 
 
 def require(key: str) -> dict:
@@ -563,6 +583,22 @@ def release_suite_claim(repo: str, suffix: str = "") -> None:
         pass
 
 
+NODE_ID = re.compile(r"^(?:FAILED|ERROR)\s+(\S+::\S+)", re.MULTILINE)
+# Re-running more than this serially costs more than the xdist run it is checking; past it
+# the honest answer is "red, go look".
+RECHECK_CAP = 400
+
+
+def failing_nodes(output: str) -> list:
+    """The node ids pytest listed in its short summary, de-duplicated, order kept."""
+    seen, nodes = set(), []
+    for node in NODE_ID.findall(output):
+        if node not in seen:
+            seen.add(node)
+            nodes.append(node)
+    return nodes
+
+
 def cmd_verify(args):
     state = require(args.key)
     cfg = SUITES[args.repo]
@@ -629,10 +665,34 @@ def run_suites(args, state, cfg, workdir, head, env=None):
     test_cmd = cfg["test"] + (args.scope or [])
     print(f"$ {' '.join(test_cmd)}")
     code, out = sh(test_cmd, workdir, env=env)
+    quarantined = []
     if code != 0:
         detail = {124: "timeout", 127: "runner nao encontrado"}.get(code, f"exit {code}")
-        tail = "\n    ".join(out.strip().splitlines()[-15:])
-        problems.append(f"suite -> {detail}\n    {tail}")
+        nodes = failing_nodes(out) if cfg.get("serial") and code not in (124, 127) else []
+        if nodes and len(nodes) <= RECHECK_CAP:
+            # A red parallel run is a question. Ask it again, one worker, same tests: what
+            # fails twice is the diff's problem, what passes was the split's.
+            recheck = cfg["serial"] + nodes
+            print(f"$ {' '.join(cfg['serial'])} <{len(nodes)} testes que falharam>")
+            rc2, out2 = sh(recheck, workdir, env=env)
+            still = failing_nodes(out2)
+            if rc2 == 0 and not still:
+                quarantined = nodes
+                print(
+                    f"  {len(nodes)} teste(s) falharam com -n 2 e passam em serie — "
+                    "artefacto do split, nao do diff."
+                )
+            else:
+                tail = "\n    ".join(out2.strip().splitlines()[-15:])
+                problems.append(
+                    f"suite -> {len(still) or 'exit ' + str(rc2)} falha(m) tambem em serie"
+                    f"\n    {tail}"
+                )
+        else:
+            if nodes:
+                print(f"  {len(nodes)} falhas e demasiado para reconfirmar em serie.")
+            tail = "\n    ".join(out.strip().splitlines()[-15:])
+            problems.append(f"suite -> {detail}\n    {tail}")
 
     ok = not problems
     if ok:
@@ -640,10 +700,11 @@ def run_suites(args, state, cfg, workdir, head, env=None):
             "head": head,
             "scope": "narrow" if args.scope else "full",
             "at": datetime.now(timezone.utc).isoformat(),
+            "xdist_only_failures": quarantined,
         }
         if state["phase"] == "implementing":
             state["phase"] = "verified"
-        save(state)
+        save_keys(state, "verified", "phase")
     log(
         f"VERIFY {args.key} repo={args.repo} head={head[:12]} ok={ok} "
         f"scope={'narrow' if args.scope else 'full'}"

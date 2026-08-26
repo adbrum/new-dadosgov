@@ -300,7 +300,7 @@ def PLAN_AUDIT_CASES() -> list:
         ),
         (
             "new symbol marked with +",
-            plan(f"`{NOTIF}` (`+cleanup_discussion_notifications`)"),
+            plan(f"`{NOTIF}` (`+zzz_symbol_that_never_exists`)"),
             "PASS",
             None,
         ),
@@ -312,7 +312,7 @@ def PLAN_AUDIT_CASES() -> list:
         ),
         (
             "symbol that does not exist and is not marked new",
-            plan(f"`{NOTIF}` (`cleanup_discussion_notifications`)"),
+            plan(f"`{NOTIF}` (`zzz_symbol_that_never_exists`)"),
             "FAIL",
             "nao encontrei",
         ),
@@ -336,6 +336,53 @@ def run_plan_audit_group() -> int:
         failures += 0 if ok else 1
         detail = "" if ok or needle is None or needle in out else f" (falta {needle!r})"
         print(f"  {'ok   ' if ok else 'FALHA'} {label:52} esperado={expected} obtido={got}{detail}")
+    os.remove(state_path(key))
+    return failures
+
+
+def run_state_race_group() -> int:
+    """A long command must not throw away what was written while it ran.
+
+    `verify` holds its state across a ten-minute suite, and the workflow says to record the
+    review and resolve the criteria during that time. It used to write the whole document at
+    the end, silently reverting both.
+    """
+    import importlib.util
+
+    # ticket-state.py imports its siblings by bare name, the way it does when run as a
+    # script from its own directory.
+    if HOOKS not in sys.path:
+        sys.path.insert(0, HOOKS)
+
+    spec = importlib.util.spec_from_file_location(
+        "ticket_state", os.path.join(HOOKS, "ticket-state.py")
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    print("\n--- ticket-state.py escrita concorrente ---")
+    key = "LEDG-9997"
+    write_ticket(ticket_state(ticket=key, review={"ran": False, "accepted": [], "rejected": []}))
+
+    held = mod.load(key)                      # what a long command loaded at its start
+    concurrent = mod.load(key)                # what another call writes while it runs
+    concurrent["review"] = {"ran": True, "accepted": ["algo"], "rejected": []}
+    concurrent["criteria"][0]["status"] = "met"
+    mod.save(concurrent)
+
+    held["verified"] = {"backend": {"head": "a" * 40}}
+    mod.save_keys(held, "verified")
+
+    after = mod.load(key)
+    failures = 0
+    for label, got, expected in (
+        ("a review escrita no meio sobrevive", after["review"]["ran"], True),
+        ("o criterio resolvido no meio sobrevive", after["criteria"][0]["status"], "met"),
+        ("o verde do comando longo e gravado", after["verified"]["backend"]["head"], "a" * 40),
+    ):
+        ok = got == expected
+        failures += 0 if ok else 1
+        print(f"  {'ok   ' if ok else 'FALHA'} {label:52} esperado={expected} obtido={got}")
     os.remove(state_path(key))
     return failures
 
@@ -374,6 +421,7 @@ def main() -> int:
     failures += run_ticket_group()
     failures += run_parallel_group()
     failures += run_plan_audit_group()
+    failures += run_state_race_group()
 
     if os.path.exists(LOCK) and not had_lock:
         os.remove(LOCK)
@@ -384,7 +432,7 @@ def main() -> int:
         return 1
     total = (
         len(BRANCH_CASES) + len(SURFACE_CASES) + len(TICKET_CASES())
-        + len(PARALLEL_CASES()) + len(PLAN_AUDIT_CASES()) + 1
+        + len(PARALLEL_CASES()) + len(PLAN_AUDIT_CASES()) + 3 + 1
     )
     print(f"TODOS OS {total} CASOS PASSAM")
     return 0

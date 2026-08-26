@@ -24,7 +24,9 @@ import os
 import re
 import sys
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+from harness_root import harness_root  # local: sits beside this hook
+
+ROOT = harness_root()
 LOCK = os.path.join(ROOT, ".claude", "state", "fix-loop.lock")
 
 # Kept deliberately in step with FROZEN in fix-loop-state.py: the write-time guard and the

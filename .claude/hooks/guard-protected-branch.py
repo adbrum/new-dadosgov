@@ -24,9 +24,11 @@ import re
 import subprocess
 import sys
 
+from harness_root import harness_root  # local: sits beside this hook
+
 PROTECTED = {"develop", "tst", "ppr", "main"}
 SUBMODULES = ("backend", "frontend")
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+ROOT = harness_root()
 
 # Tolerates any flags between `git` and the verb: `git -C x -c user.email=y commit`.
 WRITE_OP = re.compile(

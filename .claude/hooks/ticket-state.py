@@ -30,7 +30,9 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+from harness_root import harness_root  # local: sits beside this hook
+
+ROOT = harness_root()
 STATE_DIR = os.path.join(ROOT, ".claude", "state")
 LOG = os.path.join(STATE_DIR, "ticket.log")
 KEY_RE = re.compile(r"^LEDG-\d+$")

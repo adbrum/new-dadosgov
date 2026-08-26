@@ -12,7 +12,9 @@ import os
 import subprocess
 import sys
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+from harness_root import harness_root  # local: sits beside this hook
+
+ROOT = harness_root()
 REPOS = {"backend": "amagovpt/udata-pt", "frontend": "amagovpt/dadosgov-fe"}
 PROTECTED = {"develop", "tst", "ppr", "main"}
 

@@ -10,10 +10,37 @@ exist so those specific holes cannot reopen silently.
 
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+REAL_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+
+
+def sandbox() -> str:
+    """A throwaway root the hooks agree on, so this suite never touches a live session.
+
+    Every case here writes a real ticket state file and a real fix-loop lock, and the
+    lock is what freezes the test surface. Run against the primary checkout while a
+    session is working and you freeze its tests, clobber its lock and append to its
+    log. So: a temp tree whose `.claude/state` is its own, with `.claude/hooks`,
+    `backend` and `frontend` symlinked to the real ones — the guards `realpath` both
+    sides of every path comparison, so the matching still works and git still reads
+    the real repositories.
+    """
+    if os.environ.get("CLAUDE_HARNESS_ROOT"):
+        return os.environ["CLAUDE_HARNESS_ROOT"]
+    root = tempfile.mkdtemp(prefix="dadosgov-guards-")
+    os.makedirs(os.path.join(root, ".claude", "state"))
+    os.symlink(os.path.join(REAL_ROOT, ".claude", "hooks"), os.path.join(root, ".claude", "hooks"))
+    for sub in ("backend", "frontend"):
+        os.symlink(os.path.join(REAL_ROOT, sub), os.path.join(root, sub))
+    os.environ["CLAUDE_HARNESS_ROOT"] = root  # inherited by every hook we spawn
+    return root
+
+
+ROOT = sandbox()
 HOOKS = os.path.join(ROOT, ".claude", "hooks")
 LOCK = os.path.join(ROOT, ".claude", "state", "fix-loop.lock")
 BRANCH_GUARD = "guard-protected-branch.py"
@@ -120,7 +147,7 @@ def TICKET_CASES() -> list:
          edit(os.path.join(BE, "udata/core/dataset/api.py")), "PASS"),
         # the harness itself must never be frozen by a ticket
         ("#T4  Edit em .claude/ nunca e bloqueado", ticket_state(phase="planned"),
-         edit(os.path.join(ROOT, ".claude/hooks/x.py")), "PASS"),
+         edit(os.path.join(REAL_ROOT, ".claude/hooks/x.py")), "PASS"),
         # 2. branch shape
         ("#T5  branch bem formada", ticket_state(),
          bash("git checkout -b bugfix/ledg-9999-producer-scope", BE), "PASS"),
@@ -202,6 +229,7 @@ def run_group(title: str, hook: str, cases: list, with_lock: bool) -> int:
 
 
 def main() -> int:
+    print(f"root da corrida: {ROOT}")
     had_lock = os.path.exists(LOCK)
     failures = run_group("guard-protected-branch", BRANCH_GUARD, BRANCH_CASES, with_lock=False)
     failures += run_group("guard-test-surface (lock held)", SURFACE_GUARD, SURFACE_CASES, with_lock=True)
@@ -218,5 +246,17 @@ def main() -> int:
     return 0
 
 
+def cleanup(root: str) -> None:
+    """Only ever remove a tree this run created, never one handed in by the caller."""
+    if root.startswith(tempfile.gettempdir()) and os.path.basename(root).startswith(
+        "dadosgov-guards-"
+    ):
+        shutil.rmtree(root, ignore_errors=True)
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        code = main()
+    finally:
+        cleanup(ROOT)
+    sys.exit(code)

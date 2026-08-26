@@ -27,6 +27,10 @@ A ordem importa: sem harness sólido, um loop só amplifica erros.
 | `PreToolUse` / `Edit\|Write\|Bash` | `guard-test-surface.py` | Enquanto existir `.claude/state/fix-loop.lock`, **nega** escritas em ficheiros de teste (ver secção 2). Inerte sem lock. |
 | `Stop` | `stop-verify.py` | Antes de o turno fechar, diz que suite de testes ficou em dívida para os ficheiros efetivamente tocados. Não corre pytest (leva minutos) — só impede que a verificação seja silenciosamente saltada. |
 
+| — (CLI) | `harness_root.py` | Resolve **uma só vez** qual é o checkout cujo `.claude/` manda: `CLAUDE_HARNESS_ROOT`, depois `CLAUDE_PROJECT_DIR`, depois a pasta do próprio ficheiro. Antes, cada hook derivava a raiz do seu `__file__` — e como `abspath` normaliza lexicalmente, a resposta dependia da string de invocação. |
+| — (CLI) | `harness_patterns.py` | As três expressões que mais de um hook tem de partilhar: Conventional Commits, atribuição de IA, e a superfície de teste congelada (em duas formas — texto de shell e caminhos de git). Estavam duplicadas, cada cópia com um comentário a dizer que era mantida "em sintonia" com a outra à mão. |
+| — (CLI) | `ticket-worktree.py` | `create`/`list`/`remove` das árvores por ticket (secção 3). |
+
 Todos os scripts saem sempre com código 0 excepto o guard, que devolve uma decisão `deny`
 explícita. Um script avariado nunca bloqueia trabalho legítimo.
 
@@ -57,6 +61,7 @@ Para revisitar ou desativar: `/hooks`.
 | `udata-backend` | Implementar backend (Flask/MongoEngine/Celery/harvesters) com as regras do fork. |
 | `next-frontend` | Implementar frontend (App Router, service layer, SSR/ISR) com as armadilhas conhecidas de cache e i18n. |
 | `promoter` | Só git/GitHub: abre e acompanha PRs pelo fluxo de promoção. Nunca mexe em código de aplicação. |
+| `plan-auditor` | Julga um plano da Fase 4 antes de um humano o ler: satisfaz os critérios, replica o precedente, mantém-se no âmbito, as provas provam algo. Read-only — um auditor que pode editar o que audita não é auditor. |
 
 ### Comandos (`.claude/commands/`)
 
@@ -69,6 +74,11 @@ Para revisitar ou desativar: `/hooks`.
 | `/watch-pr [repo] [pr]` | Um *tick* de vigilância de PR — desenhado para correr sob `/loop`. |
 | `/triage-sprint` | Relatório read-only do sprint e do que falta promover. |
 | `/install [backend\|frontend]` | Instalar dependências. |
+
+E os subcomandos do estado do ticket que se usam à mão:
+`ticket-state.py doctor` (onde é que tudo resolveu), `status` (todos os tickets em curso),
+`claim` (que repos e que árvore este ticket toca), `plan-audit` (a metade verificável de um
+plano), `park`/`unpark` (parar com a decisão em dívida escrita).
 
 ---
 
@@ -108,7 +118,7 @@ asserção, marca `it.skip`, estreita o `include` do runner — fica verde e o b
 | Escritas fora do hook são apanhadas | `verify` pergunta ao **git** o que mudou desde o commit da baseline — e **aborta** se o git falhar, em vez de passar vazio |
 | Contagem de testes não desce, skipped não sobe | `verify` compara com a baseline (backend via `pytest --collect-only`, que é o único sítio onde a contagem aparece) |
 | Marcas de enfraquecimento | Procuradas **só** na superfície congelada, senão o `.skip(offset)` de paginação MongoEngine em código-fonte dava falso positivo |
-| O loop tem fim | 2 tentativas, consumidas pelo próprio `verify` — antes o contador era voluntário e nada o impunha |
+| O loop tem fim | 4 tentativas (`MAX_ATTEMPTS` em `fix-loop-state.py`, a autoridade), consumidas pelo próprio `verify` — antes o contador era voluntário e nada o impunha |
 
 Regressões cobertas em `.claude/hooks/tests/test_guards.py` (21 casos, um por buraco
 encontrado em revisão): `python3 .claude/hooks/tests/test_guards.py`.
@@ -169,6 +179,62 @@ turnos futuros.
 
 ---
 
+## 3.5. Vários tickets ao mesmo tempo
+
+Uma sessão por ticket. O que não se partilha não é o monorepo — é o **checkout de um
+submódulo**: um checkout está numa branch, e duas suites de backend apagam e recriam a mesma
+base de dados de teste Mongo.
+
+O que estava a impedir isto não era o modelo. `active_states()` impunha **todos** os tickets
+ativos a **todas** as escritas: um ticket ainda à espera do plano trancava `backend/` *e*
+`frontend/` para os outros, e duas sessões acabavam à espera uma da outra. A posse passou a
+ser **por repo e por árvore** — uma escrita é julgada só pelos tickets que reclamam aquele
+repo naquele checkout, e um checkout que ninguém reclama não tem nada a impor. Um ticket que
+ainda não chegou à Fase 3 continua a reclamar os dois submódulos, que é o que mantém o gate
+da aprovação fechado antes de se saber onde o código vai cair.
+
+```bash
+python3 .claude/hooks/ticket-state.py claim LEDG-2296 --repos backend   # Fase 3
+python3 .claude/hooks/ticket-worktree.py create LEDG-2301 --repos backend
+python3 .claude/hooks/ticket-worktree.py list
+```
+
+**A sessão corre sempre da raiz do monorepo.** A árvore do ticket é um caminho gravado no
+estado (`workdir`), não um segundo projeto: um `settings.json`, um universo de permissões,
+um `.claude/state/`, um `ticket.log` para toda a frota. Dar a cada árvore o seu próprio
+`.claude/` parece mais arrumado e é uma armadilha — os hooks resolvem a raiz a partir da
+string de invocação, e um guard apontado ao estado errado **não falha**: não encontra ticket
+nenhum e comporta-se como se não houvesse nada a impor. `ticket-state.py doctor` existe para
+isso ser visível, e o `session-context` repete o aviso ao início de cada sessão.
+
+Também não é uma worktree do monorepo: `git worktree add` não faz checkout de submódulos, pelo
+que dá `backend/` e `frontend/` **vazios** — o orfão `.claude/worktrees/stupefied-buck-e8566b`
+era precisamente isso, e foi apagado.
+
+Duas coisas que uma árvore fresca não tem e que fazem as suites mentir em silêncio:
+`backend/.env` e `frontend/.env` (o `create` liga-os por symlink), e as dependências (`uv sync`
+/ `npm ci` a sério — um `.venv` partilhado por symlink tem o `.pth` editável a apontar para o
+checkout principal, e os testes correriam contra o código errado).
+
+**A suite de backend serializa**, com árvores ou sem elas: `backend/udata/tests/plugin.py`
+fixa `udata_test_gw<N>` em `localhost:27017`. O `verify` reserva a suite (pid + timestamp) e
+**recusa em vez de esperar** — a sessão termina o turno e volta dentro de minutos; uma reserva
+cujo processo morreu é assumida automaticamente. Um `flock` seria pior: o `verify` corre dentro
+de uma chamada com timeout, e ao matar o grupo de processos o lock libertava-se **a meio do
+pytest**. Enquanto o `plugin.py` não aceitar a BD por ambiente (PR no `udata-pt`, com ticket
+próprio), o ganho real do paralelismo é **backend + frontend** e **N frontend**.
+
+### Quando um ticket para: `park`
+
+Uma sessão que encontra uma decisão que não é dela deixava a razão num transcript que ninguém
+relê. `park` escreve-a: um `reason_code` de um conjunto fechado (para se poderem triar cinco
+tickets estacionados), a pergunta com as opções, o diagnóstico, e a forma do trabalho no
+momento em que parou — fase, branches, pontos feitos com os shas, `git status`.
+
+Deliberadamente **não** é um `pause`: o `pause` desliga os guards, o que aqui seria ao
+contrário — um ticket estacionado antes do plano aprovado tem de manter os repos trancados
+enquanto espera. O caso `#T19` da suite de guards fixa isso contra o `#T3`.
+
 ## 4. Decisões deliberadas e pendências
 
 **Decidido:** nada corre por agendamento. Todo o trabalho recorrente é invocado à mão
@@ -179,3 +245,13 @@ tomada, e é reversível a qualquer momento com `/schedule`.
 dois submódulos — PRs [udata-pt#222](https://github.com/amagovpt/udata-pt/pull/222) e
 [dadosgov-fe#580](https://github.com/amagovpt/dadosgov-fe/pull/580), à espera de integração em
 `develop`. Até lá, os `CLAUDE.md` desses repos continuam a afirmar que o `gh` não existe.
+
+**Pendente:** a suite de backend não é paralelizável enquanto
+`backend/udata/tests/plugin.py` fixar `mongodb://localhost:27017/udata_test_gw<N>`. Tornar o
+prefixo configurável por ambiente é uma alteração no `udata-pt`, com ticket e PR próprios; até
+lá o `verify` de backend serializa por reserva.
+
+**Pendente:** o modo autónomo (`/ticket auto`, sem os dois gates humanos) foi desenhado e
+adiado por opção — primeiro medir onde é que o loop interativo realmente para a pedir coisas,
+que é a pergunta da secção 3. Todos os passos acima são pré-requisitos dele: `park` com
+`reason_code`, `plan-audit` determinístico, posse por repo/árvore e a reserva da suite.

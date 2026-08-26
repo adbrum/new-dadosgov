@@ -24,21 +24,14 @@ import os
 import re
 import sys
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+from harness_patterns import FROZEN  # local: sits beside this hook
+from harness_root import harness_root
+
+ROOT = harness_root()
 LOCK = os.path.join(ROOT, ".claude", "state", "fix-loop.lock")
 
 # Kept deliberately in step with FROZEN in fix-loop-state.py: the write-time guard and the
 # verify-time git check must agree on what "the test surface" means.
-FROZEN = re.compile(
-    r"("
-    r"/tests?/|/__tests__/|(^|[\s/=\"'])test_[^/\s]*\.py|(^|[\s/=\"'])conftest\.py"
-    r"|\.spec\.(ts|tsx|js)\b|\.test\.(ts|tsx|js|py)\b"
-    r"|(^|[\s/=\"'])vitest\.config\.[cm]?ts|(^|[\s/=\"'])playwright\.config\.[cm]?ts"
-    r"|(^|[\s/=\"'])jest\.config|(^|[\s/=\"'])pyproject\.toml|(^|[\s/=\"'])pytest\.ini"
-    r"|(^|[\s/=\"'])setup\.cfg|(^|[\s/=\"'])tox\.ini|(^|[\s/=\"'])coverage\.rc"
-    r"|(^|[\s/=\"'])factories\.py"
-    r")"
-)
 
 # Verbs that mutate a file in place. Redirections are handled separately, because
 # `pytest tests/x.py > /tmp/log` writes to /tmp, not to the test.

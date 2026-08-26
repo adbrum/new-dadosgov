@@ -11,7 +11,9 @@ import os
 import subprocess
 import sys
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+from harness_root import harness_root  # local: sits beside this hook
+
+ROOT = harness_root()
 SUITES = {
     "backend": ("*.py", "cd backend && uv run pytest <caminho-do-teste>"),
     "frontend": ("*.ts/.tsx", "cd frontend && npm run lint && npm test"),

@@ -47,7 +47,7 @@ LOCAL_FILES = {
     "frontend": [".env"],
 }
 INSTALL = {
-    "backend": ["uv", "sync", "--extra", "dev", "--extra", "test"],
+    "backend": ["uv", "sync", "--group", "dev"],
     "frontend": ["npm", "ci"],
 }
 

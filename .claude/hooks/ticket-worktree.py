@@ -47,7 +47,11 @@ LOCAL_FILES = {
     "frontend": [".env"],
 }
 INSTALL = {
-    "backend": ["uv", "sync", "--extra", "dev", "--extra", "test"],
+    # No `--extra dev --extra test`: the backend declares its test dependencies in
+    # PEP 735 `[dependency-groups] dev`, not in `optional-dependencies`, so those
+    # extras do not exist and uv exits 2. Bare `uv sync` installs the default
+    # `dev` group, which is exactly what the suites need.
+    "backend": ["uv", "sync"],
     "frontend": ["npm", "ci"],
 }
 

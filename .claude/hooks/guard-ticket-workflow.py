@@ -52,7 +52,12 @@ BRANCH_RE = re.compile(r"^(feature|bugfix|hotfix|chore|release)/ledg-(\d+)-[a-z0
 
 NEW_BRANCH = re.compile(r"\bgit\b[^|;&]*\b(?:checkout\s+-b|switch\s+(?:-c|--create))\s+(\S+)")
 GIT_COMMIT = re.compile(r"\bgit\b[^|;&]*\bcommit\b")
-GIT_PUSH = re.compile(r"\bgit\b[^|;&]*\bpush\b")
+# `push` has to be git's own subcommand, not any word "push" after "git": the loose
+# version also matched `git stash push -- <file>`, which pushes nothing anywhere and
+# was refused with the whole push-gate checklist. Only git's global options may sit
+# between, which is what lets `git -C backend push` still match.
+GIT_GLOBAL_OPT = r"(?:-C\s+\S+|-c\s+\S+|--(?:git-dir|work-tree|namespace)=\S+|--no-pager|--bare)"
+GIT_PUSH = re.compile(rf"\bgit\b(?:\s+{GIT_GLOBAL_OPT})*\s+push\b")
 MSG_FLAG = re.compile(r"(?:-m|--message)[= ]\s*(?:\"([^\"]*)\"|'([^']*)')", re.S)
 DASH_C = re.compile(r"\bgit\s+(?:[^|;&]*?\s)?-C\s+(\S+)")
 CD_ANY = re.compile(r"(?:^|[;&|(]\s*)cd\s+([^\s&;|)]+)")

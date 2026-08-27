@@ -189,6 +189,11 @@ def TICKET_CASES() -> list:
          ticket_state(branch={"backend": backend_branch()},
                       overrides=[{"gate": "push", "reason": "ensaio", "consumed": False}]),
          bash("git push -u origin HEAD", BE), "PASS"),
+        # `git stash push` is not a push: it moves nothing anywhere and is how you park a
+        # file to prove a test goes red without it. The gate used to match any "push" after
+        # "git" and refused it with the whole push checklist, mid-verification.
+        ("#T26 stash push nao e um push", on_branch,
+         bash("git stash push -q udata/harvest/api.py", BE), "PASS"),
     ]
 
 

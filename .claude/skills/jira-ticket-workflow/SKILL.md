@@ -8,7 +8,7 @@ description: >
   any code, branches from develop, implements point by point with one commit each, gates on
   lint+tests, opens the PR into develop and closes the loop back in Jira. Not for sprint
   triage, promotion or CI questions — those are /triage-sprint, /promote and /ci.
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash, Agent, ExitPlanMode, mcp__atlassian__getJiraIssue, mcp__atlassian__searchJiraIssuesUsingJql, mcp__atlassian__getTransitionsForJiraIssue, mcp__atlassian__transitionJiraIssue, mcp__atlassian__addCommentToJiraIssue, mcp__atlassian__addWorklogToJiraIssue
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash, Agent, ExitPlanMode, mcp__atlassian__getJiraIssue, mcp__atlassian__searchJiraIssuesUsingJql, mcp__atlassian__getTransitionsForJiraIssue, mcp__atlassian__transitionJiraIssue, mcp__atlassian__addCommentToJiraIssue, mcp__atlassian__addWorklogToJiraIssue, mcp__atlassian__atlassianUserInfo, mcp__atlassian__lookupJiraAccountId, mcp__atlassian__createJiraIssue, mcp__atlassian__editJiraIssue
 ---
 
 # Ticket → PR — dadosgov
@@ -65,6 +65,66 @@ code, comments, CHANGELOG entries. **The ticket's language** (Portuguese) everyw
 reads the loop: restatement, plan, progress messages, final report, Jira comments. Acceptance
 criteria quoted into the PR body stay in the ticket's language, because they are quotations.
 Never any `Co-Authored-By` or AI attribution, anywhere.
+
+## Creating a ticket — signed by the logged-in user, in the open sprint
+
+Every ticket this loop creates — a follow-up from Phase 7.5, a split of scope the user asked
+for, a ticket dictated mid-session — is **signed by whoever is logged in to Jira**, never left
+to whatever identity the MCP connection defaults to. Resolve that identity first, in the same
+message as the other Jira reads:
+
+```
+mcp__atlassian__atlassianUserInfo()                                 # name + email of the logged-in user
+mcp__atlassian__lookupJiraAccountId(searchString: "<that email>")   # → accountId
+```
+
+Then create the ticket with **both** identity fields set to that accountId:
+
+```
+mcp__atlassian__createJiraIssue(
+  projectKey: "LEDG", issueTypeName: "<Task|Bug|Story>", summary: "…", description: "…",
+  assignee_account_id: "<accountId>",
+  additional_fields: { "reporter": { "id": "<accountId>" },
+                       "customfield_10020": <sprintId> })     # the open sprint — see below
+```
+
+- **Reporter** is the ticket's author, so set it explicitly even though the OAuth connection
+  usually infers it — a shared or re-authenticated connection would otherwise sign the ticket
+  to someone who never wrote it. Jira refuses the field without *Modify Reporter* permission:
+  when it does, create the ticket without it and **say** that the reporter stayed as Jira
+  assigned it. Never drop the reporter silently.
+- **Assignee** is that same user, so no ticket is born unowned. Another assignee only when the
+  user names one — and even then the reporter stays the logged-in user.
+- **Resolve the accountId per session.** Never hardcode one and never reuse one read from an
+  earlier transcript: it is the identity of *that* session's user, not this one's.
+- Say the ticket was created, with its key and the sprint it landed in.
+
+### The sprint is always the open one
+
+**Do not ask which sprint** — it is the currently open sprint of the LEDG board (`352`), every
+time. Read its id immediately before creating: sprints rotate every two weeks, so any id in
+this file, in a state file or in an earlier transcript is already stale.
+
+```
+mcp__atlassian__searchJiraIssuesUsingJql(
+  jql: "project = LEDG AND sprint in openSprints() ORDER BY created DESC",
+  fields: ["customfield_10020"], maxResults: 1)
+```
+
+`customfield_10020` is the Sprint field on this site. The array it returns can carry closed
+sprints alongside the live one, so take the entry whose `state` is `"active"` — never the first
+by position. (Shape, not a value to reuse: `{"id": 18843, "name": "LEDG Sprint 35", "state":
+"active", "boardId": 352}`.)
+
+- **No active sprint came back** — between sprints, or the board was reconfigured — is the one
+  case where you ask, saying why the automatic answer was unavailable. Never fall back to a
+  closed sprint or to an id you remember.
+- **Jira refuses the field on create** (it is not on the create screen for that issue type) →
+  create the ticket, then set it with
+  `editJiraIssue(fields: { "customfield_10020": <sprintId> })`. A ticket left in the backlog
+  when it should be in the sprint is a silent failure: verify the field came back set, and say
+  so if it did not.
+- The field takes the sprint **id** (a number), never its name.
 
 ## Model split — plan with Fable 5, code with Opus 5
 
@@ -364,7 +424,8 @@ on what a machine could have caught.
 3. **Advisory, not blocking.** Fix what you agree with; for what you reject, say so *with the
    reason*. A gate that blocks on judgements is one people learn to route around.
 4. **Never resolve a finding by removing the check that raised it** — that is weakening a test
-   in different clothing. If the honest fix is bigger than the ticket, report it as follow-up.
+   in different clothing. If the honest fix is bigger than the ticket, report it as follow-up — a
+   ticket opened for it is created signed, per the section above.
 5. Record it, or it evaporates with the session — and the push gate refuses until it exists:
    ```bash
    python3 .claude/hooks/ticket-state.py review LEDG-<n> \
@@ -470,4 +531,7 @@ announced trees left over from tickets that never reached this phase.
 - Always read before writing; always follow the existing pattern over a new one.
 - If a point is ambiguous, ask — do not invent scope.
 - If tests fail, fix before the next point. Never report done with red tests.
+- **A ticket created by this loop is signed by the logged-in Jira user** — reporter *and*
+  assignee — never the MCP connection's default identity, and it goes straight into the
+  **open sprint**, read at creation time. Neither is a question for the user.
 - Promotion beyond `develop` is a separate, explicit step (`/promote`), never automatic.

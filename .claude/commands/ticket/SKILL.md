@@ -58,3 +58,12 @@ Then follow `jira-ticket-workflow` to Phase 10.
 
 **Phase 4 runs on Fable 5** (delegated subagent); everything that touches the repo runs on
 Opus 5.
+
+## If this session creates a ticket
+
+Any new ticket — a follow-up from the review, a split of scope — is created **signed by the
+logged-in Jira user**: reporter *and* assignee set to the accountId resolved from
+`atlassianUserInfo` + `lookupJiraAccountId`, never the MCP connection's default identity — and
+**in the currently open sprint**, whose id is read at creation time from
+`sprint in openSprints()` (field `customfield_10020`). Neither is asked: report the key and the
+sprint name it landed in. Details in `jira-ticket-workflow`.

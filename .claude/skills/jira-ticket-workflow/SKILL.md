@@ -386,6 +386,14 @@ this phase decides is **when** each level runs:
 - **Start it in the background** (`Bash(run_in_background: true)`) and, while it runs, write
   the CHANGELOG entries, draft the PR body and launch the Phase 7.5 review. The claim file
   records that process's pid, so serialisation between sessions still holds.
+- **A local red must mean what CI will say**, and two things used to stop that being true.
+  `verify` now handles both, so do not work around them by hand: it runs with CI's
+  `UDATA_SETTINGS=/nonexistent/udata.cfg` (the tracked `udata.cfg` is a *deployment* config
+  that `create_app` loads over `settings.Testing` — leaving it in cost 2.5× the wall clock
+  and 45 phantom failures), and it drops the Mongo test databases before each backend run
+  (leftover documents in `udata_test_gw<n>` make a count assertion fail in a way that is
+  indistinguishable from a regression). Running `pytest` by hand skips both; when a hand
+  run disagrees with `verify`, `verify` is the one to believe.
 - **Never two pytest runs against the same Mongo test databases.** `_clean_db` truncates
   every collection between tests, so two runs sharing a database name wipe each other's
   fixtures. `verify` reserves the suite (pid + timestamp) and **refuses** rather than waits:

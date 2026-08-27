@@ -19,15 +19,15 @@ dadosgov/
 ### Contrato API
 
 - **Base URL**: `/api/1` (v1) e `/api/2` (v2) — definido em `backend/udata/api/__init__.py`
-- **Frontend consome**: via `frontend/src/services/api.ts` (fetch functions)
-- **Tipos TS**: `frontend/src/types/api.ts` — devem espelhar os modelos do backend
+- **Frontend consome**: via `frontend/src/service/api/<domain>/index.ts` (fetch functions por domínio); helpers partilhados (`authFetch`, base URLs por ambiente) em `src/service/utils/API.ts`
+- **Tipos TS**: `frontend/src/service/types/<domain>/` (barrel `index.ts` por domínio) — devem espelhar os modelos do backend
 - **Paginação**: `{ data: T[], page, page_size, total, next_page, previous_page }`
 
 ### Ao criar uma feature nova:
 
 1. **Definir o contrato** — que endpoints são necessários e que dados trafegam
 2. **Backend**: criar/alterar modelo (`models.py`), API endpoint (`api.py`), formulário (`forms.py`), permissões (`permissions.py`)
-3. **Frontend**: criar tipo TS (`types/api.ts`), função de fetch (`services/api.ts`), componente(s), página
+3. **Frontend**: criar tipo TS (`src/service/types/<domain>/`), função de fetch (`src/service/api/<domain>/index.ts`), componente(s), página
 4. **Garantir consistência** — nomes de campos no JSON da API devem ser iguais nos tipos TS
 
 ### Mapeamento de entidades (Backend → Frontend)
@@ -74,8 +74,8 @@ src/
 │   ├── <Feature>Client.tsx  # Componente principal com estado ('use client')
 │   ├── <Feature>Filters.tsx # Filtros (se aplicável)
 │   └── <Feature>Card.tsx    # Card de listagem
-├── services/api.ts          # Adicionar fetch function
-└── types/api.ts             # Adicionar interface TS
+├── service/api/<domain>/index.ts    # Adicionar fetch function
+└── service/types/<domain>/index.ts  # Adicionar interface TS
 ```
 
 ## Comandos Rápidos
@@ -120,7 +120,8 @@ Cada repo tem branches de ambiente de longa duração — `develop`, `tst`, `ppr
 
 - A base de cada PR é sempre o **ambiente seguinte**, não sempre `main`.
 - **Fazer o fluxo só no(s) repo(s) efetivamente alterado(s)** — uma alteração só de backend passa por este fluxo apenas em `udata-pt`; o frontend fica intocado, e vice-versa.
-- O GitHub CLI (`gh`) **não está instalado** neste ambiente. Abrir PRs pelo URL de comparação: `https://github.com/amagovpt/<repo>/compare/<base>...<head>?expand=1`.
+- **Abrir PRs** — verificar primeiro com `gh auth status`. Se o GitHub CLI estiver autenticado: `gh pr create --repo amagovpt/<repo> --base <ambiente> --head <branch>`, e acompanhar o CI com `gh pr checks` / `gh run watch`. Caso contrário, abrir pelo URL de comparação `https://github.com/amagovpt/<repo>/compare/<base>...<head>?expand=1`. Não assumir nenhum dos casos: o `gh` está instalado em algumas máquinas da equipa e não noutras.
+- A mesma regra condicional está a ser aplicada aos `CLAUDE.md` dos submódulos: PRs [udata-pt#222](https://github.com/amagovpt/udata-pt/pull/222) e [dadosgov-fe#580](https://github.com/amagovpt/dadosgov-fe/pull/580), ambos para `develop`. Até serem integrados, esses ficheiros continuam a afirmar que o `gh` não existe.
 
 ## Regras Gerais
 
@@ -128,9 +129,9 @@ Cada repo tem branches de ambiente de longa duração — `develop`, `tst`, `ppr
 - **Idioma do código**: inglês (variáveis, funções, comentários, commits)
 - **Commits**: mensagens descritivas em inglês, referenciar issues com `(fix #XXX)`. **Nunca incluir `Co-Authored-By` ou qualquer atribuição de IA nos commits.**
 - **Branches e commits** seguem [Conventional Branch](https://conventionalbranch.org/) / [Conventional Commits](https://www.conventionalcommits.org/) em **qualquer** dos repos (incluindo o do monorepo) — ver `backend/CLAUDE.md` ou `frontend/CLAUDE.md` para a tabela completa de prefixos e tipos.
-- **Tickets Jira**: ao criar um ticket, indicar que foi criado e **perguntar em que sprint** inserir — por norma, o **sprint atual**.
+- **Tickets Jira**: projeto **`LEDG`** ("L11 - Evol&Man.dados.gov") no site `ticapp.atlassian.net`, cloudId `0d1d9259-29f0-46ff-bb50-522a373f8daf`, acedido pelo MCP Atlassian. Ao criar um ticket, indicar que foi criado e **perguntar em que sprint** inserir — por norma, o **sprint atual**. Para trabalhar um ticket de ponta a ponta usar `/ticket LEDG-XXXX` (skill `jira-ticket-workflow`).
 - **Ao alterar a API**: atualizar sempre tanto o backend (endpoint + serialização) como o frontend (tipo TS + fetch function)
 - **Novos endpoints**: registar em `backend/udata/api/__init__.py` → `init_app()`
-- **Novos tipos TS**: adicionar em `frontend/src/types/api.ts`
-- **Novas fetch functions**: adicionar em `frontend/src/services/api.ts`
+- **Novos tipos TS**: adicionar em `frontend/src/service/types/<domain>/`
+- **Novas fetch functions**: adicionar em `frontend/src/service/api/<domain>/index.ts`
 - **Testes**: backend obriga pytest; frontend usa ESLint para validação estática

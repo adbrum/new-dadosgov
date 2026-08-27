@@ -383,7 +383,7 @@ def load_module(name: str, filename: str):
     return module
 
 
-SCOPE_CASES = 14
+SCOPE_CASES = 16
 
 
 def run_scope_group() -> int:
@@ -451,12 +451,20 @@ def run_scope_group() -> int:
     tests, reason = ts.impacted_backend(["udata/tests/dataset/test_proxy_download.py"], BE)
     check("um teste alterado corre-se a si mesmo",
           (reason, tests), (None, {"udata/tests/dataset/test_proxy_download.py"}))
-    # The measured reason this exists: a small selection sharded across xdist workers
-    # manufactures failures that are green in series (see the SUITES comment).
-    check("um ambito impacted corre em serie, sem xdist",
-          "-n" in ts.SUITES["backend"]["test_serial"], False)
-    check("a suite completa mantem a forma do CI",
+    # The gate is only worth reading if a local red means what CI will say, so the runner
+    # shape and the settings CI uses are asserted, not assumed.
+    check("a suite mantem a forma do CI",
           ts.SUITES["backend"]["test"][-3:], ["2", "--dist", "loadscope"])
+    check("a suite completa corre o pacote, como o CI",
+          ts.SUITES["backend"]["target_all"], ["udata"])
+    # The positional belongs to the full run only. With it baked into the runner, a scoped
+    # run appended its paths to the whole package and quietly ran everything -- reported as
+    # `impacted`, which is worse than being slow.
+    check("o pacote nao esta no runner, senao um ambito corre tudo",
+          "udata" in ts.SUITES["backend"]["test"], False)
+    check("udata.cfg fica de fora, como no CI",
+          ts.suite_isolation({"ticket": "LEDG-9999"}, "backend", BE)[0].get("UDATA_SETTINGS"),
+          ts.SETTINGS_NONE)
 
     # And the same rules as the push gate sees them. The gate denies this sandbox for the
     # CHANGELOG (the real checkout sits on develop with no branch commits), so what is

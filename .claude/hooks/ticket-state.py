@@ -92,35 +92,36 @@ SUITES = {
             {"cmd": ["uv", "run", "ruff", "format", "--check"], "paths": True},
         ],
         "lint_exts": (".py",),
-        # `-n 2 --dist loadscope`, byte for byte the shape CI runs (`backend/tasks/__init__.py`
-        # `inv test --ci`): ~4 minutes instead of ~21 in series.
+        # `-n 2 --dist loadscope udata -p no:sugar`, the command CI runs
+        # (`backend/tasks/__init__.py`, `inv test --ci`). The worker count stays CI's: a local
+        # full run is then wrong in the same way CI is, which is what makes it worth reading.
         #
-        # Do NOT raise the worker count to fit the machine. Measured here on 16 cores:
+        # Two things measured here (16 cores) that this gate got wrong and now handles:
         #
-        #   -n 2 --dist loadscope   627s, 55 failures
-        #   -n 8 --dist loadscope   202s, 61 failures
-        #   -n 0 (this file's serial selection of the same tests)   green
+        #   udata.cfg loaded (no UDATA_SETTINGS)          627s, 55 failures
+        #   UDATA_SETTINGS=/nonexistent, CI's argv        276s, 7 failures
+        #   ...and the stale test databases dropped       ~276s, green
         #
-        # This suite is not isolated across xdist workers. `--dist loadscope` splits by class,
-        # and the failures are all "the app wrote to one database and the assertion counted
-        # another" (`Dataset.objects.count() == 0` right after a 201), so more workers means
-        # finer splitting means more manufactured failures. `udata/tests/apiv2/test_topics.py`
-        # is the cheapest demonstration: 38 passed at `-n 0`, 7 failed at `-n 2 --dist
-        # loadscope` with nothing else running. Not caused by `udata.cfg` -- setting
-        # UDATA_SETTINGS to a nonexistent path, the way CI does, changes nothing.
+        # udata.cfg is tracked in the backend repo and create_app loads it over
+        # settings.Testing, which is why CI points UDATA_SETTINGS at a path that does not
+        # exist (`backend/.github/workflows/tests.yml`); the local gate never did, and paid
+        # 2.5x the wall clock and 45 phantom failures for it. The remaining 7 were leftover
+        # documents in `udata_test_gw<n>` from earlier runs -- `Topic.objects.count() == 2`
+        # because one topic was already there. CI never sees either: fresh container, no cfg.
         #
-        # So the number stays CI's: a local full run is then wrong in the same way CI is,
-        # which is the only property that makes it worth reading at all.
+        # There is no xdist isolation defect. With the databases clean this suite runs
+        # correctly at -n 2 (test_topics: 38 passed), which an earlier reading of these
+        # failures got wrong.
         #
-        # Deliberately not `inv test --ci`, whose i18nc pre-task compiles translations into
-        # .mo files that are not git-ignored -- that would dirty the very working tree this
-        # gate inspects.
-        "test": ["uv", "run", "pytest", "-n", "2", "--dist", "loadscope"],
-        # An impacted or narrow selection is small, and a small selection is exactly where
-        # sharding manufactures failures: the classes that the full run happens to keep
-        # together get split across workers. Serial, therefore -- and at this size serial is
-        # also faster (no per-worker app boot).
-        "test_serial": ["uv", "run", "pytest", "-p", "no:cacheprovider"],
+        # Deliberately not `inv test --ci` itself, whose i18nc pre-task compiles translations
+        # into .mo files that are not git-ignored -- that would dirty the very working tree
+        # this gate inspects.
+        "test": ["uv", "run", "pytest", "-p", "no:sugar", "-n", "2", "--dist", "loadscope"],
+        # CI passes the package explicitly; a scoped run replaces it with the resolved paths
+        # and changes nothing else. Measured on a real ticket's impacted set (6 files, 190
+        # tests): 42s at -n 2 against 69s in series, so a scoped run shards too -- with the
+        # databases clean there is no reason not to.
+        "target_all": ["udata"],
         # Two pytest runs in backend/ share the Mongo test databases and fake regressions
         # for each other. Never start a second one.
         "exclusive": "pytest",
@@ -137,7 +138,7 @@ SUITES = {
         ],
         "lint_exts": (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"),
         "test": ["npx", "vitest", "run"],
-        "test_serial": ["npx", "vitest", "run"],
+        "target_all": [],
         "exclusive": None,
     },
 }
@@ -523,6 +524,48 @@ MONGO_PREFIX_VAR = "UDATA_TEST_MONGO_PREFIX"
 MONGO_PREFIX_BASE = "mongodb://localhost:27017/udata_test"
 
 
+# The deployment config, tracked in the backend repo, that create_app loads over
+# settings.Testing. CI points this at a path that does not exist so the load is skipped
+# (see backend/.github/workflows/tests.yml); the local gate must do the same or it tests a
+# deployment config -- 627s and 55 failures instead of 276s and green, measured.
+SETTINGS_VAR = "UDATA_SETTINGS"
+SETTINGS_NONE = "/nonexistent/udata.cfg"
+
+
+def drop_stale_test_dbs(workdir: str, env: dict):
+    """Drop this run's Mongo test databases before it starts. Returns a note, or None.
+
+    Leftover documents in `udata_test_gw<n>` are indistinguishable from a regression: a test
+    that creates one topic and asserts `Topic.objects.count() == 1` fails with 2, and the
+    failure looks exactly like a bug in the code under review. CI never sees it -- its Mongo
+    container is new every run -- so the local gate was denying pushes over failures that
+    could not exist on the branch.
+
+    Uses the project's own pymongo through `uv run`, so there is nothing extra to install
+    and no assumption about how Mongo is hosted. Best effort: a machine with no Mongo up
+    gets a note, not a blocked push -- the suite that follows will fail loudly anyway.
+    """
+    script = (
+        "import os, re\n"
+        "from pymongo import MongoClient\n"
+        "uri = os.environ.get('UDATA_TEST_MONGO_PREFIX') or "
+        "'mongodb://localhost:27017/udata_test'\n"
+        "host, _, base = uri.rpartition('/')\n"
+        # Never drop anything that is not a test database, whatever the prefix says.
+        "assert 'test' in base, base\n"
+        "client = MongoClient(host, serverSelectionTimeoutMS=4000)\n"
+        "keep = re.compile(r'^' + re.escape(base) + r'(_gw\\d+)?$')\n"
+        "names = [n for n in client.list_database_names() if keep.match(n)]\n"
+        "[client.drop_database(n) for n in names]\n"
+        "print(' '.join(names))\n"
+    )
+    code, out = sh(["uv", "run", "python", "-c", script], workdir, 120, env)
+    if code != 0:
+        return f"nao consegui limpar as BD de teste ({out.strip().splitlines()[-1:] or '?'})"
+    dropped = out.strip()
+    return f"BD de teste largadas antes da corrida: {dropped or '(nenhuma existia)'}"
+
+
 def suite_isolation(state: dict, repo: str, workdir: str):
     """(env, claim_suffix) so two checkouts of `repo` can run their suites at once.
 
@@ -534,8 +577,12 @@ def suite_isolation(state: dict, repo: str, workdir: str):
     that change landed would silently share `udata-test` while this code believed the runs
     were isolated -- worse than serialising. So it is checked, not assumed.
     """
-    if repo != "backend" or not state.get("workdir"):
+    if repo != "backend":
         return {}, ""
+    # Every backend run skips udata.cfg, worktree or not.
+    base_env = {SETTINGS_VAR: SETTINGS_NONE}
+    if not state.get("workdir"):
+        return base_env, ""
     plugin = os.path.join(workdir, "udata", "tests", "plugin.py")
     try:
         with open(plugin) as fh:
@@ -543,9 +590,9 @@ def suite_isolation(state: dict, repo: str, workdir: str):
     except OSError:
         honours = False
     if not honours:
-        return {}, ""
+        return base_env, ""
     slug = re.sub(r"[^a-z0-9]+", "", state["ticket"].lower())
-    return {MONGO_PREFIX_VAR: f"{MONGO_PREFIX_BASE}_{slug}"}, f"-{slug}"
+    return {**base_env, MONGO_PREFIX_VAR: f"{MONGO_PREFIX_BASE}_{slug}"}, f"-{slug}"
 
 
 def claim_path(repo: str, suffix: str = "") -> str:
@@ -746,24 +793,21 @@ def resolve_run(args, cfg, workdir):
         elif lint_paths:
             lint_cmds.append(list(step["cmd"]) + lint_paths)
 
-    test_cmd = list(cfg["test"])
+    test_cmd = list(cfg["test"]) + list(cfg["target_all"])
     impacted_files = []
-    if mode in ("narrow", "impacted"):
-        test_cmd = list(cfg["test_serial"])
     if mode == "narrow":
-        test_cmd += list(args.scope)
+        test_cmd = list(cfg["test"]) + list(args.scope)
     elif mode == "impacted":
         if changed is None or not base:
             mode, full_reason = "full", "sem base de comparacao"
-            test_cmd = list(cfg["test"])
         elif repo == "backend":
             tests, full_reason = impacted_backend(changed, workdir)
-            if full_reason:
-                mode = "full"
-                test_cmd = list(cfg["test"])
-            else:
+            if not full_reason:
+                mode = "impacted"
                 impacted_files = sorted(tests)
-                test_cmd += impacted_files
+                test_cmd = list(cfg["test"]) + impacted_files
+            else:
+                mode = "full"
         else:
             # vitest walks the module graph itself: --changed <base> selects the tests that
             # import what the branch touched, which is more than a path rule could infer.
@@ -822,7 +866,7 @@ def cmd_verify(args):
         return 0
 
     env, suffix = suite_isolation(state, args.repo, workdir)
-    if env:
+    if MONGO_PREFIX_VAR in env:
         print(f"BD de teste isolada: {env[MONGO_PREFIX_VAR]}_gw<n>")
 
     exclusive = cfg.get("exclusive")
@@ -857,6 +901,10 @@ def cmd_verify(args):
         return 2
 
     try:
+        if args.repo == "backend":
+            # Inside the claim: the databases belong to this run for its duration, so
+            # dropping them here cannot pull the floor out from under another session.
+            print(drop_stale_test_dbs(workdir, env))
         return run_suites(args, state, plan, workdir, head, env)
     finally:
         if exclusive:
@@ -898,8 +946,12 @@ def run_suites(args, state, plan, workdir, head, env=None):
     for p in problems:
         print(f"  PROBLEMA: {p}")
     if ok:
-        print(f"  Registado ({mode}). O gate de push aceita este verde a partir de {head[:12]}:")
-        print("  commits de CHANGELOG/docs nao o invalidam, um commit de codigo sim.")
+        if mode == "narrow":
+            print(f"  Registado (narrow) em {head[:12]}. NAO chega para o push: caminhos dados a")
+            print("  mao nao provam o diff. Antes do push: verify … --impacted.")
+        else:
+            print(f"  Registado ({mode}). O gate de push aceita este verde a partir de {head[:12]}:")
+            print("  commits de CHANGELOG/docs nao o invalidam, um commit de codigo sim.")
         if mode == "impacted":
             print(
                 f"  Ambito local: {len(plan['impacted_files'])} alvo(s) do diff. A suite "

@@ -56,6 +56,12 @@ Then follow `jira-ticket-workflow` to Phase 10.
   A resume that lands in Phase 6 with no approved plan goes back through Phase 4 first.
 - **Phase 9 is a human gate** — the Jira transition is applied only after the user confirms.
 
+The push gate reads one green per repo: lint plus `verify … --impacted` (the tests the diff
+can break; the resolver escalates to the whole suite when the diff has no area, and says
+which file forced it). The full suite for the branch is the CI run on the PR — do not repeat
+it locally out of habit. A CHANGELOG- or docs-only commit no longer invalidates that green;
+a code commit still does.
+
 **Phase 4 runs on Fable 5** (delegated subagent); everything that touches the repo runs on
 Opus 5.
 

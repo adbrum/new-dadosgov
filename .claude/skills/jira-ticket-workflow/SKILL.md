@@ -374,9 +374,18 @@ The commands live in `backend/CLAUDE.md`, `frontend/CLAUDE.md` and the two agent
 this phase decides is **when** each level runs:
 
 - **Per point: narrow only.** The test file(s) named in that point's *Prova*, with `-x`.
-- **Once, before the push: full.** Start it in the background and, while it runs, write the
-  CHANGELOG entries, draft the PR body and launch the Phase 7.5 review. The push depends on
-  its exit code, not the other way round.
+- **Once, before the push: `--impacted`.** The local gate proves *the change*; CI proves the
+  repository. `--impacted` runs the lint over the files the branch touched and the tests the
+  diff can break — resolved from the diff against the environment branch, not guessed — and
+  the whole suite runs on the PR, where it already ran anyway. `--dry-run` prints that
+  resolution without running anything, which is how you check it before trusting it.
+- **The resolver escalates to the full suite by itself** when the diff has no area: shared
+  backend infra (`udata/api/`, `udata/models/`, `udata/settings.py`, `uv.lock`, …), a
+  non-Python file with no test mapping, or a diff it could not resolve at all. It says which
+  file forced it. Passing no flag also runs full — use it when you have a reason to.
+- **Start it in the background** (`Bash(run_in_background: true)`) and, while it runs, write
+  the CHANGELOG entries, draft the PR body and launch the Phase 7.5 review. The claim file
+  records that process's pid, so serialisation between sessions still holds.
 - **Never two pytest runs against the same Mongo test databases.** `_clean_db` truncates
   every collection between tests, so two runs sharing a database name wipe each other's
   fixtures. `verify` reserves the suite (pid + timestamp) and **refuses** rather than waits:
@@ -387,12 +396,18 @@ this phase decides is **when** each level runs:
   that the tree really honours the variable before it stops serialising, because a worktree
   cut before that change landed would share `udata-test` while believing otherwise.
 
-The run that counts is the one the gate reads, and it must be green on the **final** HEAD —
-any later commit invalidates it:
+The run that counts is the one the gate reads. A **code** commit after it invalidates it; a
+commit that touches only the CHANGELOG, a README or `docs/` does not — which is why the
+CHANGELOG can be written after the green instead of costing a second suite:
 
 ```bash
-python3 .claude/hooks/ticket-state.py verify LEDG-<n> <repo>
+python3 .claude/hooks/ticket-state.py verify LEDG-<n> <repo> --impacted --dry-run   # what would run
+python3 .claude/hooks/ticket-state.py verify LEDG-<n> <repo> --impacted             # the gate
+python3 .claude/hooks/ticket-state.py status LEDG-<n>    # does the green still cover HEAD?
 ```
+
+`status` answers the resume question directly: it prints, per repo, the scope of the recorded
+green and whether the commits since then invalidated it (and which files did).
 
 **Red that does not fall to one honest attempt → `/fix-loop <repo> <caminho/do/teste>`**,
 which freezes the test surface and requires a proven red-to-green transition. Never iterate
@@ -443,6 +458,11 @@ git -C <repo> push -u origin <branch>
 gh pr create --repo amagovpt/<repo> --base develop --head <branch> --title "…" --body "<body>"
 python3 .claude/hooks/ticket-state.py pr LEDG-<n> <repo> <url>
 ```
+
+`pr-body` states which scope authorised the push (`impacted` with its target count, or
+`full`). Leave that line in: a reviewer has to know what was proved locally and what was left
+to CI. Take the CI snapshot below seriously for the same reason — with an impacted local run,
+CI is the first place a cross-module regression can appear.
 
 No `gh`? Push anyway and hand over the compare URL
 `https://github.com/amagovpt/<repo>/compare/develop...<branch>?expand=1` plus the `pr-body`

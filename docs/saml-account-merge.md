@@ -1,4 +1,10 @@
-# SAML Account Auto-Merge — CMD/eIDAS Duplicate Prevention
+# SAML Account Linking — CMD/eIDAS Duplicate Prevention
+
+> **Updated 2026-08-18 (udata-pt#94):** the automatic merge described in earlier
+> versions of this document was removed. A CMD identity is now linked to an
+> existing account **only after the user proves ownership** through the
+> migration wizard. See "Solution — Ownership-Confirmed Linking" below; the
+> CLI commands remain valid for cleaning up duplicates created before #94.
 
 ## Problem
 
@@ -30,31 +36,52 @@ udata user hash-nics             # execute
 
 ---
 
-## Solution — Auto-Merge
+## Solution — Ownership-Confirmed Linking
 
 **File:** `backend/udata/auth/saml/saml_plugin/saml_govpt.py`
 
-### Lookup Order (`_find_or_create_saml_user`)
+### Resolution Order (`_find_or_create_saml_user`)
 
-| Step | Match by     | Description                                                  |
-|------|-------------|--------------------------------------------------------------|
-| 1    | Email       | Exact match against the email provided by the IdP            |
-| 2    | NIC         | Match via `extras.auth_nic` (previous CMD login already linked) |
-| 3    | Name        | Fallback: `first_name` + `last_name` (case-insensitive)     |
-| 4    | No match    | Create new user with placeholder email                       |
+| Step | Match by     | Outcome                                                       |
+|------|-------------|----------------------------------------------------------------|
+| 1    | NIC (hashed, `extras.auth_nic`) | Direct login — the **only** path that logs in without confirmation |
+| 2    | Email (account without a linked NIC) | `migration_candidate` → migration wizard, never auto-linked |
+| 3    | `first_name` + `last_name` (case-insensitive, accounts without NIC) | `migration_candidate`; with homonyms the candidate is `None` and the wizard asks the user to identify the account | 
+| 4    | No match    | New account is created; the redirect carries `cmd_new_account=1` |
 
-### Auto-Merge Logic
+### Linking via the Migration Wizard
 
-When a legacy account is found (any step):
+A `migration_candidate` is redirected to the frontend wizard (`/migrate-account`,
+`?no_email=true` when the IdP provided no email), backed by the
+`/saml/migration/*` endpoints (`check`, `pending`, `search`, `send-code`,
+`confirm`, `skip`). Ownership is proven by one of:
 
-1. If `extras.auth_nic` matches the hashed incoming NIC — normal login, no changes needed.
-2. If `extras.auth_nic` is missing or different (e.g. old encrypted/plain value) — the NIC is re-hashed (HMAC-SHA256) and stored.
-3. The user is logged in with their existing account (preserving roles, datasets, orgs).
-4. Future CMD logins resolve instantly via Step 2 (hashed NIC match).
+- **Email code** — a 6-digit code sent to the account's address, bound to the
+  account it was issued for (re-pointing the candidate invalidates it),
+  5 attempts, expiring;
+- **Full login** — email + password of the account, 5 attempts per session,
+  generic errors to avoid account enumeration.
 
-### Name Matching Safety
+On success the hashed NIC is stored on the account and the **password is
+kept** — both login methods remain valid. Roles, organizations and owned
+content are untouched. Accounts already linked to another CMD identity are
+never candidates.
 
-Step 3 (name match) only triggers when there is **exactly one** user with that first_name + last_name combination. If multiple users share the same name, no match is made and a new account is created (preventing incorrect merges). These cases require **manual resolution** via `udata user merge-saml`.
+### `MIGRATION_MODE_ENABLED` (kill-switch)
+
+Defined in `udata.cfg` (`_env_bool("MIGRATION_MODE_ENABLED", True)`), default
+**True**. It gates the wizard redirect and all `/saml/migration/*` endpoints
+(403 when off). When disabled, a matched account is **never** logged into
+without proof — a new account is created instead (users then accumulate
+duplicates until it is re-enabled).
+
+### Historical: auto-merge (removed in udata-pt#94)
+
+Until #94 the backend auto-merged the NIC into an account matched by email or
+by a unique first+last name, with no ownership proof, and cleared the password
+on merge. This allowed a CMD user to be logged into a homonym's account and
+was removed for security. The CLI commands below remain the tool for cleaning
+up duplicate accounts created during that period.
 
 ---
 
@@ -154,8 +181,10 @@ udata user fix-cmd-duplicates --dry-run
 
 | File | Purpose |
 |------|---------|
-| `backend/udata/auth/saml/saml_plugin/saml_govpt.py` | SAML authentication handler (auto-merge logic) |
-| `backend/udata/core/user/commands.py` | CLI commands `fix-cmd-duplicates` and `merge-saml` |
+| `backend/udata/auth/saml/saml_plugin/saml_govpt.py` | SAML authentication handler (resolution order, migration wizard endpoints) |
+| `backend/udata/core/user/commands.py` | CLI commands `fix-cmd-duplicates`, `merge-saml` and `hash-nics` |
 | `backend/udata/core/user/models.py` | User model (`extras.auth_nic` field) |
-| `backend/udata/settings.py` | `MIGRATION_MODE_ENABLED` flag |
+| `backend/udata.cfg` | `MIGRATION_MODE_ENABLED` flag (default `True`) |
+| `frontend/src/components/login/MigrateAccountClient.tsx` | Migration wizard UI |
+| `backend/udata/tests/frontend/test_saml.py` | Wizard + security regression tests |
 | `docs/migration-plan-of-legacy-accounts-to-CMD-ticket-40.md` | Full migration plan (TICKET-40) |

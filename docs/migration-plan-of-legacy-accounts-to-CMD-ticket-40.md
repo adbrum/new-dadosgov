@@ -1,5 +1,37 @@
 # Plano: Migração de Contas Legadas para CMD (TICKET-40)
 
+> **Estado (2026-08-18):** implementado e integrado em `develop` via
+> [udata-pt#94](https://github.com/amagovpt/udata-pt/pull/94). Este documento é
+> o plano original; a implementação final diverge nos pontos seguintes:
+>
+> - **A password NÃO é apagada ao migrar** (o plano previa `password = None`).
+>   Depois de associar o NIC, a conta fica com os **dois métodos de login
+>   válidos** — o `migration/check` devolve `needs_migration: false` para
+>   contas com NIC, pelo que o login tradicional volta a funcionar.
+> - **O "Fluxo B" (bloqueio do login legado) está ativo**, mas só **antes** da
+>   associação: com `MIGRATION_MODE_ENABLED=True`, um utilizador legado sem
+>   NIC que faça login por email+password é autenticado, verificado via
+>   `/saml/migration/check`, desligado (`logout`) e recebe 403
+>   `migration_required` com o aviso para migrar via CMD/eIDAS
+>   (`frontend/src/app/auth/login/route.ts`).
+> - **Ordem de resolução**: o NIC é verificado **primeiro** (login direto só
+>   com NIC já associado); email e nome+apelido nunca fazem login direto —
+>   produzem sempre `migration_candidate` e passam pelo wizard.
+> - **Match por nome com homónimos** já não cria conta nova diretamente: vai
+>   para o wizard com candidato indefinido e o utilizador identifica a conta
+>   (pesquisa ou login completo).
+> - **Método password do `migration/confirm`** exige login completo
+>   (email + password), não apenas a password do candidato; 5 tentativas,
+>   erro genérico anti-enumeração.
+> - **O código por email fica vinculado à conta-alvo** (re-apontar o candidato
+>   invalida-o) — correção de segurança contra account takeover.
+> - **`MIGRATION_MODE_ENABLED` default `True`** (definido em `udata.cfg`, não
+>   em `settings.py`); desligado, cria conta nova em vez de entrar sem prova.
+> - **URL do wizard**: `/migrate-account` (o segmento `/pages` foi removido
+>   das rotas públicas).
+>
+> Documentação operacional atualizada em `docs/saml-account-merge.md`.
+
 ## Contexto
 
 O portal dados.gov.pt tem utilizadores legados com login email/password. A nova diretriz exige CMD (Chave Móvel Digital) ou eIDAS como únicos métodos de autenticação. Utilizadores legados possuem datasets, organizações e reutilizações vinculados às suas contas. É necessário migrar estes utilizadores sem perda de dados.

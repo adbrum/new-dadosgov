@@ -50,6 +50,38 @@ def root_warnings() -> list[str]:
     return warnings
 
 
+def stale_worktrees() -> list[str]:
+    """Per-ticket trees whose ticket is already closed.
+
+    Each costs about a gigabyte (`.venv`, `node_modules`), and a session that ends before
+    Phase 10 leaves one behind with nothing pointing at it. One is invisible; six are six
+    gigabytes, which is how they were found. Announced here because no other reader of
+    `.claude/worktrees` exists.
+    """
+    trees = os.path.join(ROOT, ".claude", "worktrees")
+    if not os.path.isdir(trees):
+        return []
+    stale = []
+    for name in sorted(os.listdir(trees)):
+        if not os.path.isdir(os.path.join(trees, name)):
+            continue
+        key = name.upper()
+        try:
+            with open(os.path.join(trees, name, ".ticket-worktree.json")) as fh:
+                key = json.load(fh).get("ticket") or key
+        except Exception:
+            pass
+        if not os.path.exists(os.path.join(ROOT, ".claude", "state", f"ticket-{key}.json")):
+            stale.append(key)
+    if not stale:
+        return []
+    return [
+        f"- ARVORES POR LIMPAR ({len(stale)}): {', '.join(stale)} — tickets ja fechados com o"
+        " checkout ainda em disco (~1 GB cada). Limpa com `python3"
+        " .claude/hooks/ticket-worktree.py gc` (recusa-se a apagar trabalho por empurrar)."
+    ]
+
+
 def main() -> None:
     lines = ["Estado git do monorepo dadosgov (hook session-context):"]
     lines.extend(root_warnings())
@@ -105,6 +137,7 @@ def main() -> None:
             # question travels into the session that might be able to answer it.
             lines.append(f"  DECISAO EM DIVIDA: {parked['question']}")
 
+    lines.extend(stale_worktrees())
     lines.append(
         "Fluxo: branch a partir de develop -> PR para develop -> tst -> ppr -> main, "
         "so no(s) repo(s) efetivamente alterado(s)."

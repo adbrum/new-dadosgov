@@ -35,12 +35,17 @@ One ticket per session, and each session needs its own checkout of the repo it t
 ```bash
 python3 .claude/hooks/ticket-worktree.py list                 # what is already claimed
 python3 .claude/hooks/ticket-worktree.py create LEDG-<n> --repos backend
+python3 .claude/hooks/ticket-worktree.py gc                   # reclaim closed tickets' trees
 ```
 
 `claim` refuses a second active ticket in the same repo without a worktree, and says which
 command creates one. The session still runs from the monorepo root — the worktree is a path
 recorded in the ticket's state (`workdir`), not a second project. `ticket-state.py doctor`
 prints where everything resolved to if anything looks off.
+
+A tree costs about a gigabyte, so it is reclaimed with the ticket: `ticket-state.py end`
+(Phase 10) removes this one, `gc` sweeps the ones sessions that died earlier left behind.
+Both refuse over uncommitted or unpushed work rather than deleting it.
 
 Then follow `jira-ticket-workflow` to Phase 10.
 

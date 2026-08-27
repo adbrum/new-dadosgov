@@ -793,6 +793,15 @@ def cmd_status(args):
 
 
 def cmd_end(args):
+    """Archive the state and reclaim the ticket's worktree.
+
+    The tree is part of the ticket, so closing the ticket closes the tree: each one holds a
+    `.venv` or a `node_modules` and costs about a gigabyte, and before this nothing ever
+    deleted them -- they simply piled up, one per ticket, until the disk complained. The
+    removal is the same guarded one as `ticket-worktree.py remove`: it refuses over
+    uncommitted changes or commits that are on no origin ref, and says so instead of
+    deleting. `--keep-worktree` when the tree is deliberately being kept around.
+    """
     state = require(args.key)
     pending = [c for c in state["criteria"] if c["status"] == "pending"]
     if pending and not args.abandon:
@@ -802,10 +811,31 @@ def cmd_end(args):
             file=sys.stderr,
         )
         return 1
+    workdir = state.get("workdir")
     os.rename(path_for(args.key), path_for(args.key) + ".done")
     log(f"END {args.key} abandon={bool(args.abandon)}")
     print(f"Ticket {args.key} fechado (arquivado em ticket-{args.key}.json.done).")
     print("Os guards do ticket voltam a estar inertes.")
+    if workdir and not args.keep_worktree:
+        print()
+        rc, out = sh(
+            ["python3", os.path.join(ROOT, ".claude", "hooks", "ticket-worktree.py"),
+             "remove", args.key],
+            ROOT,
+            600,
+        )
+        print(out)
+        if rc != 0:
+            print(
+                f"A arvore {workdir} ficou por remover. Trata do que esta acima e corre\n"
+                f"  python3 .claude/hooks/ticket-worktree.py remove {args.key}\n"
+                "ou, mais tarde, `ticket-worktree.py gc`, que varre todas as arvores de "
+                "tickets fechados.",
+                file=sys.stderr,
+            )
+    elif workdir:
+        print(f"Arvore mantida em {workdir} (--keep-worktree); limpa-a depois com "
+              f"`ticket-worktree.py remove {args.key}`.")
     return 0
 
 
@@ -1046,7 +1076,12 @@ def cmd_claim(args):
     if unknown:
         print(f"Repos desconhecidos: {', '.join(unknown)} (esperado backend|frontend).", file=sys.stderr)
         return 2
-    workdir = os.path.abspath(args.workdir) if args.workdir else state.get("workdir")
+    if getattr(args, "no_workdir", False) and args.workdir:
+        print("--workdir e --no-workdir sao mutuamente exclusivos.", file=sys.stderr)
+        return 2
+    workdir = None if getattr(args, "no_workdir", False) else (
+        os.path.abspath(args.workdir) if args.workdir else state.get("workdir")
+    )
     if workdir and not os.path.isdir(workdir):
         print(f"A arvore {workdir} nao existe.", file=sys.stderr)
         return 2
@@ -1063,7 +1098,10 @@ def cmd_claim(args):
         )
         return 1
     state["repos"] = repos
-    if workdir:
+    if workdir or getattr(args, "no_workdir", False):
+        # None on purpose when the tree was removed: the ticket goes back to the main
+        # checkout, and everything that resolves a path (suites, lint hook, guards) reads
+        # this field. Leaving a stale path here points them all at a directory that is gone.
         state["workdir"] = workdir
     save(state)
     log(f"CLAIM {args.key} repos={','.join(repos)} workdir={workdir or '-'}")
@@ -1285,6 +1323,11 @@ def main() -> int:
     p.add_argument("key")
     p.add_argument("--repos", required=True, help="backend | frontend | backend,frontend")
     p.add_argument("--workdir", help="the per-ticket worktree, when it has one")
+    p.add_argument(
+        "--no-workdir",
+        action="store_true",
+        help="clear the recorded worktree — the ticket goes back to the main checkout",
+    )
     p.set_defaults(func=cmd_claim)
 
     p = sub.add_parser("park", help="stop this ticket with the decision it awaits written down")
@@ -1300,9 +1343,14 @@ def main() -> int:
     p = sub.add_parser("doctor", help="check that hooks and CLI agree on the harness root")
     p.set_defaults(func=cmd_doctor)
 
-    p = sub.add_parser("end", help="archive the ticket state")
+    p = sub.add_parser("end", help="archive the ticket state and reclaim its worktree")
     p.add_argument("key")
     p.add_argument("--abandon", action="store_true")
+    p.add_argument(
+        "--keep-worktree",
+        action="store_true",
+        help="do not remove the ticket's worktree (it stays until `ticket-worktree.py gc`)",
+    )
     p.set_defaults(func=cmd_end)
 
     args = parser.parse_args()

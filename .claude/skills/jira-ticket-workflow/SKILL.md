@@ -52,8 +52,11 @@ one checkout is one branch, and two backend suites share one Mongo test database
 - **The session still runs from the monorepo root.** The worktree is a path in the ticket's
   state, not a second project — the guards, the suites and the lint hook all read it from
   there. `ticket-state.py doctor` prints where everything resolved to.
-- `ticket-worktree.py list` shows every ticket tree and whether it is dirty; `remove` refuses
-  while work is uncommitted or unpushed.
+- **A tree is created with the ticket and dies with it.** Each one carries its own `.venv`
+  or `node_modules` — about a gigabyte — so `ticket-state.py end` at Phase 10 removes it,
+  and `ticket-worktree.py gc` sweeps whatever earlier sessions left behind. Neither can
+  delete work: a tree with uncommitted changes, or with commits on no `origin` ref, is kept
+  and the reason printed. `list` shows every tree and which are already reclaimable.
 
 ## Language — one rule
 
@@ -421,6 +424,12 @@ in `--watch`, which pins this session for the whole run doing nothing.
 Build the criteria and review sections from `pr-body`/`status`, never from memory. Then close
 the state: `python3 .claude/hooks/ticket-state.py end LEDG-<n>`.
 
+`end` also **removes this ticket's worktree**, if it had one — the PR is open, so the commits
+are on `origin` and the checkout has nothing left to hold. It refuses if anything would be
+lost and says what; then it is a real question for the user, not something to force. Say in
+the report which tree was reclaimed, and run `ticket-worktree.py gc` when the session start
+announced trees left over from tickets that never reached this phase.
+
 ---
 
 ## Failure modes — decided in advance, not improvised
@@ -447,6 +456,10 @@ the state: `python3 .claude/hooks/ticket-state.py end LEDG-<n>`.
   order by a well-meaning reviewer.
 - **A point blocked on the user.** `point blocked --reason`, continue with independent points,
   otherwise stop with the question stated.
+- **The session dies before Phase 10.** Its worktree stays on disk with nothing pointing at
+  it — a gigabyte per ticket, and they add up unnoticed. The next session start names them;
+  `ticket-worktree.py gc` collects the ones whose tickets are closed and whose work is
+  pushed, and keeps the rest with the reason. Never `--force` a tree you did not check.
 
 ## Rules
 

@@ -8,9 +8,12 @@ Reads .claude/state/ticket-*.json (written only by ticket-state.py) and turns th
     "Phase 4 is an approval gate" real, and what gives `replan` teeth;
   * a working branch must be <type>/ledg-<n>-<kebab> and carry the active ticket's number;
   * a commit message must be Conventional, carry `Refs: LEDG-<n>`, and no AI attribution;
-  * `git push` on a ticket branch is refused until lint+tests ran green on THIS HEAD, the
-    CHANGELOG gained an entry (and only gained), every acceptance criterion is resolved,
-    every commit message in the range is clean, and the phase 7.5 review was recorded.
+  * `git push` on a ticket branch is refused until lint+tests ran green over the code at
+    HEAD (a later commit that touches only the CHANGELOG or docs does not invalidate that
+    green -- it cannot change a test outcome, and the CHANGELOG is itself required before
+    the push), the CHANGELOG gained an entry (and only gained), every acceptance criterion
+    is resolved, every commit message in the range is clean, and the phase 7.5 review was
+    recorded.
 
 Inert when no active ticket state exists, so ordinary work outside /ticket is untouched.
 `ticket-state.py pause <KEY>` makes it inert on purpose.
@@ -37,14 +40,18 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 
-from harness_patterns import ATTRIBUTION, CONVENTIONAL  # local: sits beside this hook
+from harness_patterns import (  # local: sits beside this hook
+    ATTRIBUTION,
+    CONVENTIONAL,
+)
+from harness_patterns import range_base as patterns_range_base
+from harness_patterns import source_drift
 from harness_root import harness_root
 
 ROOT = harness_root()
 STATE_DIR = os.path.join(ROOT, ".claude", "state")
 LOG = os.path.join(STATE_DIR, "ticket.log")
 SUBMODULES = ("backend", "frontend")
-ENV_BRANCHES = ("develop", "tst", "ppr", "main")
 
 BRANCH_RE = re.compile(r"^(feature|bugfix|hotfix|chore|release)/ledg-(\d+)-[a-z0-9][a-z0-9-]*$")
 # Deliberately narrow: a bare "claude" or "anthropic" would reject a legitimate commit that
@@ -205,19 +212,7 @@ def unapproved(states: list) -> list:
 
 def range_base(sub_path: str):
     """The environment branch this work was cut from — the closest one, not always develop."""
-    best, best_len = None, None
-    for env in ENV_BRANCHES:
-        rc, base = sh(["git", "merge-base", "HEAD", f"origin/{env}"], sub_path)
-        base = base.strip()
-        if rc != 0 or not base:
-            continue
-        rc, count = sh(["git", "rev-list", "--count", f"{base}..HEAD"], sub_path)
-        if rc != 0 or not count.strip().isdigit():
-            continue
-        n = int(count.strip())
-        if best_len is None or n < best_len:
-            best, best_len = base, n
-    return best
+    return patterns_range_base(sh, sub_path)
 
 
 def check_commit_messages(sub_path: str, base: str, ticket: str) -> list:
@@ -305,14 +300,27 @@ def check_push(state: dict, repo: str, sub_path: str) -> None:
             f"python3 .claude/hooks/ticket-state.py verify {key} {repo}"
         )
     elif verified.get("head") != head:
+        # Not every commit can change a test outcome. The CHANGELOG entry is *required*
+        # before the push, so pinning the green to the exact sha charged a full suite for
+        # writing it — every ticket, and again for every doc-only fix from the review. Ask
+        # what actually changed instead, and only deny on source.
+        drift = source_drift(sh, sub_path, verified["head"], head)
+        if drift is None:
+            problems.append(
+                f"o ultimo verde foi em {verified['head'][:12]}, o HEAD e {head[:12]} e nao "
+                "consegui ler o diff entre os dois — sem isso nao distingo um commit de "
+                f"CHANGELOG de um commit de codigo. Corre: ticket-state.py verify {key} {repo}"
+            )
+        elif drift:
+            listed = ", ".join(drift[:5]) + (f" (+{len(drift) - 5})" if len(drift) > 5 else "")
+            problems.append(
+                f"o verde foi em {verified['head'][:12]} e desde entao mudou codigo: {listed}. "
+                f"Corre outra vez: ticket-state.py verify {key} {repo}"
+            )
+    if verified and verified.get("scope") == "narrow":
         problems.append(
-            f"o ultimo verde foi em {verified['head'][:12]} e o HEAD e {head[:12]} — houve "
-            f"commits desde entao. Corre outra vez: ticket-state.py verify {key} {repo}"
-        )
-    elif verified.get("scope") == "narrow":
-        problems.append(
-            "o ultimo verde foi de uma corrida NARROW. Antes do push corre a suite completa: "
-            f"ticket-state.py verify {key} {repo} (sem caminhos)"
+            "o ultimo verde foi de uma corrida NARROW (caminhos dados a mao). Antes do push "
+            f"corre o ambito do diff: ticket-state.py verify {key} {repo} --impacted"
         )
 
     base = range_base(sub_path)

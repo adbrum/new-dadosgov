@@ -386,6 +386,11 @@ this phase decides is **when** each level runs:
 - **Start it in the background** (`Bash(run_in_background: true)`) and, while it runs, write
   the CHANGELOG entries, draft the PR body and launch the Phase 7.5 review. The claim file
   records that process's pid, so serialisation between sessions still holds.
+- **The full run uses 4 xdist workers, where CI uses 2** — the one deliberate divergence,
+  because it is measurably stable here (133s green, three runs) while CI's 4-core runner is
+  not the machine this runs on. Above 4 there is no time left to buy and the Mongo instance
+  starts refusing connections (`-n 8`: 125s and 36 failures, all `AutoReconnect`), so do not
+  raise it. `DADOSGOV_PYTEST_WORKERS=2` puts a session back on CI's exact number.
 - **A local red must mean what CI will say**, and two things used to stop that being true.
   `verify` now handles both, so do not work around them by hand: it runs with CI's
   `UDATA_SETTINGS=/nonexistent/udata.cfg` (the tracked `udata.cfg` is a *deployment* config

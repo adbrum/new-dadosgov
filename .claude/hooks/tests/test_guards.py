@@ -383,7 +383,20 @@ def load_module(name: str, filename: str):
     return module
 
 
-SCOPE_CASES = 16
+SCOPE_CASES = 18
+
+
+def _with_env(module, key: str, value: str):
+    """Read module.pytest_workers() with one environment variable set."""
+    before = os.environ.get(key)
+    os.environ[key] = value
+    try:
+        return module.pytest_workers()
+    finally:
+        if before is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = before
 
 
 def run_scope_group() -> int:
@@ -453,8 +466,15 @@ def run_scope_group() -> int:
           (reason, tests), (None, {"udata/tests/dataset/test_proxy_download.py"}))
     # The gate is only worth reading if a local red means what CI will say, so the runner
     # shape and the settings CI uses are asserted, not assumed.
-    check("a suite mantem a forma do CI",
-          ts.SUITES["backend"]["test"][-3:], ["2", "--dist", "loadscope"])
+    # Not CI's worker count (4 against CI's 2, measured stable x3 where -n 8 is not), but
+    # everything else is CI's, and the divergence has to stay overridable and bounded.
+    check("a suite corre com xdist e loadscope",
+          ts.SUITES["backend"]["test"][-4:-2] + ts.SUITES["backend"]["test"][-1:],
+          ["-n", "4", "loadscope"])
+    check("DADOSGOV_PYTEST_WORKERS manda",
+          _with_env(ts, "DADOSGOV_PYTEST_WORKERS", "2"), "2")
+    check("um valor absurdo cai na omissao",
+          _with_env(ts, "DADOSGOV_PYTEST_WORKERS", "banana"), "4")
     check("a suite completa corre o pacote, como o CI",
           ts.SUITES["backend"]["target_all"], ["udata"])
     # The positional belongs to the full run only. With it baked into the runner, a scoped

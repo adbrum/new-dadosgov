@@ -60,6 +60,16 @@ REASON_CODES = (
     "other",  # anything else -- the question and the diagnosis carry the weight
 )
 
+def pytest_workers() -> str:
+    """How many xdist workers the backend suite runs with. See the SUITES comment for why 4.
+
+    An env var and not a flag: the number is a property of the machine, not of the ticket, and
+    a session that needs CI's exact number wants it for every run in that session.
+    """
+    raw = (os.environ.get("DADOSGOV_PYTEST_WORKERS") or "").strip()
+    return raw if raw.isdigit() and 0 <= int(raw) <= 16 else "4"
+
+
 # Backend paths with no "area" of their own: everything imports them, so a change here can
 # break any test and the impacted resolver must give up and run the whole suite. A superset
 # is the safe direction to be wrong in.
@@ -92,9 +102,22 @@ SUITES = {
             {"cmd": ["uv", "run", "ruff", "format", "--check"], "paths": True},
         ],
         "lint_exts": (".py",),
-        # `-n 2 --dist loadscope udata -p no:sugar`, the command CI runs
-        # (`backend/tasks/__init__.py`, `inv test --ci`). The worker count stays CI's: a local
-        # full run is then wrong in the same way CI is, which is what makes it worth reading.
+        # CI's command (`backend/tasks/__init__.py`, `inv test --ci`) with one deliberate
+        # divergence: the worker count. CI pins `-n 2` for a 4-core runner; this machine class
+        # has more, and the suite is measurably stable at 4. Everything else is CI's, so a
+        # local red still means what CI will say.
+        #
+        # Measured on develop, whole suite, test databases dropped before each run:
+        #
+        #   -n 2   236s   green            (CI's number)
+        #   -n 4   133s   green x3         (132.6 / 132.6 / 134.8 -- adopted)
+        #   -n 8   125s   36 failures      pymongo AutoReconnect: the Mongo instance runs out
+        #                                  of connections, not the CPU
+        #
+        # Note there is no time left to buy above 4 (133s -> 125s) -- the ceiling is Mongo, so
+        # more workers only trades correctness for nothing. If a machine ever sits closer to
+        # that ceiling the failure is recognisable rather than silent (AutoReconnect, connection
+        # closed), and DADOSGOV_PYTEST_WORKERS=2 puts the run back on CI's number.
         #
         # Two things measured here (16 cores) that this gate got wrong and now handles:
         #
@@ -116,7 +139,7 @@ SUITES = {
         # Deliberately not `inv test --ci` itself, whose i18nc pre-task compiles translations
         # into .mo files that are not git-ignored -- that would dirty the very working tree
         # this gate inspects.
-        "test": ["uv", "run", "pytest", "-p", "no:sugar", "-n", "2", "--dist", "loadscope"],
+        "test": ["uv", "run", "pytest", "-p", "no:sugar", "-n", pytest_workers(), "--dist", "loadscope"],
         # CI passes the package explicitly; a scoped run replaces it with the resolved paths
         # and changes nothing else. Measured on a real ticket's impacted set (6 files, 190
         # tests): 42s at -n 2 against 69s in series, so a scoped run shards too -- with the

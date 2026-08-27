@@ -31,7 +31,13 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 
-from harness_patterns import CONVENTIONAL, FROZEN_PATH  # local: sits beside this hook
+from harness_patterns import (  # local: sits beside this hook
+    CONVENTIONAL,
+    FROZEN_PATH,
+    changed_paths,
+    range_base,
+    source_drift,
+)
 from harness_root import FILE_ROOT, candidates, harness_root
 
 ROOT = harness_root()
@@ -54,27 +60,84 @@ REASON_CODES = (
     "other",  # anything else -- the question and the diagnosis carry the weight
 )
 
+# Backend paths with no "area" of their own: everything imports them, so a change here can
+# break any test and the impacted resolver must give up and run the whole suite. A superset
+# is the safe direction to be wrong in.
+WIDE_BACKEND = (
+    "udata/api/",
+    "udata/app.py",
+    "udata/models/",
+    "udata/mongo/",
+    "udata/settings.py",
+    "udata/core/storages/",
+    "udata/tests/__init__.py",
+    "udata/tests/helpers.py",
+    "udata/tests/plugin.py",
+    "udata/tests/models.py",
+    "udata/tasks.py",
+    "tasks/",
+    "pyproject.toml",
+    "uv.lock",
+    "udata.cfg",
+)
+
 SUITES = {
     "backend": {
         "dir": os.path.join(ROOT, "backend"),
+        # `--extend-select I` is what CI runs (backend/.github/workflows/tests.yml). Without
+        # it here, import order was the one thing a green local gate could not see, so it
+        # failed on GitHub *after* the push it had just authorised.
         "lint": [
-            ["uv", "run", "ruff", "check", "."],
-            ["uv", "run", "ruff", "format", "--check", "."],
+            {"cmd": ["uv", "run", "ruff", "check", "--extend-select", "I"], "paths": True},
+            {"cmd": ["uv", "run", "ruff", "format", "--check"], "paths": True},
         ],
-        # -n 2 --dist loadscope, the same shape CI runs: about 4 minutes instead of 21.
-        # loadscope keeps a class or module on one worker, and the repo's pytest plugin
-        # gives each worker its own Mongo database, so the split is safe. Deliberately not
-        # `inv test --ci`, whose i18nc pre-task compiles translations into .mo files that
-        # are not git-ignored -- that would dirty the very working tree this gate inspects.
+        "lint_exts": (".py",),
+        # `-n 2 --dist loadscope`, byte for byte the shape CI runs (`backend/tasks/__init__.py`
+        # `inv test --ci`): ~4 minutes instead of ~21 in series.
+        #
+        # Do NOT raise the worker count to fit the machine. Measured here on 16 cores:
+        #
+        #   -n 2 --dist loadscope   627s, 55 failures
+        #   -n 8 --dist loadscope   202s, 61 failures
+        #   -n 0 (this file's serial selection of the same tests)   green
+        #
+        # This suite is not isolated across xdist workers. `--dist loadscope` splits by class,
+        # and the failures are all "the app wrote to one database and the assertion counted
+        # another" (`Dataset.objects.count() == 0` right after a 201), so more workers means
+        # finer splitting means more manufactured failures. `udata/tests/apiv2/test_topics.py`
+        # is the cheapest demonstration: 38 passed at `-n 0`, 7 failed at `-n 2 --dist
+        # loadscope` with nothing else running. Not caused by `udata.cfg` -- setting
+        # UDATA_SETTINGS to a nonexistent path, the way CI does, changes nothing.
+        #
+        # So the number stays CI's: a local full run is then wrong in the same way CI is,
+        # which is the only property that makes it worth reading at all.
+        #
+        # Deliberately not `inv test --ci`, whose i18nc pre-task compiles translations into
+        # .mo files that are not git-ignored -- that would dirty the very working tree this
+        # gate inspects.
         "test": ["uv", "run", "pytest", "-n", "2", "--dist", "loadscope"],
+        # An impacted or narrow selection is small, and a small selection is exactly where
+        # sharding manufactures failures: the classes that the full run happens to keep
+        # together get split across workers. Serial, therefore -- and at this size serial is
+        # also faster (no per-worker app boot).
+        "test_serial": ["uv", "run", "pytest", "-p", "no:cacheprovider"],
         # Two pytest runs in backend/ share the Mongo test databases and fake regressions
         # for each other. Never start a second one.
         "exclusive": "pytest",
     },
     "frontend": {
         "dir": os.path.join(ROOT, "frontend"),
-        "lint": [["npm", "run", "lint"], ["npx", "tsc", "--noEmit"]],
+        # `npm run lint` is `eslint .` over the whole app; the PostToolUse hook already
+        # linted every file as it was written, and CI has no eslint job at all -- so this is
+        # the only eslint gate and it stays, scoped to the diff. `tsc` takes no paths: a
+        # project-wide type check is the point of it.
+        "lint": [
+            {"cmd": ["npx", "eslint"], "paths": True},
+            {"cmd": ["npx", "tsc", "--noEmit"], "paths": False},
+        ],
+        "lint_exts": (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"),
         "test": ["npx", "vitest", "run"],
+        "test_serial": ["npx", "vitest", "run"],
         "exclusive": None,
     },
 }
@@ -563,6 +626,184 @@ def release_suite_claim(repo: str, suffix: str = "") -> None:
         pass
 
 
+# Filenames every module has. As glob tokens they match test files across unrelated modules
+# (`dataservices/models.py` pulling in `core/post/tests/test_models.py`), and they add
+# nothing: the module directory rules already cover the module they belong to.
+GENERIC_STEMS = {
+    "api",
+    "api_fields",
+    "apiv2",
+    "commands",
+    "constants",
+    "factories",
+    "forms",
+    "models",
+    "permissions",
+    "rdf",
+    "search",
+    "signals",
+    "tasks",
+    "utils",
+    "views",
+}
+
+
+def tests_for_module(path: str, workdir: str) -> set:
+    """Test paths that plausibly cover a changed backend source file.
+
+    Three ways in, because the repo uses all three: `udata/tests/<mod>/`,
+    `udata/core/<mod>/tests/`, and loose `udata/tests/test_<something>.py` files whose name
+    carries the area (`udata/auth/saml/...` is covered by `udata/tests/frontend/test_saml.py`,
+    which no directory rule would ever find). Over-selecting costs seconds; under-selecting
+    costs a red CI, so every rule that fires is added, not the first one that matches.
+    """
+    found, tokens = set(), []
+    parts = path.split("/")
+    stem = os.path.splitext(parts[-1])[0]
+
+    def add_dir(candidate: str) -> None:
+        if os.path.isdir(os.path.join(workdir, candidate)):
+            found.add(candidate)
+
+    if len(parts) >= 3 and parts[:2] == ["udata", "core"]:
+        mod = parts[2]
+        tokens.append(mod)
+        add_dir(f"udata/tests/{mod}")
+        add_dir(f"udata/core/{mod}/tests")
+        if mod.endswith("s"):  # `dataservices/` is tested by `udata/tests/dataservice/`
+            tokens.append(mod[:-1])
+            add_dir(f"udata/tests/{mod[:-1]}")
+        if stem.startswith("api"):  # serialization lives half in the module, half in the API
+            add_dir("udata/tests/api")
+            add_dir("udata/tests/apiv2")
+    elif len(parts) >= 2 and parts[0] == "udata":
+        pkg = parts[1]
+        tokens.append(pkg)
+        add_dir(f"udata/{pkg}/tests")
+        add_dir(f"udata/tests/{pkg}")
+
+    tokens += parts[1:-1] + ([stem] if stem not in GENERIC_STEMS else [])
+    for token in {t for t in tokens if len(t) > 3 and t not in GENERIC_STEMS}:
+        found |= set(
+            glob.glob(f"udata/**/test_*{token}*.py", root_dir=workdir, recursive=True)
+        )
+    return found
+
+
+def impacted_backend(changed: list, workdir: str):
+    """(test paths, reason the whole suite is needed instead)."""
+    tests = set()
+    for path in changed:
+        if any(path == wide or path.startswith(wide) for wide in WIDE_BACKEND):
+            return set(), f"{path} e infra partilhada (WIDE_BACKEND)"
+        if path.endswith(".py") and FROZEN_PATH.search(path):
+            tests.add(path)  # a changed test runs itself
+            continue
+        if not path.endswith(".py"):
+            # A mail template, a translation catalogue, a JSON fixture: no module, so no
+            # mapping. Guessing here is how an impacted run silently proves nothing.
+            return set(), f"{path} nao e Python e nao tem mapeamento de testes"
+        tests |= tests_for_module(path, workdir)
+    tests = {t for t in tests if os.path.exists(os.path.join(workdir, t))}
+    dirs = {t for t in tests if os.path.isdir(os.path.join(workdir, t))}
+    tests = {t for t in tests if not any(t != d and t.startswith(d + "/") for d in dirs)}
+    if not tests:
+        return set(), "o diff nao resolveu nenhum teste"
+    return tests, None
+
+
+def resolve_run(args, cfg, workdir):
+    """Decide, before anything runs, which lint and which tests this verify will execute.
+
+    Shared by `--dry-run` and the real run so the two can never disagree about what
+    "impacted" means.
+    """
+    repo = args.repo
+    mode = "narrow" if args.scope else ("impacted" if args.impacted else "full")
+    base = range_base(sh, workdir)
+    changed = changed_paths(sh, workdir, base) if base else None
+    notes, full_reason = [], None
+
+    # Lint: the files the branch actually touched. The PostToolUse hook already linted each
+    # one as it was written; CI still runs both linters repo-wide, so drift cannot land.
+    lint_paths = None
+    if changed is not None:
+        lint_paths = sorted(
+            p
+            for p in changed
+            if p.endswith(cfg["lint_exts"]) and os.path.exists(os.path.join(workdir, p))
+        )
+    else:
+        notes.append("nao consegui ler o diff (base em falta?) — lint repo-wide, suite completa")
+
+    lint_cmds = []
+    for step in cfg["lint"]:
+        if not step["paths"]:
+            lint_cmds.append(list(step["cmd"]))
+            continue
+        if lint_paths is None:
+            lint_cmds.append(list(step["cmd"]) + ["."])
+        elif lint_paths:
+            lint_cmds.append(list(step["cmd"]) + lint_paths)
+
+    test_cmd = list(cfg["test"])
+    impacted_files = []
+    if mode in ("narrow", "impacted"):
+        test_cmd = list(cfg["test_serial"])
+    if mode == "narrow":
+        test_cmd += list(args.scope)
+    elif mode == "impacted":
+        if changed is None or not base:
+            mode, full_reason = "full", "sem base de comparacao"
+            test_cmd = list(cfg["test"])
+        elif repo == "backend":
+            tests, full_reason = impacted_backend(changed, workdir)
+            if full_reason:
+                mode = "full"
+                test_cmd = list(cfg["test"])
+            else:
+                impacted_files = sorted(tests)
+                test_cmd += impacted_files
+        else:
+            # vitest walks the module graph itself: --changed <base> selects the tests that
+            # import what the branch touched, which is more than a path rule could infer.
+            impacted_files = [f"--changed {base[:12]}"]
+            test_cmd += ["--changed", base, "--passWithNoTests"]
+
+    return {
+        "mode": mode,
+        "base": base,
+        "changed": changed,
+        "lint_cmds": lint_cmds,
+        "lint_paths": lint_paths,
+        "test_cmd": test_cmd,
+        "impacted_files": impacted_files,
+        "full_reason": full_reason,
+        "notes": notes,
+    }
+
+
+def print_plan(plan: dict) -> None:
+    print(f"AMBITO: {plan['mode']}", end="")
+    if plan["full_reason"]:
+        print(f"  (impacted recusado: {plan['full_reason']})")
+    else:
+        print()
+    if plan["base"]:
+        print(f"base: {plan['base'][:12]}")
+    if plan["lint_paths"] is not None:
+        print(f"lint: {len(plan['lint_paths'])} ficheiro(s) alterado(s)")
+    for note in plan["notes"]:
+        print(f"nota: {note}")
+    for cmd in plan["lint_cmds"]:
+        shown = cmd if len(cmd) <= 8 else cmd[:8] + [f"... (+{len(cmd) - 8})"]
+        print(f"$ {' '.join(shown)}")
+    shown = plan["test_cmd"]
+    if len(shown) > 14:
+        shown = shown[:14] + [f"... (+{len(shown) - 14})"]
+    print(f"$ {' '.join(shown)}")
+
+
 def cmd_verify(args):
     state = require(args.key)
     cfg = SUITES[args.repo]
@@ -574,6 +815,11 @@ def cmd_verify(args):
             file=sys.stderr,
         )
         return 2
+
+    plan = resolve_run(args, cfg, workdir)
+    if args.dry_run:
+        print_plan(plan)
+        return 0
 
     env, suffix = suite_isolation(state, args.repo, workdir)
     if env:
@@ -611,51 +857,54 @@ def cmd_verify(args):
         return 2
 
     try:
-        return run_suites(args, state, cfg, workdir, head, env)
+        return run_suites(args, state, plan, workdir, head, env)
     finally:
         if exclusive:
             release_suite_claim(args.repo, suffix)
 
 
-def run_suites(args, state, cfg, workdir, head, env=None):
+def run_suites(args, state, plan, workdir, head, env=None):
     problems = []
-    for lint_cmd in cfg["lint"]:
-        print(f"$ {' '.join(lint_cmd)}")
+    print_plan(plan)
+    for lint_cmd in plan["lint_cmds"]:
         code, out = sh(lint_cmd, workdir, 900, env)
         if code != 0:
             tail = "\n    ".join(out.strip().splitlines()[-10:])
-            problems.append(f"$ {' '.join(lint_cmd)} -> {code}\n    {tail}")
+            problems.append(f"$ {' '.join(lint_cmd[:6])} … -> {code}\n    {tail}")
 
-    test_cmd = cfg["test"] + (args.scope or [])
-    print(f"$ {' '.join(test_cmd)}")
-    code, out = sh(test_cmd, workdir, env=env)
+    code, out = sh(plan["test_cmd"], workdir, env=env)
     if code != 0:
         detail = {124: "timeout", 127: "runner nao encontrado"}.get(code, f"exit {code}")
         tail = "\n    ".join(out.strip().splitlines()[-15:])
         problems.append(f"suite -> {detail}\n    {tail}")
 
     ok = not problems
+    mode = plan["mode"]
     if ok:
         state["verified"][args.repo] = {
             "head": head,
-            "scope": "narrow" if args.scope else "full",
+            "scope": mode,
+            "files": plan["impacted_files"],
+            "full_reason": plan["full_reason"],
             "at": datetime.now(timezone.utc).isoformat(),
         }
         if state["phase"] == "implementing":
             state["phase"] = "verified"
         save(state)
-    log(
-        f"VERIFY {args.key} repo={args.repo} head={head[:12]} ok={ok} "
-        f"scope={'narrow' if args.scope else 'full'}"
-    )
+    log(f"VERIFY {args.key} repo={args.repo} head={head[:12]} ok={ok} scope={mode}")
     print("\n" + "=" * 66)
     print("VERDICTO:", "VERDE" if ok else "VERMELHO", f"({args.repo} @ {head[:12]})")
     print("=" * 66)
     for p in problems:
         print(f"  PROBLEMA: {p}")
     if ok:
-        print(f"  Registado. O gate de push aceita este HEAD ({head[:12]}) — e so este:")
-        print("  qualquer commit novo invalida o verde e obriga a correr `verify` outra vez.")
+        print(f"  Registado ({mode}). O gate de push aceita este verde a partir de {head[:12]}:")
+        print("  commits de CHANGELOG/docs nao o invalidam, um commit de codigo sim.")
+        if mode == "impacted":
+            print(
+                f"  Ambito local: {len(plan['impacted_files'])} alvo(s) do diff. A suite "
+                "completa e a do CI — segue o PR com /watch-pr."
+            )
     else:
         print(
             "\n  O gate de push vai recusar ate isto correr verde neste HEAD. Se a falha "
@@ -719,6 +968,19 @@ def cmd_pr_body(args):
             if p.get("proof"):
                 line += f" — proof: {p['proof']}"
             print(line)
+    verified = {r: v for r, v in (state.get("verified") or {}).items() if v}
+    if verified:
+        print("\n### Local verification")
+        for repo, v in sorted(verified.items()):
+            scope = v.get("scope", "full")
+            if scope == "impacted":
+                n = len(v.get("files") or [])
+                print(
+                    f"- `{repo}`: lint + the {n} test target(s) the diff can break, green at "
+                    f"`{v['head'][:12]}`. The full suite for this branch runs in CI."
+                )
+            else:
+                print(f"- `{repo}`: lint + the full suite, green at `{v['head'][:12]}`.")
     review = state.get("review", {})
     if review.get("ran") and (review.get("accepted") or review.get("rejected")):
         print("\n### Independent review")
@@ -768,6 +1030,30 @@ def cmd_pause(args):
     return 0
 
 
+def verified_line(state: dict, repo: str) -> str:
+    """One line on what proved this repo, and whether it still holds at HEAD."""
+    verified = state.get("verified", {}).get(repo)
+    if not verified:
+        return f"{repo}: sem verde registado"
+    scope = verified.get("scope", "full")
+    detail = f"{repo}: verde {scope} em {verified['head'][:12]}"
+    if scope == "impacted":
+        detail += f" ({len(verified.get('files') or [])} alvo(s); suite completa = CI)"
+    workdir = repo_dir(state, repo)
+    rc, head = sh(["git", "rev-parse", "HEAD"], workdir, 30)
+    head = head.strip()
+    if rc != 0 or not head:
+        return detail + " — HEAD ilegivel"
+    if head == verified["head"]:
+        return detail + " — vale para o HEAD atual"
+    drift = source_drift(sh, workdir, verified["head"], head)
+    if drift is None:
+        return detail + " — nao consegui comparar com o HEAD atual"
+    if not drift:
+        return detail + f" — ainda vale em {head[:12]} (so mudaram ficheiros inertes)"
+    return detail + f" — INVALIDADO por {len(drift)} ficheiro(s) de codigo: {', '.join(drift[:3])}"
+
+
 def cmd_status(args):
     key = getattr(args, "key", None)
     files = [path_for(key)] if key else sorted(glob.glob(os.path.join(STATE_DIR, "ticket-*.json")))
@@ -784,6 +1070,9 @@ def cmd_status(args):
         found = True
         if key:
             print(summary_line(state) + "\n")
+            for repo in state.get("repos") or sorted(state.get("verified", {})):
+                print("  " + verified_line(state, repo))
+            print()
             print(json.dumps(state, indent=2, ensure_ascii=False))
         else:
             print("  " + summary_line(state))
@@ -1280,6 +1569,16 @@ def main() -> int:
     p.add_argument("key")
     p.add_argument("repo", choices=sorted(SUITES))
     p.add_argument("scope", nargs="*", help="optional test paths to narrow the run")
+    p.add_argument(
+        "--impacted",
+        action="store_true",
+        help="run only what the diff against the environment branch can break (pre-push default)",
+    )
+    p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="print the lint and test commands this would run, and run nothing",
+    )
     p.set_defaults(func=cmd_verify)
 
     p = sub.add_parser("review", help="record the phase 7.5 review outcome")

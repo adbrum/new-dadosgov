@@ -138,6 +138,12 @@ def backend_branch() -> str:
     return current_branch(BE)
 
 
+def backend_head() -> str:
+    return subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=BE, capture_output=True, text=True
+    ).stdout.strip()
+
+
 # Each case carries its own state, because what is being tested IS the state->decision map.
 def TICKET_CASES() -> list:
     on_branch = ticket_state(branch={"backend": backend_branch()})
@@ -300,7 +306,7 @@ def PLAN_AUDIT_CASES() -> list:
         ),
         (
             "new symbol marked with +",
-            plan(f"`{NOTIF}` (`+cleanup_discussion_notifications`)"),
+            plan(f"`{NOTIF}` (`+purge_orphan_discussion_notifications`)"),
             "PASS",
             None,
         ),
@@ -312,7 +318,7 @@ def PLAN_AUDIT_CASES() -> list:
         ),
         (
             "symbol that does not exist and is not marked new",
-            plan(f"`{NOTIF}` (`cleanup_discussion_notifications`)"),
+            plan(f"`{NOTIF}` (`purge_orphan_discussion_notifications`)"),
             "FAIL",
             "nao encontrei",
         ),
@@ -366,6 +372,125 @@ def run_group(title: str, hook: str, cases: list, with_lock: bool) -> int:
     return failures
 
 
+def load_module(name: str, filename: str):
+    """Import a hyphenated hook as a module, so its pure functions can be tested directly."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(name, os.path.join(HOOKS, filename))
+    module = importlib.util.module_from_spec(spec)
+    sys.path.insert(0, HOOKS)
+    spec.loader.exec_module(module)
+    return module
+
+
+SCOPE_CASES = 14
+
+
+def run_scope_group() -> int:
+    """The two decisions that made /ticket slow: what invalidates a green, and what to run.
+
+    Both are pure enough to test directly, and both are load-bearing: a green that survives
+    too much authorises a push over untested code, and a resolver that selects too little
+    proves nothing while looking green.
+    """
+    print("\n--- ambito do verde e do impacted ---")
+    failures = 0
+    patterns = load_module("harness_patterns", "harness_patterns.py")
+    ts = load_module("ticket_state", "ticket-state.py")
+
+    def check(label: str, got, expected) -> None:
+        nonlocal failures
+        ok = got == expected
+        failures += 0 if ok else 1
+        print(f"  {'ok  ' if ok else 'FALHA'} {label}" + ("" if ok else f"  (got={got!r})"))
+
+    # A throwaway repo, so the "what changed between these two commits" plumbing is exercised
+    # for real instead of mocked.
+    tmp = tempfile.mkdtemp(prefix="dadosgov-scope-")
+    def git(*args):
+        subprocess.run(["git", *args], cwd=tmp, capture_output=True, text=True, check=False)
+    git("init", "-q")
+    git("config", "user.email", "t@t.t")
+    git("config", "user.name", "t")
+    open(os.path.join(tmp, "foo.py"), "w").write("x = 1\n")
+    git("add", "-A"); git("commit", "-qm", "c1")
+    c1 = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmp, capture_output=True, text=True).stdout.strip()
+    open(os.path.join(tmp, "CHANGELOG.md"), "w").write("- entry\n")
+    open(os.path.join(tmp, "docs"), "w").close()
+    os.remove(os.path.join(tmp, "docs"))
+    git("add", "-A"); git("commit", "-qm", "c2")
+    c2 = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmp, capture_output=True, text=True).stdout.strip()
+    open(os.path.join(tmp, "foo.py"), "w").write("x = 2\n")
+    git("add", "-A"); git("commit", "-qm", "c3")
+    c3 = subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmp, capture_output=True, text=True).stdout.strip()
+
+    def run(cmd, cwd):
+        p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+        return p.returncode, p.stdout + p.stderr
+
+    check("um commit so de CHANGELOG nao invalida o verde",
+          patterns.source_drift(run, tmp, c1, c2), [])
+    check("um commit de codigo invalida o verde",
+          patterns.source_drift(run, tmp, c2, c3), ["foo.py"])
+    check("um sha ilegivel nao vale como 'nada mudou'",
+          patterns.source_drift(run, tmp, "0" * 40, c3), None)
+    check(".github/workflows nao e inerte (decide o que o CI corre)",
+          patterns.non_inert([".github/workflows/tests.yml"]), [".github/workflows/tests.yml"])
+    shutil.rmtree(tmp, ignore_errors=True)
+
+    # The resolver, against the real backend tree.
+    wide, reason = ts.impacted_backend(["udata/api/limits.py"], BE)
+    check("infra partilhada escala para a suite completa", (wide, bool(reason)), (set(), True))
+    _, reason = ts.impacted_backend(["udata/templates/mail/confirm.html"], BE)
+    check("ficheiro nao-Python sem mapeamento escala para completa", bool(reason), True)
+    _, reason = ts.impacted_backend([], BE)
+    check("diff vazio nunca e um verde", bool(reason), True)
+    tests, reason = ts.impacted_backend(["udata/core/dataset/api.py"], BE)
+    check("um modulo do core resolve os seus testes",
+          (reason, "udata/tests/dataset" in tests), (None, True))
+    tests, reason = ts.impacted_backend(["udata/tests/dataset/test_proxy_download.py"], BE)
+    check("um teste alterado corre-se a si mesmo",
+          (reason, tests), (None, {"udata/tests/dataset/test_proxy_download.py"}))
+    # The measured reason this exists: a small selection sharded across xdist workers
+    # manufactures failures that are green in series (see the SUITES comment).
+    check("um ambito impacted corre em serie, sem xdist",
+          "-n" in ts.SUITES["backend"]["test_serial"], False)
+    check("a suite completa mantem a forma do CI",
+          ts.SUITES["backend"]["test"][-3:], ["2", "--dist", "loadscope"])
+
+    # And the same rules as the push gate sees them. The gate denies this sandbox for the
+    # CHANGELOG (the real checkout sits on develop with no branch commits), so what is
+    # asserted here is the *reason*: whether the recorded green was accepted or not.
+    def deny_reason(verified: dict) -> str:
+        write_ticket(ticket_state(branch={"backend": backend_branch()}, verified=verified))
+        payload = {"tool_name": "Bash",
+                   "tool_input": {"command": "git push -u origin HEAD"}, "cwd": BE}
+        out = subprocess.run(
+            ["python3", os.path.join(HOOKS, TICKET_GUARD)],
+            input=json.dumps(payload), capture_output=True, text=True,
+        ).stdout
+        if not out.strip():
+            return ""
+        return json.loads(out)["hookSpecificOutput"]["permissionDecisionReason"]
+
+    head = backend_head()
+    reason = deny_reason({"backend": {"head": head, "scope": "impacted",
+                                      "files": ["udata/tests/dataset"]}})
+    check("um verde impacted neste HEAD nao e motivo de recusa",
+          "verify" in reason.lower() or "narrow" in reason.lower(), False)
+    reason = deny_reason({"backend": {"head": head, "scope": "narrow"}})
+    check("um verde narrow continua a ser recusado", "NARROW" in reason, True)
+
+    rc, prev = run(["git", "rev-parse", "HEAD~1"], BE)
+    drift = patterns.source_drift(run, BE, prev.strip(), head) if rc == 0 else None
+    reason = deny_reason({"backend": {"head": prev.strip(), "scope": "impacted"}})
+    if drift:
+        check("codigo commitado depois do verde invalida-o", "mudou codigo" in reason, True)
+    else:
+        check("commit inerte depois do verde nao o invalida", "mudou codigo" in reason, False)
+    return failures
+
+
 def main() -> int:
     print(f"root da corrida: {ROOT}")
     had_lock = os.path.exists(LOCK)
@@ -374,6 +499,7 @@ def main() -> int:
     failures += run_ticket_group()
     failures += run_parallel_group()
     failures += run_plan_audit_group()
+    failures += run_scope_group()
 
     if os.path.exists(LOCK) and not had_lock:
         os.remove(LOCK)
@@ -384,7 +510,7 @@ def main() -> int:
         return 1
     total = (
         len(BRANCH_CASES) + len(SURFACE_CASES) + len(TICKET_CASES())
-        + len(PARALLEL_CASES()) + len(PLAN_AUDIT_CASES()) + 1
+        + len(PARALLEL_CASES()) + len(PLAN_AUDIT_CASES()) + 1 + SCOPE_CASES
     )
     print(f"TODOS OS {total} CASOS PASSAM")
     return 0

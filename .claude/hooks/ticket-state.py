@@ -21,6 +21,8 @@ Exit codes: 0 the step passed, 1 it failed, 2 misuse.
 """
 
 import argparse
+import contextlib
+import fcntl
 import glob
 import hashlib
 import json
@@ -209,6 +211,59 @@ def save(state: dict) -> None:
     except Exception:
         os.unlink(tmp)
         raise
+
+
+@contextlib.contextmanager
+def state_lock(key: str):
+    """Serialise the read-modify-write of one ticket's state file.
+
+    An flock, and not the claim-file dance `take_suite_claim` uses, because the trade-off
+    inverts here: that claim guards minutes of pytest, where a killed tool call would
+    release an flock mid-run; this guards a few milliseconds of file rewriting, and
+    release-on-death is exactly what we want -- a session killed between read and write
+    leaves no lock behind for the next one to time out on.
+
+    The lock file is separate from the state file on purpose: `save` replaces the state
+    file by rename, so a lock held on that inode would stop guarding the path the moment
+    the first writer finished.
+    """
+    os.makedirs(STATE_DIR, exist_ok=True)
+    fh = open(path_for(key) + ".lock", "a+")
+    try:
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        yield
+    finally:
+        fh.close()  # closing releases the lock
+
+
+def update(key: str, mutate):
+    """Apply `mutate` to the state as it is on disk *now*, atomically. Returns it, or None.
+
+    The bug this exists for: `verify` read the state at process start, ran a suite for
+    minutes, then wrote its whole in-memory snapshot back. Run the two repos in parallel --
+    which the skill explicitly recommends -- and each wrote a snapshot taken before the
+    other had finished, so the second write silently dropped the first one's recorded
+    green. Both printed VERDE; `status` then reported "sem verde registado" for a repo that
+    had just passed, and the push gate refused it.
+
+    So the whole file is never written from a snapshot older than the lock: re-read inside
+    it, apply only this command's delta, save. None means the state vanished while the work
+    ran (a concurrent `end`), and the caller must not resurrect it by writing.
+    """
+    with state_lock(key):
+        fresh = load(key)
+        if fresh is None:
+            # The ticket was closed while the work ran, and `end` already removed the lock
+            # file this call just re-created. Take it away again rather than leave a stray
+            # one in .claude/state: nobody can write this key any more.
+            try:
+                os.remove(path_for(key) + ".lock")
+            except OSError:
+                pass
+            return None
+        mutate(fresh)
+        save(fresh)
+        return fresh
 
 
 def require(key: str) -> dict:
@@ -951,24 +1006,37 @@ def run_suites(args, state, plan, workdir, head, env=None):
 
     ok = not problems
     mode = plan["mode"]
+    recorded = True
     if ok:
-        state["verified"][args.repo] = {
+        entry = {
             "head": head,
             "scope": mode,
             "files": plan["impacted_files"],
             "full_reason": plan["full_reason"],
             "at": datetime.now(timezone.utc).isoformat(),
         }
-        if state["phase"] == "implementing":
-            state["phase"] = "verified"
-        save(state)
+
+        def record(fresh):
+            # Only this repo's key and, at most, this repo's phase bump: everything the
+            # other repo's verify recorded while this suite ran stays where it is.
+            fresh["verified"][args.repo] = entry
+            if fresh["phase"] == "implementing":
+                fresh["phase"] = "verified"
+
+        recorded = update(args.key, record) is not None
     log(f"VERIFY {args.key} repo={args.repo} head={head[:12]} ok={ok} scope={mode}")
     print("\n" + "=" * 66)
     print("VERDICTO:", "VERDE" if ok else "VERMELHO", f"({args.repo} @ {head[:12]})")
     print("=" * 66)
     for p in problems:
         print(f"  PROBLEMA: {p}")
-    if ok:
+    if ok and not recorded:
+        print(
+            f"  AVISO: o estado de {args.key} desapareceu enquanto a suite corria (um `end` "
+            "noutra\n  sessao?), por isso este verde NAO ficou registado. O gate de push "
+            "vai recusar.\n  Confirma com `status` antes de repetir o verify."
+        )
+    elif ok:
         if mode == "narrow":
             print(f"  Registado (narrow) em {head[:12]}. NAO chega para o push: caminhos dados a")
             print("  mao nao provam o diff. Antes do push: verify … --impacted.")
@@ -1177,6 +1245,12 @@ def cmd_end(args):
         return 1
     workdir = state.get("workdir")
     os.rename(path_for(args.key), path_for(args.key) + ".done")
+    # The lock guards the path, not the ticket: with the state archived nobody can write
+    # this key again, so leaving the file behind would just litter .claude/state.
+    try:
+        os.remove(path_for(args.key) + ".lock")
+    except OSError:
+        pass
     log(f"END {args.key} abandon={bool(args.abandon)}")
     print(f"Ticket {args.key} fechado (arquivado em ticket-{args.key}.json.done).")
     print("Os guards do ticket voltam a estar inertes.")
@@ -1586,6 +1660,22 @@ def cmd_doctor(args):
     return 0
 
 
+# Commands that read the state and write it back within milliseconds: holding the lock
+# across the whole command is what makes that read-modify-write atomic, and it costs
+# nothing at that duration. Two absences are deliberate:
+#   `verify`  -- it runs a suite for minutes and locks only for its final write (`update`),
+#                so the two repos still verify in parallel instead of queueing;
+#   `end`     -- it renames the state file and then reclaims a worktree, and nothing else
+#                should be writing to a ticket being closed.
+# Read-only commands (`status`, `pr-body`, `doctor`) never need it: `save` replaces by
+# rename, so a reader sees either the old file whole or the new one whole, never a tear.
+LOCKED_CMDS = (
+    "cmd_start", "cmd_criteria", "cmd_plan_delegated", "cmd_plan_approved", "cmd_replan",
+    "cmd_branch", "cmd_point", "cmd_review", "cmd_pr", "cmd_override", "cmd_pause",
+    "cmd_plan_audit", "cmd_claim", "cmd_park", "cmd_unpark",
+)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -1728,6 +1818,10 @@ def main() -> int:
     p.set_defaults(func=cmd_end)
 
     args = parser.parse_args()
+    key = getattr(args, "key", None)
+    if args.func.__name__ in LOCKED_CMDS and key and KEY_RE.match(key):
+        with state_lock(key):
+            return args.func(args)
     return args.func(args)
 
 

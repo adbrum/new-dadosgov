@@ -452,6 +452,13 @@ falta ao ponto 9.
   mesma de onde o backend lê o parâmetro): um afirma que o aviso não envia nada, o outro que o
   separador CMD envia — o par é deliberado, porque uma asserção de ausência sozinha passaria
   por vazio se a captura deixasse de registar. Ambos provados por mutação.
+- **O caminho do link por email não tinha teste, e é o único sem sessão.** Descoberto por um
+  login manual: a asserção CMD não trouxe email, o utilizador escreveu um novo, e o campo não
+  apareceu na base de dados. **A causa era ambiente, não código** — o `develop` local do
+  frontend estava quatro commits atrasado e o browser não enviava o parâmetro; o `auth_provider`
+  gravou porque esse não depende do frontend, e foi esse contraste que apontou a causa. Mas
+  expôs a lacuna a sério: das quatro escritas, essa era a única sem prova. **O código estava
+  correcto** — o teste escrito a seguir passou à primeira. Ver a lacuna 7.
 
 **Porque vem cedo:** o dado **só se acumula a partir do momento em que entra em produção**. O
 ponto 5 não o consegue contar no dia em que correr — estará vazio em todas as contas — logo cada
@@ -626,19 +633,21 @@ problema causado por divergência entre branches.
 
 ## Cobertura de testes
 
-- `udata/tests/frontend/test_saml.py` — **149 testes** de base, **160 depois do LEDG-2433**, que
-  acrescentou as duas classes do provedor de autenticação.
+- `udata/tests/frontend/test_saml.py` — **149 testes** de base, **160 depois do LEDG-2433** (as
+  duas classes do provedor), **169 depois do LEDG-2457** (`SAMLDeclaredCitizenTypeTest`), e
+  **170 + 8 subtests** hoje, com o teste do link por email. Medido em `develop`.
 - `udata/tests/test_legacy_vulns_auth_enumeration.py` — regressão de enumeração. **O LEDG-2456
   acrescentou a classe que faltava** para o change-email: o ficheiro tinha uma por cada vetor da
   auditoria e nenhuma para este, que é a razão pela qual a fuga sobreviveu.
 - `udata/tests/test_auth_mails.py` — desde o LEDG-2456, fixa que os e-mails de autenticação têm
   tradução pt.
-- Frontend: `src/components/login/__tests__/` — 37 testes, 6 ficheiros.
+- Frontend: `src/components/login/__tests__/` — **93 testes, 6 ficheiros** (eram 37 antes do
+  LEDG-2457). Medido em `develop`.
   ⚠️ **Só existem em `develop` e `tst`.**
 
 Qualquer alteração deve manter estes verdes, **em particular os de enumeração**.
 
-### Seis lacunas a fechar
+### Sete lacunas a fechar
 
 Deixaram passar todos os problemas deste refinamento:
 
@@ -648,6 +657,9 @@ Deixaram passar todos os problemas deste refinamento:
    aumenta. Testar um login só nunca revelaria a classe 1.
 3. **Um teste com capitalização diferente** (`Maria@x.pt` vs `maria@x.pt`). Sem ele a classe 2
    sobrevive a qualquer correção e não aparece em contagem nenhuma.
+   🚨 **Deixou de ser hipótese:** o levantamento encontrou `Pablolira@hotmail.com` e
+   `pablolira@hotmail.com`, duas contas criadas a 49 segundos de distância. A classe 2 existe
+   em dados reais. **Ainda aberta** — é trabalho do LEDG-2435.
 4. **Os casos do tronco comum testados nos DOIS handlers.** Tudo o que está depois do
    `_find_or_create_saml_user` é partilhado, mas um teste só no eIDAS dá a impressão de cobertura
    que não existe para o CMD, e vice-versa.
@@ -660,6 +672,13 @@ Deixaram passar todos os problemas deste refinamento:
    por isso um e-mail inteiro em inglês passou meses sem ser apanhado. Um msgid sem entrada no
    catálogo **não falha**: o `gettext` devolve o próprio msgid. O LEDG-2456 fechou-a para o
    conjunto que estava mal.
+7. **Um caminho de escrita implementado por simetria não fica provado pela simetria.** ✅ FECHADA.
+   Das quatro escritas de `auth_citizen_declared`, a do link por email era a única sem teste — e
+   é a única que **não pode** usar a sessão, porque o clique chega sem nenhuma; o valor viaja no
+   registo do link. Foi escrita a espelhar o `provider`, cujo teste equivalente já existia, e é
+   o caminho de quem entra por CMD sem email na asserção — nem raro, nem canto. Apareceu porque
+   **alguém a exercitou à mão**, não porque a suite se queixasse. Fechada com dois testes,
+   provados por mutação nos dois sentidos.
 
 ---
 

@@ -482,9 +482,24 @@ não reconhecidos (intocados)            23
 duplicados SAML a fundir                 0
 ```
 
-⚠️ **Ambiente não confirmado.** O `.env` não é legível nesta sessão; o valor tem de ser
-preenchido antes de estes números valerem como resposta ao critério de aceitação, que exige
-a data **e** o ambiente.
+🚨 **Correu na base de dados LOCAL, não em nenhum dos quatro ambientes.** Portanto **estes
+números não respondem ao critério de aceitação**, que pede a data *e* o ambiente — e "local"
+não é um dos quatro.
+
+Os dados aparentam ser reais (emails de municípios, `ama.gov.pt`), logo a BD local é
+presumivelmente um dump restaurado — de **origem e data desconhecidas**. Consequências:
+
+- **As proporções valem como forma, não como contagem.** Que 52% estejam em cifra legada é
+  um sinal forte sobre a natureza do problema; que sejam exactamente 1207 não vale para
+  ambiente nenhum.
+- **O "zero contas com endereço sintético" é o mais suspeito de todos.** Pode ser verdade,
+  ou ser artefacto da idade do dump ou do valor local do `MIGRATION_MODE_ENABLED` — que é
+  precisamente a pergunta 9, ainda sem resposta.
+- **As conclusões por hash são locais por construção**, porque o `hash_nic` usa o
+  `SECRET_KEY` desta máquina.
+
+**O que falta:** correr o `audit_institutional_users.py` com `--host` contra **DEV
+(`10.55.37.143`)** e **TST (`10.55.37.40`)**. É para isso que o script recebe o parâmetro.
 
 **O que estes números mudam:**
 

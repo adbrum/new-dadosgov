@@ -20,6 +20,11 @@ a reformulação CMD/eIDAS estiver feita e validada. **Não se promove por ticke
   o custo aceite — e a alternativa (promover ticket a ticket) tem o risco de deixar o fluxo
   **meio-migrado** em produção, que é exactamente o que produziu as duas regressões descritas
   abaixo.
+  📊 **Já medido, com os pontos 1 a 4 feitos:** `tst → ppr` espera **85 commits no backend** e
+  **80 no frontend** (2026-09-08). Uma parte é anterior a este refinamento e já lá estava; o
+  ponto é que o número não vai descer, e a promoção final não será revisível commit a commit.
+  **Registar aqui a contagem em cada ponto que entra** dá a curva, e a curva é o argumento a
+  usar se a decisão tiver de ser reavaliada.
 - ⚠️ **O LEDG-2437 deixa de ser uma ação de release independente.** Fechava com um
   `ppr → main` do frontend a qualquer momento; passa a esperar pelo conjunto. **O 404 em
   produção mantém-se até lá** — risco aceite, e agora por mais tempo do que o previsto.

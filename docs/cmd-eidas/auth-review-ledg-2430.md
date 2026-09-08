@@ -225,6 +225,30 @@ linked to a different CMD identity`).
 > entre homónimos** se replicado num fluxo self-service.
 >
 > ⚠️ **E não vê a classe 2** — só itera contas com o prefixo.
+>
+> 🚨 **A verificação de colisões é ESTRUTURALMENTE CEGA em `--dry-run`.** O
+> `_find_shared_nics()` filtra por `is_nic_hashed`; num ambiente onde nada está hasheado
+> ainda, não tem nada para olhar. O `0 duplicados` de um dry-run é **garantido, não
+> medido** — e a ambiguidade **já existe antes de qualquer hash**, porque o passo 1b do
+> lookup faz `User.objects(extras__auth_nic=user_nic).first()` sobre valores em claro.
+
+### `scripts/audit_institutional_users.py` — o segundo, e ainda NÃO versionado
+
+Só de leitura, recebe `--host`, e classifica o link CMD **nas mesmas quatro categorias** do
+comando (`yes (hashed)`, `stale (legacy-encrypted)`, `stale (plain NIC)`,
+`stale (unrecognized)`). Já conta contas com prefixo, pertença a organização, `last_login_at`
+e domínios institucionais → cobre boa parte das perguntas 1 a 4.
+
+Os hosts dos ambientes estão no seu docstring: **DEV `10.55.37.143`**, **TST `10.55.37.40`**.
+
+⚠️ **Está untracked em `backend/scripts/`** — não está em branch nenhuma. O LEDG-2434 pede
+explicitamente um script versionado, porque o levantamento vai ter de ser repetido depois das
+correcções. **Versioná-lo é o primeiro ponto do LEDG-2434**, não escrever um novo.
+
+⚠️ **O que lhe falta:** os dois eixos de colisão — `auth_nic` repetido (pergunta 7) e
+`email` repetido em minúsculas (pergunta 8). É a extensão a fazer, e resolve de uma vez a
+cegueira do dry-run: **valores em claro iguais produzem hashes iguais**, logo agrupar os
+valores em claro responde à pergunta sem hashear nada e sem depender do `SECRET_KEY`.
 
 ---
 
@@ -329,7 +353,7 @@ confiança, três chaves, nunca misturados:
 | Chave | Fonte | Confiança | Ticket |
 | --- | --- | --- | --- |
 | `auth_provider` | a rota ACS | **provado** | LEDG-2433 — em `develop` e `tst` |
-| `auth_citizen_declared` | o radio que a pessoa clica | **declarado** | LEDG-2457 — em `develop`, PRs pendentes |
+| `auth_citizen_declared` | o radio que a pessoa clica | **declarado** | LEDG-2457 — em `develop` e `tst` |
 | `auth_doc_type` / `auth_doc_nationality` | a asserção do IdP | **provado** | LEDG-2438 |
 
 O declarado **nunca gateia nada**, e quando o provado existir **o provado ganha**. O desacordo
@@ -344,15 +368,17 @@ entre os dois passa a ser o sinal de IdP mal configurado que hoje falta ao LEDG-
 | **1** | LEDG-2432 | Repor o login por email e palavra-passe | Frontend | ✅ **Sim** — em `develop` e `tst` | 🚨 Regressão; desbloqueou o `tst → ppr` |
 | **2** | LEDG-2456 | Fuga de existência de conta **+ e-mails em inglês** | Backend | ✅ **Sim** — em `develop` e `tst` | Nenhuma — e torna o 7 menor |
 | **3** | LEDG-2433 | Campo do método de autenticação (CMD/eIDAS) | Backend | ✅ **Sim** — 6 commits, suite completa verde; em `develop` e `tst` | Nenhuma — aditivo |
-| 4 | LEDG-2457 | Tipo de cidadão **declarado** (nacional/estrangeiro) | Full-stack | ✅ **Sim** — 4 commits nos dois repos; **PRs para `develop` pendentes** | **Depende do 3** |
+| **4** | LEDG-2457 | Tipo de cidadão **declarado** (nacional/estrangeiro) | Full-stack | ✅ **Sim** — 5 commits nos dois repos; em `develop` e `tst` | **Depende do 3** |
 | 5 | LEDG-2434 | Levantamento de dados e de impacto | Spike | ❌ Não | Nenhuma — paralelizável com o 3 e o 4 |
 | 6 | LEDG-2435 | **Uma identidade, uma conta** — as duas classes de duplicado | Backend | ❌ Não | Desenho depende do **5** |
 | 7 | LEDG-2431 | Associar a uma conta tradicional existente | Full-stack | ❌ Não | Depende do **2**, do **5** e do **6** |
 | 8 | LEDG-2438 | **Estrangeiros: identidade por documento em vez de NIC** | Backend | ❌ Não | Confirmar sobreposição com LEDG-2288 |
 | 9 | LEDG-2436 | Identidade sem identificador (eIDAS **e** CMD) | Backend | ❌ Não | **Depende do 8**; escolha bloqueada por LEDG-2288 |
 
-**Próximo a implementar:** o **4** (LEDG-2457), assim que o 3 aterrar em `develop` — ou o **5**
-(LEDG-2434), que não depende de nada e pode correr em paralelo.
+**Próximo a implementar:** o **5** (LEDG-2434). Os pontos 1 a 4 estão em `develop` e `tst`, e
+o 5 é o único que não depende de nada — e é o que desbloqueia o desenho do 6 e do 7. O dry-run
+já correu (ver acima); falta versionar o script de levantamento, acrescentar-lhe os dois eixos
+de colisão, e correr nos quatro ambientes.
 
 > ⚠️ **Os números desta tabela mudam.** Entrou o LEDG-2457 e tudo o que vinha depois desceu uma
 > posição. Quatro tickets referiam-se ao seu próprio lugar por número (*"é o ponto 2 da
@@ -422,7 +448,10 @@ falta ao ponto 9.
   `_terminate_local_session` é manual, e é isso que a torna fácil de esquecer.**
 - **O `MigrationNotice` do separador de email também arranca um login CMD**, mas esse ecrã nunca
   faz a pergunta. Tem handler próprio e não envia parâmetro — foi o TypeScript que o apanhou,
-  não um teste.
+  não um teste. **Fechado a seguir** com dois testes que observam a URL de arranque SAML (a
+  mesma de onde o backend lê o parâmetro): um afirma que o aviso não envia nada, o outro que o
+  separador CMD envia — o par é deliberado, porque uma asserção de ausência sozinha passaria
+  por vazio se a captura deixasse de registar. Ambos provados por mutação.
 
 **Porque vem cedo:** o dado **só se acumula a partir do momento em que entra em produção**. O
 ponto 5 não o consegue contar no dia em que correr — estará vazio em todas as contas — logo cada
@@ -442,6 +471,58 @@ mesma pessoa**, e **quantos duplicados existem sem prefixo**. Começa pelo
   de que data a contagem passa a ter significado.
   ⚠️ **Este spike não consegue contar estrangeiros** — o campo do ponto 4 só se preenche em
   logins futuros.
+
+#### Primeira execução do dry-run — 2026-09-08
+
+```
+plain NICs a hashear                  1070
+já hasheados                             0
+legacy-encrypted (intocados)          1207   ← 52% das 2300 com auth_nic
+não reconhecidos (intocados)            23
+duplicados SAML a fundir                 0
+```
+
+⚠️ **Ambiente não confirmado.** O `.env` não é legível nesta sessão; o valor tem de ser
+preenchido antes de estes números valerem como resposta ao critério de aceitação, que exige
+a data **e** o ambiente.
+
+**O que estes números mudam:**
+
+1. **🚨 1207 contas — 52% — ficam intocadas, e a migração que a docstring promete não
+   existe.** O `is_nic_legacy_encrypted` só é referenciado pelo contador do próprio comando;
+   não há desencriptação em `udata/migrations/` nem em lado nenhum. **Mas há caminho:** o
+   `_has_linked_nic()` devolve `False` para uma cifra legada, logo estas contas caem no match
+   por email e são candidatas ao assistente de associação — reconquistam o link provando
+   posse. Ou seja, **o `MIGRATION_MODE_ENABLED` decide o acesso de 1207 contas.**
+
+2. **Zero contas com endereço sintético neste ambiente.** Nenhuma linha `SKIP`, nenhum
+   `saml-`. A estimativa de **~200 contas** do pedido original **não se confirma aqui** — o
+   que reforça a leitura da classe 2: o problema pode estar todo em duplicados **sem**
+   prefixo.
+
+3. **Uma colisão de capitalização confirmada**, entre as 1093 listadas:
+   `Pablolira@hotmail.com` (`67fe5ab0…`) e `pablolira@hotmail.com` (`67fe5a7f…`), criadas a
+   **49 segundos** de distância. É a classe 2 em dados reais. Lower bound, não a resposta à
+   pergunta 8 — só cobre contas **com** `auth_nic`.
+
+4. **Os 23 não reconhecidos são usernames e nomes, não NICs.** Cruzando com o email não há
+   dúvida: `maria.filomena.delgado@funchal.pt` → `'mafide'`,
+   `iolanda.sofia.fernandes@funchal.pt` → `'iosofe'`, `carlos.mora@techframe.pt` → `'CMTF'`.
+   **Só um parece documento:** `'4595P5L28'`, com letras — forma de título de residência, não
+   NIC português. **Prova a favor do ponto 8 (LEDG-2438).**
+
+5. **13 emails malformados** — 10 com espaço final, `dora.canelas` e `gmrmatos` sem `@`, e
+   `Nelinho_33@hotmail,com` com vírgula em vez de ponto. **Todos no grupo dos 1070**, que se
+   auto-cura pelo NIC no primeiro login (passo 1b), logo não bloqueiam ninguém — mas o
+   endereço com vírgula nunca receberá mail.
+
+❌ **Correcção a uma leitura anterior:** dez dos 23 valores têm exactamente 12 caracteres
+**porque o log os corta** — `nic[:12]` em `commands.py`. É truncagem de **impressão**, não dos
+dados. Não existe limite de 12 no código de escrita, e não vale a pena procurá-lo.
+
+⚠️ **Os hashes dependem do `SECRET_KEY` de cada ambiente** (`hash_nic` é HMAC com essa
+chave), logo estes números **não são portáveis** e o levantamento é obrigatoriamente **por
+ambiente**. Uma rotação de chave invalida todos os links existentes.
 
 ### 6 — LEDG-2435 · Uma identidade, uma conta *(backend)*
 

@@ -9,6 +9,24 @@
 >
 > **Última sincronização: 2026-09-08.**
 
+---
+
+## 🛑 DECISÃO DE PROMOÇÃO: nada sai de `tst` até a reformulação estar completa
+
+Decidido a **2026-09-08**: as promoções `tst → ppr` e `ppr → main` só acontecem quando **toda**
+a reformulação CMD/eIDAS estiver feita e validada. **Não se promove por ticket.**
+
+- O `tst` vai **acumular os pontos todos** antes de subir, logo a promoção final será grande. É
+  o custo aceite — e a alternativa (promover ticket a ticket) tem o risco de deixar o fluxo
+  **meio-migrado** em produção, que é exactamente o que produziu as duas regressões descritas
+  abaixo.
+- ⚠️ **O LEDG-2437 deixa de ser uma ação de release independente.** Fechava com um
+  `ppr → main` do frontend a qualquer momento; passa a esperar pelo conjunto. **O 404 em
+  produção mantém-se até lá** — risco aceite, e agora por mais tempo do que o previsto.
+- Quanto mais o `tst` acumular, **mais importa testar lá cada ponto à medida que entra**, e não
+  só no fim. Uma regressão descoberta na promoção final é muito mais caro de localizar entre
+  nove pontos do que entre um.
+
 ## Objetivo
 
 Garantir a identificação única e inequívoca dos utilizadores autenticados por Autenticação.gov
@@ -326,7 +344,7 @@ entre os dois passa a ser o sinal de IdP mal configurado que hoje falta ao LEDG-
 | **1** | LEDG-2432 | Repor o login por email e palavra-passe | Frontend | ✅ **Sim** — em `develop` e `tst` | 🚨 Regressão; desbloqueou o `tst → ppr` |
 | **2** | LEDG-2456 | Fuga de existência de conta **+ e-mails em inglês** | Backend | ✅ **Sim** — em `develop` e `tst` | Nenhuma — e torna o 7 menor |
 | **3** | LEDG-2433 | Campo do método de autenticação (CMD/eIDAS) | Backend | ✅ **Sim** — 6 commits, suite completa verde; em `develop` e `tst` | Nenhuma — aditivo |
-| 4 | LEDG-2457 | Tipo de cidadão **declarado** (nacional/estrangeiro) | Full-stack | ❌ Não | **Depende do 3** |
+| 4 | LEDG-2457 | Tipo de cidadão **declarado** (nacional/estrangeiro) | Full-stack | 🔄 **Em curso** | **Depende do 3** |
 | 5 | LEDG-2434 | Levantamento de dados e de impacto | Spike | ❌ Não | Nenhuma — paralelizável com o 3 e o 4 |
 | 6 | LEDG-2435 | **Uma identidade, uma conta** — as duas classes de duplicado | Backend | ❌ Não | Desenho depende do **5** |
 | 7 | LEDG-2431 | Associar a uma conta tradicional existente | Full-stack | ❌ Não | Depende do **2**, do **5** e do **6** |
@@ -377,7 +395,7 @@ default é substituído.
 ⚠️ **Não distingue nacional de estrangeiro** — ver a secção acima e o ponto 4. Inclui a
 justificação da decisão 1 no `nic.py`.
 
-### 4 — LEDG-2457 · Tipo de cidadão declarado *(full-stack)*
+### 4 — LEDG-2457 · Tipo de cidadão declarado *(full-stack)* 🔄 EM CURSO
 
 O `CmdTab.tsx` já pergunta se o cidadão é nacional ou estrangeiro — e **atira a resposta fora**:
 o valor só habilita o botão. Este ponto envia-o e grava-o em `auth_citizen_declared`, **em chave
@@ -475,10 +493,13 @@ ponto 8.
 
 ---
 
-## 🔓 Fora da sequência: LEDG-2437 — ação de release, sem implementação
+## 🛑 LEDG-2437 — retido pela decisão de promoção
 
-**Não tem código e não pertence à ordem acima.** Fecha quando a promoção `ppr → main` do
-frontend for feita, e **não depende de nenhum dos pontos 1 a 9**.
+**Não tem código.** Fecha quando a promoção `ppr → main` do frontend for feita — e essa, **por
+decisão de 2026-09-08, só acontece quando toda a reformulação estiver completa e validada**.
+
+Técnicamente **não depende de nenhum dos pontos 1 a 9**, mas a decisão de promover em bloco
+prevalece.
 
 Verificado que o `7d5c9b50` **não está em `ppr`**, logo a promoção traz a página que falta em
 produção e **não** traz a regressão do LEDG-2432.
@@ -487,8 +508,10 @@ Foram avaliados dois hotfixes e **descartados**: qualquer um cria um commit só 
 depois tem de ser reconciliado — acrescentaria uma divergência entre branches para corrigir um
 problema causado por divergência entre branches.
 
-> ⚠️ **Risco aceite enquanto espera:** as contas com endereço sintético continuam a receber 404
-> em produção, em cada login. A decorrer desde ~2026-08-25.
+> 🚨 **Risco aceite, e agora por mais tempo:** as contas com endereço sintético continuam a
+> receber **404 em produção, em cada login**, desde ~2026-08-25 e até a reformulação completa
+> subir a `main`. **É a consequência direta da decisão de promoção em bloco**, e fica escrito
+> para ser uma escolha e não um esquecimento.
 
 ---
 

@@ -328,8 +328,8 @@ confiança, três chaves, nunca misturados:
 
 | Chave | Fonte | Confiança | Ticket |
 | --- | --- | --- | --- |
-| `auth_provider` | a rota ACS | **provado** | LEDG-2433 |
-| `auth_citizen_declared` | o radio que a pessoa clica | **declarado** | LEDG-2457 |
+| `auth_provider` | a rota ACS | **provado** | LEDG-2433 — em `develop` e `tst` |
+| `auth_citizen_declared` | o radio que a pessoa clica | **declarado** | LEDG-2457 — em `develop`, PRs pendentes |
 | `auth_doc_type` / `auth_doc_nationality` | a asserção do IdP | **provado** | LEDG-2438 |
 
 O declarado **nunca gateia nada**, e quando o provado existir **o provado ganha**. O desacordo
@@ -344,7 +344,7 @@ entre os dois passa a ser o sinal de IdP mal configurado que hoje falta ao LEDG-
 | **1** | LEDG-2432 | Repor o login por email e palavra-passe | Frontend | ✅ **Sim** — em `develop` e `tst` | 🚨 Regressão; desbloqueou o `tst → ppr` |
 | **2** | LEDG-2456 | Fuga de existência de conta **+ e-mails em inglês** | Backend | ✅ **Sim** — em `develop` e `tst` | Nenhuma — e torna o 7 menor |
 | **3** | LEDG-2433 | Campo do método de autenticação (CMD/eIDAS) | Backend | ✅ **Sim** — 6 commits, suite completa verde; em `develop` e `tst` | Nenhuma — aditivo |
-| 4 | LEDG-2457 | Tipo de cidadão **declarado** (nacional/estrangeiro) | Full-stack | 🔄 **Em curso** | **Depende do 3** |
+| 4 | LEDG-2457 | Tipo de cidadão **declarado** (nacional/estrangeiro) | Full-stack | ✅ **Sim** — 4 commits nos dois repos; **PRs para `develop` pendentes** | **Depende do 3** |
 | 5 | LEDG-2434 | Levantamento de dados e de impacto | Spike | ❌ Não | Nenhuma — paralelizável com o 3 e o 4 |
 | 6 | LEDG-2435 | **Uma identidade, uma conta** — as duas classes de duplicado | Backend | ❌ Não | Desenho depende do **5** |
 | 7 | LEDG-2431 | Associar a uma conta tradicional existente | Full-stack | ❌ Não | Depende do **2**, do **5** e do **6** |
@@ -395,7 +395,7 @@ default é substituído.
 ⚠️ **Não distingue nacional de estrangeiro** — ver a secção acima e o ponto 4. Inclui a
 justificação da decisão 1 no `nic.py`.
 
-### 4 — LEDG-2457 · Tipo de cidadão declarado *(full-stack)* 🔄 EM CURSO
+### 4 — LEDG-2457 · Tipo de cidadão declarado *(full-stack)* ✅ FEITO
 
 O `CmdTab.tsx` já pergunta se o cidadão é nacional ou estrangeiro — e **atira a resposta fora**:
 o valor só habilita o botão. Este ponto envia-o e grava-o em `auth_citizen_declared`, **em chave
@@ -410,6 +410,19 @@ valor não reconhecido **não grava nada**, nem cru nem default.
 ⚠️ **Este valor nunca gateia nada.** Vem de um radio button. Quando o ponto 8 trouxer o provado,
 **o provado ganha** — e o desacordo entre os dois passa a ser o sinal de IdP mal configurado que
 falta ao ponto 9.
+
+**Dois achados da implementação, que valem para os pontos seguintes:**
+
+- 🚨 **A declaração contaminava a sessão entre utilizadores.** Ficava na sessão depois de ser
+  lida, logo o próximo login CMD no mesmo browser — alguém a abrir um `/saml/login` de bookmark,
+  sem parâmetro — gravava na sua conta a resposta da pessoa anterior. É **o mesmo perigo** pelo
+  qual o `saml_confirmation_pending` já é limpo duas linhas ao lado, na mesma função, com o
+  raciocínio escrito acima: *"whoever signs in now owns this session"*. A chave nova faltava
+  nessa lista. **Lição para quem acrescentar chaves de sessão: a lista do
+  `_terminate_local_session` é manual, e é isso que a torna fácil de esquecer.**
+- **O `MigrationNotice` do separador de email também arranca um login CMD**, mas esse ecrã nunca
+  faz a pergunta. Tem handler próprio e não envia parâmetro — foi o TypeScript que o apanhou,
+  não um teste.
 
 **Porque vem cedo:** o dado **só se acumula a partir do momento em que entra em produção**. O
 ponto 5 não o consegue contar no dia em que correr — estará vazio em todas as contas — logo cada

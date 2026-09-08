@@ -181,7 +181,7 @@ ficou lá registada como achado rejeitado, por pertencer ao LEDG-2435.
 | Ecrã de conclusão de registo | `/complete-registration` + `CompleteRegistrationClient.tsx` | ❌ **LEDG-2437** |
 | Verificar a posse do email indicado | `/auth/change-email` → `send_change_email_confirmation_instructions` | ✅ |
 | **Resposta genérica no ecrã de conclusão** (aviso ao dono da caixa) | `change_email` + `mails.address_taken_notice` | 🔧 LEDG-2456, em `develop`+`tst` |
-| **Provedor de autenticação gravado** (`extras.auth_provider`) | as duas rotas ACS → criação, login, wizard e link | 🔧 LEDG-2433, PR pendente |
+| **Provedor de autenticação gravado** (`extras.auth_provider`) | as duas rotas ACS → criação, login, wizard e link | 🔧 LEDG-2433, em `develop`+`tst` |
 
 **Consequência:** a decisão "o que acontece a quem recusa dar um email" **já está tomada em
 código** — é bloqueado, e volta ao mesmo ecrã em cada login.
@@ -324,8 +324,8 @@ entre os dois passa a ser o sinal de IdP mal configurado que hoje falta ao LEDG-
 | # | Ticket | O quê | Onde | Feito? | Dependência |
 | --- | --- | --- | --- | --- | --- |
 | **1** | LEDG-2432 | Repor o login por email e palavra-passe | Frontend | ✅ **Sim** — em `develop` e `tst` | 🚨 Regressão; desbloqueou o `tst → ppr` |
-| **2** | LEDG-2456 | Fuga de existência de conta **+ e-mails em inglês** | Backend | ✅ **Sim** — em `develop`; PR para `tst` pendente | Nenhuma — e torna o 7 menor |
-| **3** | LEDG-2433 | Campo do método de autenticação (CMD/eIDAS) | Backend | ✅ **Sim** — 6 commits, suite completa verde; **PR para `develop` pendente** | Nenhuma — aditivo |
+| **2** | LEDG-2456 | Fuga de existência de conta **+ e-mails em inglês** | Backend | ✅ **Sim** — em `develop` e `tst` | Nenhuma — e torna o 7 menor |
+| **3** | LEDG-2433 | Campo do método de autenticação (CMD/eIDAS) | Backend | ✅ **Sim** — 6 commits, suite completa verde; em `develop` e `tst` | Nenhuma — aditivo |
 | 4 | LEDG-2457 | Tipo de cidadão **declarado** (nacional/estrangeiro) | Full-stack | ❌ Não | **Depende do 3** |
 | 5 | LEDG-2434 | Levantamento de dados e de impacto | Spike | ❌ Não | Nenhuma — paralelizável com o 3 e o 4 |
 | 6 | LEDG-2435 | **Uma identidade, uma conta** — as duas classes de duplicado | Backend | ❌ Não | Desenho depende do **5** |
@@ -335,6 +335,14 @@ entre os dois passa a ser o sinal de IdP mal configurado que hoje falta ao LEDG-
 
 **Próximo a implementar:** o **4** (LEDG-2457), assim que o 3 aterrar em `develop` — ou o **5**
 (LEDG-2434), que não depende de nada e pode correr em paralelo.
+
+> ⚠️ **Os números desta tabela mudam.** Entrou o LEDG-2457 e tudo o que vinha depois desceu uma
+> posição. Quatro tickets referiam-se ao seu próprio lugar por número (*"é o ponto 2 da
+> decomposição"*) e ficaram errados em silêncio; os dois que se referiam **por chave**
+> (*"vem depois do LEDG-2438"*) continuaram correctos apesar de ambos terem mudado de posição.
+>
+> **Regra:** nas descrições dos tickets, referir dependências **por chave**, e deixar a posição
+> só aqui. Foi aplicado aos quatro (LEDG-2431, LEDG-2433, LEDG-2434, LEDG-2435) em 2026-09-08.
 
 O **LEDG-2371** é pré-requisito prático de tudo isto: sem ele nada é mensurável — e no caso do
 8/9 é a **única** forma de saber quantos casos são estrangeiros com CMD e quantos são eIDAS mal

@@ -314,13 +314,30 @@ ticket has its own worktree — `ticket-state.py status LEDG-<n>` shows which.
 
 ```bash
 git -C <tree> fetch origin
-git -C <tree> checkout -b <type>/ledg-<number>-<short-english-description> origin/develop
+git -C <tree> switch -c <type>/ledg-<number>-<short-english-description> --no-track origin/develop
 python3 .claude/hooks/ticket-state.py branch LEDG-<number> <repo> <branch>
 ```
 
 **Never `checkout develop` here.** Branching straight off `origin/develop` is one command
 instead of two, and worktrees share the ref namespace: with a second checkout in play,
 `checkout develop` fails with *"develop is already checked out"*.
+
+🚨 **`--no-track` is not optional, and this is why.** `checkout -b X origin/develop` — what this
+line used to say — sets `branch.X.merge = refs/heads/develop`, so the new branch's upstream is
+**develop itself**. Any `git push` on that branch then pushes straight onto the environment
+branch, with no PR and without the push gate ever seeing it. On 2026-09-09 that is exactly what
+happened: three commits landed on `udata-pt`'s `develop` after the IDE's auto-push fired on a
+branch created this way, while the session believed the commits were local. The gate cannot stop
+it — the push is issued outside the harness.
+
+`--no-track` leaves the branch with no upstream, so a bare push fails loudly instead of guessing
+`develop`. `git push -u origin <branch>` at Phase 8 then sets the correct one. To check an
+existing branch, or to repair one:
+
+```bash
+git -C <tree> config --get branch.<branch>.merge          # must be refs/heads/<branch>
+git -C <tree> config branch.<branch>.merge refs/heads/<branch>
+```
 
 `feature|bugfix|hotfix|chore|release`, kebab-case, English, ticket number included — e.g.
 `bugfix/ledg-2296-harvester-producer-admin-scope`. State the name and create it; renaming

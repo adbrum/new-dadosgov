@@ -490,6 +490,74 @@ acima.
 ⚠️ **Não mexer na flag até se saber o seu valor actual**, precisamente porque ela discrimina
 entre as duas histórias. Ligá-la sem saber pode estar a "corrigir" algo que já está ligado.
 
+##### ✅ Pergunta 5 — onde o email é tratado como identificador (levantamento de código)
+
+**Não há uma convenção. Há quatro**, e duas estão erradas.
+
+O armazenamento: `email = field(StringField(max_length=255, required=True, unique=True))` —
+índice único **sensível à capitalização**, e **sem normalização na escrita**. É por isso que
+`Maria@x.pt` e `maria@x.pt` coexistem: **401 de 9075 contas (4,4%) têm ao menos uma maiúscula
+no endereço.** Esse número é o raio de acção de tudo o que se segue.
+
+| Convenção | Onde | Veredicto |
+| --- | --- | --- |
+| Exacta no input cru | `find_user(email=…)`, `objects(email=…)` — `auth/views.py`, `proconnect.py:91`, `saml_govpt.py:725`, `user/commands.py`, `api/oauth2.py:259`, `api/commands.py:84` | consistente com o índice |
+| **Insensível à capitalização** | `email__iexact` — **só** no `saml_govpt.py:888` (`_find_user_by_email_ci`) | correcta, mas isolada |
+| **Exacta sobre input em minúsculas** | `organization/api.py:651` | 🚨 **quebrada** |
+| Normaliza e depois compara exacto | `auth/views.py:64` (`strip().lower()`) | correcta para o que escreve |
+
+###### 🚨 Defeito 1 — convites de organização não encontram 4,4% das contas
+
+`MembershipInviteForm`, em `organization/api.py:651`:
+
+```python
+user = User.objects(email=email.lower()).first()
+if user:
+    email = None  # User found, use user instead of email
+```
+
+Passa o input a minúsculas e compara **exacto** com o valor guardado. Uma conta guardada como
+`Maria@x.pt` **nunca é encontrada** — o convite cai no ramo do endereço e é criado **por email
+em vez de ligado à conta existente**. A pessoa recebe um convite que não a reconhece.
+
+###### 🚨 Defeito 2 — a comparação certa está debaixo de uma consulta que a impede de correr
+
+`match_email_invitations`, em `user/models.py:410` — corre quando alguém se registra, para lhe
+atribuir convites pendentes:
+
+```python
+for org in Organization.objects(
+    requests__kind="invitation", requests__email=user.email.lower(), requests__status="pending"
+):
+    for req in org.requests:
+        if (... and req.email.lower() == user.email.lower() ...):   # ← correcto
+```
+
+A comparação em Python (linha 425) é **insensível à capitalização nos dois lados** — o autor
+sabia que a capitalização importava. Mas ela só corre sobre as organizações que **a consulta já
+devolveu**, e a consulta (linha 417) compara `requests.email` **exacto** contra
+`user.email.lower()`.
+
+**Um convite guardado com maiúsculas nunca é encontrado:** a organização não entra no ciclo, e a
+comparação correcta nunca tem oportunidade. A pessoa registra-se e **não fica membro**, em
+silêncio.
+
+> 💡 **É o mesmo padrão do resto desta revisão, uma terceira vez:** duas funções a decidir a
+> mesma coisa sem concordarem — como o `_find_user_by_email_ci` contra o `find_user`, e como os
+> predicados copiados do `nic.py` no script de auditoria. **Aqui as duas estão no mesmo ficheiro,
+> a oito linhas de distância.**
+
+###### O que isto dá aos pontos seguintes
+
+- **LEDG-2435** — a lista de sítios a alinhar. A correcção não é "usar `iexact` em todo o
+  sítio": é decidir se o endereço é **normalizado na escrita** (e então migrar os 401) ou
+  **comparado sem capitalização na leitura** (e então corrigir os quatro sítios). Misturar as
+  duas é o que produziu isto.
+- **LEDG-2431** — os dois defeitos acima são caminhos pelos quais uma conta associada pode
+  perder pertenças a organizações. Têm de estar corrigidos **antes**, ou a associação herda-os.
+- ⚠️ **Nenhum dos dois é específico do CMD/eIDAS.** Afectam registo por email igualmente, e
+  provavelmente merecem ticket próprio em vez de irem dentro do 2435.
+
 ##### Pergunta 2 — a que mais pesa: **6 de 120 têm conteúdo ou pertença**
 
 | | |

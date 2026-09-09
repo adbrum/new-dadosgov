@@ -633,17 +633,27 @@ entre os dois passa a ser o sinal de IdP mal configurado que hoje falta ao LEDG-
 
 ## Decomposição, pela ordem de implementação
 
+> 🔄 **Reordenado a 2026-09-09, com os dados de produção.** A ordem anterior assumia que o
+> problema eram as ~200 contas sintéticas e que essas contas eram poucas pessoas com muitas
+> contas cada. **Os dados dizem o contrário** (120 contas = 120 pessoas, e só 6 com conteúdo),
+> o que simplifica o 2435, esvazia a justificação do 2436 por esta via, e faz aparecer quatro
+> problemas que não estavam em ponto nenhum.
+
 | # | Ticket | O quê | Onde | Feito? | Dependência |
 | --- | --- | --- | --- | --- | --- |
 | **1** | LEDG-2432 | Repor o login por email e palavra-passe | Frontend | ✅ **Sim** — em `develop` e `tst` | 🚨 Regressão; desbloqueou o `tst → ppr` |
-| **2** | LEDG-2456 | Fuga de existência de conta **+ e-mails em inglês** | Backend | ✅ **Sim** — em `develop` e `tst` | Nenhuma — e torna o 7 menor |
+| **2** | LEDG-2456 | Fuga de existência de conta **+ e-mails em inglês** | Backend | ✅ **Sim** — em `develop` e `tst` | Nenhuma — e torna o 10 menor |
 | **3** | LEDG-2433 | Campo do método de autenticação (CMD/eIDAS) | Backend | ✅ **Sim** — 6 commits, suite completa verde; em `develop` e `tst` | Nenhuma — aditivo |
 | **4** | LEDG-2457 | Tipo de cidadão **declarado** (nacional/estrangeiro) | Full-stack | ✅ **Sim** — 5 commits nos dois repos; em `develop` e `tst` | **Depende do 3** |
-| 5 | LEDG-2434 | Levantamento de dados e de impacto | Spike | ❌ Não | Nenhuma — paralelizável com o 3 e o 4 |
-| 6 | LEDG-2435 | **Uma identidade, uma conta** — as duas classes de duplicado | Backend | ❌ Não | Desenho depende do **5** |
-| 7 | LEDG-2431 | Associar a uma conta tradicional existente | Full-stack | ❌ Não | Depende do **2**, do **5** e do **6** |
-| 8 | LEDG-2438 | **Estrangeiros: identidade por documento em vez de NIC** | Backend | ❌ Não | Confirmar sobreposição com LEDG-2288 |
-| 9 | LEDG-2436 | Identidade sem identificador (eIDAS **e** CMD) | Backend | ❌ Não | **Depende do 8**; escolha bloqueada por LEDG-2288 |
+| 5 | LEDG-2434 | Levantamento — **falta a pergunta 9 e as 2/3/4** | Spike | 🟡 Parcial | Nenhuma. ⚠️ **A pergunta 9 primeiro** — pode encolher tudo o que vem abaixo |
+| 6 | **NOVO-A** | **Campos de sessão vazios no login SAML** (`last_login_at`, `current_login_at`, `login_count`, `last_login_ip`) | Backend | ❌ Não | Nenhuma. Paralelo ao 5 — **este é código, o 5 é humano** |
+| 7 | **NOVO-B** | **As 6 contas com conteúdo, 4 delas admin ÚNICO** — plano nomeado | Operação | ❌ Não | **Pré-requisito do 10.** Bloqueia qualquer recusa ou limpeza |
+| 8 | **NOVO-C** | **Login ambíguo:** identificador duplicado resolvido por `.first()` | Backend | ❌ Não | Nenhuma — verificado no código, independente das contas sintéticas |
+| 9 | LEDG-2435 | **Uma identidade, uma conta** — as duas classes de duplicado | Backend | ❌ Não | Depende do **5**. 🟢 **Mais simples do que desenhado:** reconciliação é 1:1 |
+| 10 | LEDG-2431 | Associar a uma conta tradicional existente | Full-stack | ❌ Não | Depende do **2**, **5**, **7** e **9**. ✅ **Desenho decidido pelos dados: recusar quando há conteúdo** |
+| 11 | LEDG-2438 | **Estrangeiros: identidade por documento em vez de NIC** | Backend | ❌ Não | Confirmar sobreposição com LEDG-2288 |
+| 12 | LEDG-2436 | Identidade sem identificador (eIDAS **e** CMD) | Backend | ❌ Não | **Depende do 11**. 🔻 **Despromovido:** zero casos nas 120; só se justifica pelo eIDAS |
+| — | **NOVO-D** | **Organizações AGIT duplicadas** (3 registos) | A confirmar | ❌ Não | Fora do caminho crítico — âmbito a confirmar |
 
 **Próximo a implementar:** o **5** (LEDG-2434). Os pontos 1 a 4 estão em `develop` e `tst`, e
 o 5 é o único que não depende de nada — e é o que desbloqueia o desenho do 6 e do 7. O dry-run

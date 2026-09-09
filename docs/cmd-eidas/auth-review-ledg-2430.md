@@ -253,7 +253,7 @@ comando (`yes (hashed)`, `stale (legacy-encrypted)`, `stale (plain NIC)`,
 `stale (unrecognized)`). Já conta contas com prefixo, pertença a organização, `last_login_at`
 e domínios institucionais → cobre boa parte das perguntas 1 a 4.
 
-Os hosts dos ambientes estão no seu docstring: **DEV `10.55.37.143`**, **TST `10.55.37.40`**.
+Os hosts dos ambientes estão no seu docstring: **DEV o host de DEV**, **TST o host de TST**.
 
 ✅ **Resgatado em 2026-09-09**, sem alterar uma linha, na branch
 `chore/ledg-2434-version-the-institutional-audit-script` — estava untracked e um `git clean`
@@ -334,7 +334,7 @@ o `migrate-nics` também não porque só itera o prefixo.
 
 #### 🚨 DEV e TST medidos — 2026-09-09
 
-| | **DEV** `10.55.37.143` | **TST** `10.55.37.40` | local |
+| | **DEV** | **TST** | local |
 | --- | --- | --- | --- |
 | contas analisadas | 8854 | 8698 | 8505 |
 | `yes (hashed)` | **1399** | **1236** | **0** |
@@ -348,8 +348,8 @@ o `migrate-nics` também não porque só itera o prefixo.
 
 #### 🎯 DADOS DE PRODUÇÃO — backup de 2026-08-24 restaurado em DEV, medido a 2026-09-09
 
-A VM de DEV (`10.55.37.143`) recebeu um backup de PRD de **2026-08-24**. É a primeira medição
-com a população real. **PPR (`10.53.37.70`) e PRD (`10.51.37.51`) não são alcançáveis** desta
+A VM de DEV (o host de DEV) recebeu um backup de PRD de **2026-08-24**. É a primeira medição
+com a população real. **PPR (o host de Mongo de PPR) e PRD (o host de Mongo de PRD) não são alcançáveis** desta
 máquina — testado, timeout nos dois.
 
 ##### Pergunta 1 — contas com endereço sintético: **120**
@@ -587,7 +587,7 @@ absoluta lida aqui descreve *esses* ambientes, **não produção**.
    resposta. ⚠️ É uma **contagem de listagem, não uma consulta** — dá o número de contas, não
    quantas pessoas distintas são (pergunta 7) nem quantas têm conteúdo (pergunta 2).
 
-   **PPR (`10.53.37.70`) e PRD (`10.51.37.51`) não são alcançáveis** desta máquina (timeout de
+   **PPR (o host de Mongo de PPR) e PRD (o host de Mongo de PRD) não são alcançáveis** desta máquina (timeout de
    selecção de servidor nos dois), logo tudo o que dependa de consulta a produção **é trabalho
    humano**, não automatizável a partir daqui.
 
@@ -904,7 +904,7 @@ presumivelmente um dump restaurado — de **origem e data desconhecidas**. Conse
   `SECRET_KEY` desta máquina.
 
 **O que falta:** correr o `audit_institutional_users.py` com `--host` contra **DEV
-(`10.55.37.143`)** e **TST (`10.55.37.40`)**. É para isso que o script recebe o parâmetro.
+(o host de DEV)** e **TST (o host de TST)**. É para isso que o script recebe o parâmetro.
 
 **O que estes números mudam:**
 

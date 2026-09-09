@@ -1013,6 +1013,79 @@ dados. Não existe limite de 12 no código de escrita, e não vale a pena procur
 chave), logo estes números **não são portáveis** e o levantamento é obrigatoriamente **por
 ambiente**. Uma rotação de chave invalida todos os links existentes.
 
+### 6 — LEDG-2462 · Campos de sessão vazios no login SAML *(backend)*
+
+O plugin importa o `login_user` do **`flask_login`** (`saml_govpt.py:31`), que **não escreve**
+`last_login_at`, `current_login_at`, `login_count` nem `last_login_ip`. Quem os escreve é o
+`login_user` do `flask_security`, que não é importado — e o `SECURITY_TRACKABLE = True` já está
+em `settings.py:86`, portanto os campos **deviam** ser mantidos. É defeito, não decisão.
+
+Medido: das contas com `auth_nic`, **83%** das criadas antes de 2026-01 têm `last_login_at`,
+contra **3%** (7 de 232) das criadas entre junho e agosto de 2026. Os 83% históricos são contas
+antigas, não prova de que o fluxo SAML escreva.
+
+🚨 **A troca do import, sozinha, não grava nada.** Nos **dois** sítios que chamam `login_user`
+(linhas 1126 e 1360) o `user.save()` existente está **antes** do login, e o
+`flask_security.login_user` **muta o objecto sem gravar** — o login tradicional persiste com
+`after_this_request(view_commit)`, que aqui não existe. É preciso `user.save()` **depois**.
+
+**Prova obrigatória:** mutação que remove esse `save()` tem de deixar o teste vermelho. Se
+passar sem ele, o teste está errado. Cobrir **os dois caminhos** — login directo e link por
+email — porque foi a assimetria entre eles que produziu a lacuna 7 dos testes.
+
+⚠️ **Não recupera o passado.** As 232 contas criadas desde junho ficam sem histórico; os campos
+só têm significado a partir do deploy. **A pergunta 3 do LEDG-2434 continua sem resposta para o
+período já decorrido** — precisa de logs de acesso, ou de se aceitar a lacuna e escrevê-la.
+
+⚠️ **Impacto largo, fora deste refinamento:** qualquer lógica que dependa de inactividade —
+limpezas, notificações, relatórios de utilização — trata **todos** os utilizadores de CMD/eIDAS
+recentes como dormentes.
+
+### 7 — LEDG-2463 · As contas com conteúdo, e as 4 organizações com admin único *(operação)*
+
+**Não é código — é uma decisão sobre organizações reais**, e é por isso que bloqueia o
+LEDG-2431: qualquer regra de "recusar quando há conteúdo" tem de saber o que fazer com estes
+casos antes de existir.
+
+Das 120 contas com endereço sintético, **6 têm conteúdo ou pertença** (2 datasets, 0 reuses). E
+os 4 que são admin são **o único administrador** da sua organização:
+
+| Conta | Organização | datasets |
+| --- | --- | --- |
+| `saml-dde8d633@…` | **AGIT (Agência para a Gestão do Sistema…)** | **5** |
+| `saml-9a4b1075@…` | **Instituto Nacional de Administração, I.P.** | 0 |
+| `saml-64f971fb@…` | GREEN METRICS LDA | 0 |
+| `saml-c0437c35@…` | EazyAL | 0 |
+
+Organismos públicos administrados por uma conta **cujo endereço não existe**, que não recebe
+correio, e que leva **404 em produção a cada login** (LEDG-2437). **Recusar ou apagar qualquer
+uma deixa a organização órfã**, e a da AGIT leva 5 datasets consigo.
+
+**O que o ticket tem de produzir:** quem passa a administrar cada uma das quatro, e por que via
+— promover outro membro, ou associar a conta sintética ao seu dono real primeiro. **Decisão da
+AMA, não do código.**
+
+### 8 — LEDG-2464 · Login ambíguo: identificador duplicado resolvido por `.first()` *(backend)*
+
+O passo 1 do resolvedor faz `User.objects(extras__auth_nic=…).first()`. Com duas contas a
+partilhar o identificador, **devolve uma arbitrária** — e a mesma pessoa pode entrar hoje numa
+conta e amanhã na outra, sem nada mudar.
+
+**Medido em dados de produção: 13 grupos, 26 contas.** E **nenhum inclui uma conta sintética** —
+são pares de contas com endereço real, tipicamente a mesma pessoa com dois endereços criados a
+segundos ou minutos de distância. **Independente do LEDG-2435**, portanto: não é o problema das
+contas sintéticas, é outro.
+
+⚠️ **O `migrate-nics --dry-run` não o reporta de forma fiável:** o `_find_shared_nics()` filtra
+por `is_nic_hashed`, logo num ambiente com valores em claro **subconta**, e num ambiente sem
+nada hasheado devolve zero garantido. O script de levantamento versionado no LEDG-2434 agrupa
+pelos valores **como estão guardados** e não tem esse ponto cego.
+
+**O que o ticket tem de decidir:** o resolvedor deve **recusar** uma identidade ambígua (falhar
+o login com mensagem clara e registo de auditoria) em vez de escolher uma conta ao acaso. Uma
+escolha arbitrária num caminho de autenticação é pior do que uma recusa: dá acesso a uma conta
+que pode não ser a da pessoa.
+
 ### 9 — LEDG-2435 · Uma identidade, uma conta *(backend)*
 
 Invariante: **uma identidade CMD/eIDAS → no máximo uma conta.** Cobre as duas classes:

@@ -246,9 +246,32 @@ e domínios institucionais → cobre boa parte das perguntas 1 a 4.
 
 Os hosts dos ambientes estão no seu docstring: **DEV `10.55.37.143`**, **TST `10.55.37.40`**.
 
-⚠️ **Está untracked em `backend/scripts/`** — não está em branch nenhuma. O LEDG-2434 pede
-explicitamente um script versionado, porque o levantamento vai ter de ser repetido depois das
-correcções. **Versioná-lo é o primeiro ponto do LEDG-2434**, não escrever um novo.
+✅ **Resgatado em 2026-09-09**, sem alterar uma linha, na branch
+`chore/ledg-2434-version-the-institutional-audit-script` — estava untracked e um `git clean`
+apagava-o. Commitado **como está** de propósito, para que a correcção que se segue seja um diff
+revisível em vez de um primeiro import irrevisível.
+
+🚨 **E a correcção é necessária: os dois classificadores NÃO concordam.** O script
+reimplementa a classificação do NIC em vez de a importar, e as cópias já divergiram:
+
+| | `udata/core/user/nic.py` (o que a produção usa) | o script |
+| --- | --- | --- |
+| `HEX_DIGITS` | `"0123456789abcdef"` | igual |
+| comparação | `for c in nic_value` | `for c in nic.lower()` ⚠️ |
+
+Um valor em **hex maiúsculo** é portanto classificado de forma diferente pelos dois: uma cifra
+legada de 512 hex em maiúsculas é `legacy-encrypted` para o script e `unrecognized` para o
+login. **São 1207 contas nesse balde** — o risco está concentrado exactamente onde está o
+volume.
+
+Verificado que **no dump local não se manifesta** (nenhum dos 23 valores não reconhecidos é hex
+longo). Em DEV, TST e produção é incógnita — e num levantamento cujo propósito é *contar*, um
+classificador que discorda da produção produz contagens erradas.
+
+> 💡 **É a mesma classe de bug que originou esta revisão inteira:** duas funções que decidem a
+> mesma coisa e não concordam, como o `_find_user_by_email_ci` versus o `find_user` da classe 2.
+> A correcção é fazer os predicados **virem do `nic.py`**, para que o levantamento conte pelo
+> mesmo critério que o login usa, por construção.
 
 ⚠️ **O que lhe falta:** os dois eixos de colisão — `auth_nic` repetido (pergunta 7) e
 `email` repetido em minúsculas (pergunta 8). É a extensão a fazer, e resolve de uma vez a

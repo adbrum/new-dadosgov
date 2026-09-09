@@ -7,7 +7,7 @@
 > divergirem, **o Jira prevalece** e este ficheiro está desatualizado, porque é lá que as
 > decisões são tomadas e comentadas.
 >
-> **Última sincronização: 2026-09-08.**
+> **Última sincronização: 2026-09-09.**
 
 ---
 
@@ -30,7 +30,7 @@ a reformulação CMD/eIDAS estiver feita e validada. **Não se promove por ticke
   produção mantém-se até lá** — risco aceite, e agora por mais tempo do que o previsto.
 - Quanto mais o `tst` acumular, **mais importa testar lá cada ponto à medida que entra**, e não
   só no fim. Uma regressão descoberta na promoção final é muito mais caro de localizar entre
-  nove pontos do que entre um.
+  doze pontos do que entre um.
 
 ## Objetivo
 
@@ -623,9 +623,10 @@ o fluxo SAML os escrever.
 
 1. **A pergunta 3 do LEDG-2434 não tem resposta possível pelos dados**, e é preciso outra
    fonte (logs de acesso) ou corrigir o defeito e esperar.
-2. **É um defeito por si só**, e não está em nenhum dos nove pontos: qualquer lógica que
-   dependa de inactividade — limpezas, notificações, relatórios de utilização — trata
-   **todos** os utilizadores de CMD/eIDAS recentes como dormentes. Merece ticket próprio.
+2. **É um defeito por si só**, e não estava em nenhum dos pontos quando isto foi escrito:
+   qualquer lógica que dependa de inactividade — limpezas, notificações, relatórios de
+   utilização — trata **todos** os utilizadores de CMD/eIDAS recentes como dormentes.
+   ✅ **Já tem ticket próprio: o LEDG-2462**, o ponto 6 da decomposição.
 
 ---
 
@@ -853,11 +854,13 @@ de PRD.
 > (*"vem depois do LEDG-2438"*) continuaram correctos apesar de ambos terem mudado de posição.
 >
 > **Regra:** nas descrições dos tickets, referir dependências **por chave**, e deixar a posição
-> só aqui. Foi aplicado aos quatro (LEDG-2431, LEDG-2433, LEDG-2434, LEDG-2435) em 2026-09-08.
+> só aqui. Foi aplicado aos quatro (LEDG-2431, LEDG-2433, LEDG-2434, LEDG-2435) em 2026-09-08,
+> e aos três novos (LEDG-2462, LEDG-2463, LEDG-2464) em 2026-09-09 — que por isso não levam
+> número na sua própria descrição.
 
 O **LEDG-2371** é pré-requisito prático de tudo isto: sem ele nada é mensurável — e no caso do
-8/9 é a **única** forma de saber quantos casos são estrangeiros com CMD e quantos são eIDAS mal
-formado.
+LEDG-2438/LEDG-2436 é a **única** forma de saber quantos casos são estrangeiros com CMD e
+quantos são eIDAS mal formado.
 
 ### 1 — LEDG-2432 · Repor o login por email e palavra-passe *(frontend)* ✅ FEITO
 
@@ -1154,7 +1157,7 @@ LEDG-2288 e pelo LEDG-2438.
 **Não tem código.** Fecha quando a promoção `ppr → main` do frontend for feita — e essa, **por
 decisão de 2026-09-08, só acontece quando toda a reformulação estiver completa e validada**.
 
-Técnicamente **não depende de nenhum dos pontos 1 a 9**, mas a decisão de promover em bloco
+Técnicamente **não depende de nenhum dos pontos 1 a 12**, mas a decisão de promover em bloco
 prevalece.
 
 Verificado que o `7d5c9b50` **não está em `ppr`**, logo a promoção traz a página que falta em

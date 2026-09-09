@@ -426,6 +426,58 @@ sessão não são escritos (pergunta 3).
 > correcção é diferente em cada uma. Não é "registar para completude" — é o que diz qual é o
 > problema.
 
+#### ✅ RESPONDIDA — a flag está LIGADA em produção (2026-09-09)
+
+O `.env` de PRD (datado 2026-05-19) **não contém `MIGRATION_MODE_ENABLED`**. O valor efectivo
+vem portanto do default, e o default que ganha é o do `udata.cfg`:
+
+```python
+# udata.cfg:377
+MIGRATION_MODE_ENABLED = _env_bool("MIGRATION_MODE_ENABLED", True)
+
+# udata.cfg:25
+def _env_bool(var, default=False):
+    return os.getenv(var, str(default)).lower() in ("true", "1", "yes")
+```
+
+Ausente → `os.getenv` devolve `"True"` → **`True`**. O `False` do `_migration_enabled()` é um
+**fallback morto**: só se aplicaria se o `udata.cfg` não tivesse corrido, e corre sempre.
+
+> ⚠️ **Os "três defaults contraditórios" são menos perigosos do que parecia, e mais
+> enganadores.** Não estão em conflito — há uma ordem de precedência clara e o `udata.cfg`
+> ganha. O problema é que **o `False` escrito no código sugere o contrário a quem lê**, e foi
+> isso que me levou a assumir que produção estava desligada.
+
+❌ **RETRACTADO — "ligar a flag trava a hemorragia".** Propus isso como a mitigação mais barata
+do refinamento. **Não existe: já está ligada.** Não há nada para ligar.
+
+##### Então de onde vêm as 120 contas sintéticas?
+
+Com a flag ligada, um `migration_candidate` vai para o assistente, **não** cria conta nova. Logo
+as 120 vêm do caminho em que **não há candidato** (`status == "new"`) e o email da asserção
+**já está tomado** — o `_create_saml_user` fabrica então o endereço.
+
+**Quem não pode ser candidato?** Uma conta já ligada a **outra** identidade CMD, excluída pelo
+`_has_linked_nic`.
+
+**Hipótese, não verificada:** são **caixas de correio partilhadas**. Um `geral@`, `sig@` ou
+`informatica@cm-x.pt` já ligado à identidade do colega nº 1; o colega nº 2 entra com o seu CMD,
+a asserção traz o mesmo endereço partilhado, a conta não pode ser candidata → conta nova →
+endereço tomado → **endereço fabricado**.
+
+**O que sustenta a hipótese:** este mesmo levantamento contou **386 contas com aparência
+institucional E link CMD** — exactamente a população que produz este efeito. E explica porque
+**não há multiplicação**: cada pessoa fica com o seu próprio identificador na sua própria conta
+sintética.
+
+**Como confirmar:** cruzar as datas de criação das 120 com as contas institucionais ligadas, e
+ver se o domínio das 120 (que não é visível no endereço fabricado, mas está no `first_name`/
+`last_name` e no audit log do LEDG-2366) corresponde a mailboxes partilhadas.
+
+⚠️ **Marcada como hipótese.** Este documento já retractou quatro inferências hoje, todas por
+dados novos derrubarem raciocínio a partir de código. Esta só passa a conclusão com a consulta
+acima.
+
 **Verificações feitas antes de considerar mexer na flag em produção:**
 
 | Verificação | Resultado |

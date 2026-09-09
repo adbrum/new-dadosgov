@@ -20,11 +20,19 @@ a reformulação CMD/eIDAS estiver feita e validada. **Não se promove por ticke
   o custo aceite — e a alternativa (promover ticket a ticket) tem o risco de deixar o fluxo
   **meio-migrado** em produção, que é exactamente o que produziu as duas regressões descritas
   abaixo.
-  📊 **Já medido, com os pontos 1 a 4 feitos:** `tst → ppr` espera **85 commits no backend** e
-  **80 no frontend** (2026-09-08). Uma parte é anterior a este refinamento e já lá estava; o
-  ponto é que o número não vai descer, e a promoção final não será revisível commit a commit.
-  **Registar aqui a contagem em cada ponto que entra** dá a curva, e a curva é o argumento a
-  usar se a decisão tiver de ser reavaliada.
+  📊 **A curva, medida a cada ponto que entra** — é o argumento a usar se a decisão tiver de
+  ser reavaliada:
+
+  | Quando | Pontos feitos | `tst → ppr` backend | `tst → ppr` frontend |
+  | --- | --- | --- | --- |
+  | 2026-09-08 | 1 a 4 | 85 | 80 |
+  | 2026-09-09 | + o 6 (LEDG-2462) | **103** | 80 |
+
+  Uma parte é anterior a este refinamento e já lá estava; o ponto é que **o número não desce**,
+  e a promoção final não será revisível commit a commit. O frontend não se moveu porque o ponto
+  6 é só backend. ⚠️ **Os +18 do backend não são todos deste refinamento** — o `tst` recebe
+  também trabalho de outras frentes, e é isso que torna a promoção final difícil de rever.
+  Para referência, `ppr → main` está em **86** no backend e **122** no frontend.
 - ⚠️ **O LEDG-2437 deixa de ser uma ação de release independente.** Fechava com um
   `ppr → main` do frontend a qualquer momento; passa a esperar pelo conjunto. **O 404 em
   produção mantém-se até lá** — risco aceite, e agora por mais tempo do que o previsto.
@@ -71,6 +79,7 @@ Verificado com `git cat-file` / `git grep` após `fetch`, **revalidado a 2026-09
 | `pending_registration` na API `/me` | ✅ | ✅ | ✅ | ✅ |
 | `_link_identity_and_login` | ✅ | ✅ | ❌ | ❌ |
 | guardas `nic_required` | ✅ | ✅ | ❌ | ❌ |
+| `_record_login_activity` (LEDG-2462) | ✅ | ✅ | ❌ | ❌ |
 | `migrate-nics` / `_find_shared_nics` | ✅ | ✅ | ✅ | ✅ |
 
 **Saúde deste fluxo, por ambiente:**
@@ -604,10 +613,13 @@ da consulta.
 As 120 têm `last_login_at`, `current_login_at`, `login_count` e `last_login_ip` **todos
 vazios**. A leitura fácil — "nenhuma voltou a entrar" — **está errada** e não a assumi.
 
-O plugin SAML importa o `login_user` do **`flask_login`** ([saml_govpt.py:31](backend/udata/auth/saml/saml_plugin/saml_govpt.py#L31)),
-que **não escreve** nenhum destes campos; quem os escreve é o `login_user` do
-`flask_security`, que não é importado. E os dados confirmam a consequência, por data de
-criação das contas **com** `auth_nic`:
+A causa: o plugin SAML importava o `login_user` do **`flask_login`**
+([saml_govpt.py:31](backend/udata/auth/saml/saml_plugin/saml_govpt.py#L31)), que **não escreve**
+nenhum destes campos — quem os escreve é o `login_user` do `flask_security`.
+✅ **Corrigido pelo LEDG-2462**, em `develop` e `tst`, e por escrita atómica dos cinco campos em
+vez da troca do import (ver o ponto 6). ⚠️ **Mas isto não muda os números abaixo**: eles são de
+um backup de 2026-08-24, e a correcção **não é retroactiva**. E os dados confirmam a
+consequência, por data de criação das contas **com** `auth_nic`:
 
 | criadas | contas | com `last_login_at` |
 | --- | --- | --- |

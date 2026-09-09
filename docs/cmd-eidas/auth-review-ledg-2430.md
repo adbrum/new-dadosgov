@@ -231,11 +231,20 @@ linked to a different CMD identity`).
 >
 > ⚠️ **E não vê a classe 2** — só itera contas com o prefixo.
 >
-> 🚨 **A verificação de colisões é ESTRUTURALMENTE CEGA em `--dry-run`.** O
-> `_find_shared_nics()` filtra por `is_nic_hashed`; num ambiente onde nada está hasheado
-> ainda, não tem nada para olhar. O `0 duplicados` de um dry-run é **garantido, não
-> medido** — e a ambiguidade **já existe antes de qualquer hash**, porque o passo 1b do
-> lookup faz `User.objects(extras__auth_nic=user_nic).first()` sobre valores em claro.
+> ⚠️ **A verificação de colisões só vê os valores JÁ hasheados.** O `_find_shared_nics()`
+> filtra por `is_nic_hashed`, logo o que reporta depende do estado do ambiente:
+>
+> - **nada hasheado** (o caso da BD local: 0 hasheados, 1070 em claro) → não tem nada para
+>   olhar, e o seu zero é **garantido, não medido**;
+> - **a meio** → reporta só o subconjunto hasheado, ou seja **subconta**;
+> - **tudo hasheado** (DEV e TST: 0 em claro) → aqui **funciona**, e teria reportado os 13/14
+>   grupos. ❌ **Correcção a uma afirmação anterior desta doc:** escrevi que a cegueira era
+>   estrutural em qualquer ambiente. Não é — é estrutural *enquanto* houver valores em claro.
+>   Em DEV e TST o comando teria dito a verdade; **ninguém o correu**.
+>
+> A ambiguidade, por outro lado, **já existe antes de qualquer hash**: o passo 1b do lookup faz
+> `User.objects(extras__auth_nic=user_nic).first()` sobre valores em claro e devolve um
+> arbitrário.
 
 ### `scripts/audit_institutional_users.py` — o segundo, e ainda NÃO versionado
 
@@ -322,6 +331,35 @@ emails a colidir só na capitalização        2 grupos
 **É a classe 1 sem prefixo nenhum** — o efeito de "uma conta nova em cada login" previsto pela
 pergunta 7, a acontecer em contas com endereço real. Nenhuma contagem por `saml-` as apanha, e
 o `migrate-nics` também não porque só itera o prefixo.
+
+#### 🚨 DEV e TST medidos — 2026-09-09
+
+| | **DEV** `10.55.37.143` | **TST** `10.55.37.40` | local |
+| --- | --- | --- | --- |
+| contas analisadas | 8854 | 8698 | 8505 |
+| `yes (hashed)` | **1399** | **1236** | **0** |
+| `stale (plain NIC)` | **0** | **0** | 1070 |
+| `stale (legacy-encrypted)` | **1201** | **1201** | 1203 |
+| `stale (unrecognized)` | **39** | 30 | 23 |
+| sem link CMD | 5922 | 5937 | 5916 |
+| emails `saml-*` | **4** | **3** | 0 |
+| grupos com o mesmo identificador | **13** | **14** | 13 |
+| colisões de capitalização | **2** | **2** | 2 |
+
+**Quatro conclusões, e a primeira derruba a premissa do pedido:**
+
+1. 🚨 **A estimativa de "~200 contas com endereço fabricado" está errada por ~50×.** São
+   **4 em DEV e 3 em TST**. O problema que deu origem ao pedido é o **menor** dos três.
+2. 🚨 **As colisões de identificador estão VIVAS em DEV e TST, não são um risco de migração.**
+   Nesses ambientes os valores já estão hasheados (`plain NIC = 0`), logo os 13/14 grupos
+   partilham o **mesmo hash agora**: para ~26–28 contas o login CMD resolve por `.first()` e
+   devolve **uma arbitrária**. É um defeito de correcção em produção-like, não um efeito
+   colateral futuro. **É o maior dos três problemas** e nenhuma contagem por `saml-` o vê.
+3. **O `migrate-nics` já correu em DEV e TST** — zero em claro, e o `legacy-encrypted`
+   permaneceu **1201** nos dois, exactamente como localmente (1203). Prova empírica de que o
+   comando **não toca** nesse balde: correu, e os 1201 continuam lá.
+4. ⚠️ **Os `unrecognized` estão a acumular:** 23 local → 30 TST → **39 DEV**. Não é um resíduo
+   histórico estável; algo continua a escrever nomes e usernames no slot do NIC.
 
 **E a classe 2, num exemplar de manual:**
 

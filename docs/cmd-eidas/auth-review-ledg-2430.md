@@ -285,10 +285,54 @@ Três commits na branch, de propósito: o resgate como estava (`261cb5b6`), a fo
 (`5549b81f`) e o fix (`eeb2c4f3`). Sem essa separação o fix ficava enterrado debaixo de
 sessenta linhas de literais reformatados.
 
-⚠️ **O que lhe falta:** os dois eixos de colisão — `auth_nic` repetido (pergunta 7) e
-`email` repetido em minúsculas (pergunta 8). É a extensão a fazer, e resolve de uma vez a
-cegueira do dry-run: **valores em claro iguais produzem hashes iguais**, logo agrupar os
-valores em claro responde à pergunta sem hashear nada e sem depender do `SECRET_KEY`.
+✅ **Os dois eixos de colisão acrescentados** (`90dfe30a`) — `auth_nic` repetido (pergunta 7)
+e `email` em minúsculas (pergunta 8). Agrupados pelos valores **como estão guardados**, logo
+não precisam do `SECRET_KEY` e a resposta vale em qualquer ambiente: duas contas com o mesmo
+NIC em claro dão o mesmo digest, logo agrupar os valores em claro encontra-as sem hashear nada.
+
+O relatório **diz o que não vê**, em vez de dar a impressão de completude: um NIC em claro
+numa conta e o hash desse mesmo NIC noutra não são reconciliáveis sem a chave, logo o número
+do identificador é um **limite inferior**.
+
+#### 🚨 Primeira corrida com os dois eixos — BD local, 2026-09-09
+
+```
+contas analisadas                       8505
+parecem institucionais                   722   (336 sem CMD, 386 com)
+contas com link CMD                     2296
+emails sintéticos (saml-*)                 0
+contas a partilhar o MESMO identificador  13 grupos   ← o dry-run diz 0
+emails a colidir só na capitalização        2 grupos
+```
+
+**Treze grupos onde o login CMD é ambíguo hoje, e o `migrate-nics --dry-run` reporta zero.**
+É a prova da cegueira, medida em dados reais.
+
+**E o padrão é inequívoco: a mesma pessoa, dois emails, minutos de intervalo.**
+
+| Contas | Intervalo |
+| --- | --- |
+| `cristiana.castro@cm-moita.pt` · `cristianaarqui@hotmail.com` | **14 s** |
+| `metralha2725@gmail.com` · `otaviochunguinha123@gmail.com` | **25 s** |
+| `sara.a.m.arana@gmail.com` · `sara.xana2014@gmail.com` | **31 s** |
+| `pablolira@hotmail.com` · `Pablolira@hotmail.com` | **49 s** |
+| `catarina.leitao.campos@gmail.com` · `cata.leitao.campos@gmail.com` | **8 min** |
+| `filipe.silva@mogadouro.pt` · `filipe@ruasilva.pt` | **1 h 17** |
+
+**É a classe 1 sem prefixo nenhum** — o efeito de "uma conta nova em cada login" previsto pela
+pergunta 7, a acontecer em contas com endereço real. Nenhuma contagem por `saml-` as apanha, e
+o `migrate-nics` também não porque só itera o prefixo.
+
+**E a classe 2, num exemplar de manual:**
+
+```
+sandra.rodrigues.1990@gmail.com   sem link CMD              criada 2022-04-18
+Sandra.rodrigues.1990@gmail.com   stale (legacy-encrypted)  criada 2024-08-07
+```
+
+Conta tradicional primeiro; dois anos depois um login CMD com o endereço capitalizado de outra
+forma. O resolvedor encontrou-a (`ci`), **descartou-a**, e o `_create_saml_user` — que compara
+exacto — não a encontrou e criou a segunda. Exactamente o mecanismo descrito na classe 2.
 
 ---
 

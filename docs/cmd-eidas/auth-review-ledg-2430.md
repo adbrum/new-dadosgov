@@ -453,23 +453,31 @@ há conteúdo.** Para 114 das 120 não há nada a transferir, e transferir conte
 custa dados de utilizadores. O ticket já antecipava esta bifurcação; os dados escolhem o ramo
 simples.
 
-🚨 **Mas os 6 casos não são "uns poucos à mão" — são um risco de integridade.** Todos os 4
-admins são **o ÚNICO administrador** das suas organizações:
+🚨 **Mas os casos não são "uns poucos à mão" — são um risco de integridade.** Os 4 admins são
+**o ÚNICO administrador** das suas organizações:
 
-| Conta | Organização | |
-| --- | --- | --- |
-| `saml-dde8d633@…` | **AGIT** (3 registos: "AGIT", "AGIT - Agência…", "AGIT (Agência…") | 🚨 único admin |
-| `saml-9a4b1075@…` | **Instituto Nacional de Administração, I.P.** | 🚨 único admin |
-| `saml-64f971fb@…` | GREEN METRICS LDA | 🚨 único admin |
-| `saml-c0437c35@…` | EazyAL | 🚨 único admin |
+| Conta | Organização | datasets | |
+| --- | --- | --- | --- |
+| `saml-dde8d633@…` | **AGIT (Agência para a Gestão do Sistema…)** | **5** | 🚨 único admin |
+| `saml-9a4b1075@…` | **Instituto Nacional de Administração, I.P.** | 0 | 🚨 único admin |
+| `saml-64f971fb@…` | GREEN METRICS LDA | 0 | 🚨 único admin |
+| `saml-c0437c35@…` | EazyAL | 0 | 🚨 único admin |
 
 Organismos públicos reais administrados por uma conta **cujo endereço não existe**, que não
 recebe correio, e que — pelo [LEDG-2437](https://ticapp.atlassian.net/browse/LEDG-2437) — leva
 **404 em produção a cada login**. Recusar ou apagar qualquer uma delas **deixa a organização
-órfã**. Estes seis precisam de um plano nomeado, não de "tratamento manual".
+órfã**, e a da AGIT leva **5 datasets** consigo.
 
-> 💡 E os três registos "AGIT" sugerem organizações duplicadas, não só contas duplicadas —
-> fora do âmbito deste refinamento, mas vale um ticket.
+❌ **Correcção a um número anterior: eram 6 organizações reportadas, são 4.** A contagem de
+pertença do script não filtrava organizações apagadas. Corrigido (`1a662faa`), e a correcção
+está no próprio script para não voltar a acontecer.
+
+❌ **E o ticket NOVO-D (organizações AGIT duplicadas) NÃO se cria.** A suspeita vinha de três
+registos com nomes parecidos. A consulta mostra que os **três foram criados no mesmo dia
+(2026-07-18)**, que **dois já estão apagados** com 0 datasets, e que só o terceiro está vivo:
+foi alguém a criar a organização três vezes até acertar no nome, e a limpeza já foi feita.
+**Não havia problema — havia um palpite meu**, que é a razão pela qual não se cria ticket antes
+da consulta.
 
 ##### Pergunta 3 — ⚠️ NÃO É RESPONDÍVEL, e a razão é um defeito
 

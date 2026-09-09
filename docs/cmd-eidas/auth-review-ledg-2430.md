@@ -30,7 +30,7 @@ a reformulação CMD/eIDAS estiver feita e validada. **Não se promove por ticke
   produção mantém-se até lá** — risco aceite, e agora por mais tempo do que o previsto.
 - Quanto mais o `tst` acumular, **mais importa testar lá cada ponto à medida que entra**, e não
   só no fim. Uma regressão descoberta na promoção final é muito mais caro de localizar entre
-  doze pontos do que entre um.
+  catorze pontos do que entre um.
 
 ## Objetivo
 
@@ -626,7 +626,7 @@ o fluxo SAML os escrever.
 2. **É um defeito por si só**, e não estava em nenhum dos pontos quando isto foi escrito:
    qualquer lógica que dependa de inactividade — limpezas, notificações, relatórios de
    utilização — trata **todos** os utilizadores de CMD/eIDAS recentes como dormentes.
-   ✅ **Já tem ticket próprio: o LEDG-2462**, o ponto 6 da decomposição.
+   ✅ **Já tem ticket próprio: o LEDG-2462**, o ponto 6, com PR aberto para `develop`.
 
 ---
 
@@ -829,17 +829,19 @@ entre os dois passa a ser o sinal de IdP mal configurado que hoje falta ao LEDG-
 | # | Ticket | O quê | Onde | Feito? | Dependência |
 | --- | --- | --- | --- | --- | --- |
 | **1** | LEDG-2432 | Repor o login por email e palavra-passe | Frontend | ✅ **Sim** — em `develop` e `tst` | 🚨 Regressão; desbloqueou o `tst → ppr` |
-| **2** | LEDG-2456 | Fuga de existência de conta **+ e-mails em inglês** | Backend | ✅ **Sim** — em `develop` e `tst` | Nenhuma — e torna o 10 menor |
+| **2** | LEDG-2456 | Fuga de existência de conta **+ e-mails em inglês** | Backend | ✅ **Sim** — em `develop` e `tst` | Nenhuma — e torna o 12 menor |
 | **3** | LEDG-2433 | Campo do método de autenticação (CMD/eIDAS) | Backend | ✅ **Sim** — 6 commits, suite completa verde; em `develop` e `tst` | Nenhuma — aditivo |
 | **4** | LEDG-2457 | Tipo de cidadão **declarado** (nacional/estrangeiro) | Full-stack | ✅ **Sim** — 5 commits nos dois repos; em `develop` e `tst` | **Depende do 3** |
 | 5 | LEDG-2434 | Levantamento — **falta PPR e as perguntas 2/3/4 fora de PRD** | Spike | 🟡 Parcial | Nenhuma |
-| 6 | **LEDG-2462** | **Campos de sessão vazios no login SAML** (`last_login_at`, `current_login_at`, `login_count`, `last_login_ip`) | Backend | ❌ Não | Nenhuma. Paralelo ao 5 — **este é código, o 5 é humano** |
-| 7 | **LEDG-2463** | **As 6 contas com conteúdo, 4 delas admin ÚNICO** — plano nomeado | Operação | ❌ Não | **Pré-requisito do LEDG-2431.** Bloqueia qualquer recusa ou limpeza |
-| 8 | **LEDG-2464** | **Login ambíguo:** identificador duplicado resolvido por `.first()` | Backend | ❌ Não | Nenhuma — verificado no código, independente das contas sintéticas |
-| 9 | LEDG-2435 | **Uma identidade, uma conta** — as duas classes de duplicado | Backend | ❌ Não | Depende do **5**. 🟢 **Mais simples do que desenhado:** reconciliação é 1:1 |
-| 10 | LEDG-2431 | Associar a uma conta tradicional existente | Full-stack | ❌ Não | Depende do **2**, **5**, **7** e **9**. ✅ **Desenho decidido pelos dados: recusar quando há conteúdo** |
-| 11 | LEDG-2438 | **Estrangeiros: identidade por documento em vez de NIC** | Backend | ❌ Não | Confirmar sobreposição com LEDG-2288 |
-| 12 | LEDG-2436 | Identidade sem identificador (eIDAS **e** CMD) | Backend | ❌ Não | **Depende do 11**. 🔻 **Despromovido:** zero casos nas 120; só se justifica pelo eIDAS |
+| 6 | **LEDG-2462** | **Campos de sessão vazios no login SAML** (`last_login_at`, `current_login_at`, `login_count`, `last_login_ip`) | Backend | 🔧 **PR aberto** para `develop`; 6 commits, suite completa verde, 13 testes novos | Nenhuma. Paralelo ao 5 — **este é código, o 5 é humano** |
+| **7** | **LEDG-2465** | **Login recusado tratado como sucesso:** sessão marcada, log diz `OK`, auditoria diz `success`, e o link de uso único fica queimado | Backend | ❌ Não | Nenhuma — mas mexe nas **mesmas duas funções** do 6, logo é mais barato a seguir a ele |
+| **8** | **LEDG-2466** | **`datastore.commit()` é no-op em Mongo:** 3 chamadas que não gravam nada, e o `confirmed_at` do auto-confirm perde-se | Backend | ❌ Não | Nenhuma — o 6 deixou de o reparar de lado, deliberadamente |
+| 9 | LEDG-2463 | **As 6 contas com conteúdo, 4 delas admin ÚNICO** — plano nomeado | Operação | ❌ Não | **Pré-requisito do LEDG-2431.** Bloqueia qualquer recusa ou limpeza |
+| 10 | LEDG-2464 | **Login ambíguo:** identificador duplicado resolvido por `.first()` | Backend | ❌ Não | Nenhuma — verificado no código, independente das contas sintéticas |
+| 11 | LEDG-2435 | **Uma identidade, uma conta** — as duas classes de duplicado | Backend | ❌ Não | Depende do **5**. 🟢 **Mais simples do que desenhado:** reconciliação é 1:1 |
+| 12 | LEDG-2431 | Associar a uma conta tradicional existente | Full-stack | ❌ Não | Depende do **2**, **5**, **9** e **11**. ✅ **Desenho decidido pelos dados: recusar quando há conteúdo** |
+| 13 | LEDG-2438 | **Estrangeiros: identidade por documento em vez de NIC** | Backend | ❌ Não | Confirmar sobreposição com LEDG-2288 |
+| 14 | LEDG-2436 | Identidade sem identificador (eIDAS **e** CMD) | Backend | ❌ Não | **Depende do 13**. 🔻 **Despromovido:** zero casos nas 120; só se justifica pelo eIDAS |
 | — | ~~NOVO-D~~ | ~~**Organizações AGIT duplicadas** (3 registos)~~ | — | ❌ **Não se cria** | A consulta desfez a suspeita — ver acima |
 
 **Próximo a implementar:** o **5** (LEDG-2434). Os pontos 1 a 4 estão em `develop` e `tst`, e
@@ -1027,14 +1029,52 @@ Medido: das contas com `auth_nic`, **83%** das criadas antes de 2026-01 têm `la
 contra **3%** (7 de 232) das criadas entre junho e agosto de 2026. Os 83% históricos são contas
 antigas, não prova de que o fluxo SAML escreva.
 
-🚨 **A troca do import, sozinha, não grava nada.** Nos **dois** sítios que chamam `login_user`
-(linhas 1126 e 1360) o `user.save()` existente está **antes** do login, e o
-`flask_security.login_user` **muta o objecto sem gravar** — o login tradicional persiste com
-`after_this_request(view_commit)`, que aqui não existe. É preciso `user.save()` **depois**.
+❌ **RETRACTADO — "a troca do import, sozinha, não grava nada".** Escrevi isso a partir do
+docstring do próprio `login_user` (*"make sure you commit changes after this request"*).
+**Não se aplica aqui:** o `MongoEngineDatastore.put()` é `model.save()`, uma escrita imediata,
+e o `Datastore.commit()` da classe base é `pass` — aquele conselho é para SQLAlchemy, onde o
+`put()` é só um `session.add()`. Trocar o import **chegava** para persistir. Não havia `save()`
+a acrescentar, logo a prova por mutação também tinha de ser outra.
 
-**Prova obrigatória:** mutação que remove esse `save()` tem de deixar o teste vermelho. Se
-passar sem ele, o teste está errado. Cobrir **os dois caminhos** — login directo e link por
-email — porque foi a assimetria entre eles que produziu a lacuna 7 dos testes.
+**Mas a troca não é o que se fez, e por três razões que só apareceram ao implementar.** O
+`_datastore.put(user)` dentro do `flask_security.login_user` é **desprotegido**, logo um
+documento legado que não valide passa de "campo perdido" a 500 no login — a regressão que o
+comentário da linha 1094 existe para impedir. E a troca traz `session["fs_cc"]`/`fs_paa` e os
+sinais `identity_changed`/`user_authenticated`, que nunca dispararam neste caminho. Três
+mudanças de comportamento num ticket de cinco campos, e nas contas menos capazes de as
+absorver. Não há unidade importável mais pequena: a semântica está inline naquele bloco.
+
+**O que se fez:** um helper `_record_login_activity` que espelha a semântica e escreve os cinco
+campos **atomicamente** (`update_one` com `inc__login_count`), chamado **só se o `login_user`
+devolver verdadeiro**, com gate no `trackable` da extensão e o `datetime_factory` dela.
+
+🚨 **E porque NÃO com `user.save()`, que era o plano aprovado.** A revisão adversarial provou
+que um save arrasta `about`, `first_name` e `last_name`: o `User.pre_save` sanitiza-os em
+qualquer caminho de escrita, e num documento legado o valor **muda de facto** (`Silva & Sousa`
+→ `Silva &amp; Sousa`), logo o mongoengine marca-o sujo e ele vai no mesmo `$set`. **Quem
+entrasse por CMD veria o próprio nome estragado no ecrã**, em silêncio, porque a escrita está
+dentro de um `except` que só loga. E o mesmo acoplamento deixava um login sobrescrever uma bio
+editada noutro separador. Verificado: o `sanitize_strict` **é** idempotente, e o mongoengine
+só marca sujo quando o valor muda — logo o dano é de uma vez, na primeira entrada de cada
+conta legada, e é isso que o torna difícil de notar.
+
+> 💡 **Sanitizar dados legados é trabalho de migração, não efeito colateral de um login.** E o
+> `inc__` atómico deu de graça uma coisa que o próprio upstream faz mal: dois logins
+> simultâneos deixam de perder uma contagem.
+
+**Prova obrigatória:** seis mutações, e três matam **exactamente um** teste cada — tornar a
+chamada incondicional (mata o da conta inactiva), remover o gate do `trackable`, e trocar o
+import. Voltar a `user.save()` mata o teste do apelido legado. Cobrir **os dois caminhos** —
+login directo e link por email — porque foi a assimetria entre eles que produziu a lacuna 7
+dos testes; comentar só a chamada do link deixa vermelho só o teste do link.
+
+⚠️ **A lacuna de cobertura que a revisão encontrou, e que vale para o resto do ficheiro:** 9
+dos 11 testes faziam `patch` do `login_user` com um mock **sempre truthy**, logo nenhum
+exercitava o ramo verdadeiro da guarda com a função real. E o teste da guarda apontava para o
+`User.save`, que deixou de ser chamado — **passava sem exercitar a guarda**.
+
+✅ **Estado: PR aberto para `develop`**, 6 commits, suite completa verde, 13 testes novos.
+Fez aparecer os pontos 7 (LEDG-2465) e 8 (LEDG-2466).
 
 ⚠️ **Não recupera o passado.** As 232 contas criadas desde junho ficam sem histórico; os campos
 só têm significado a partir do deploy. **A pergunta 3 do LEDG-2434 continua sem resposta para o
@@ -1044,7 +1084,62 @@ período já decorrido** — precisa de logs de acesso, ou de se aceitar a lacun
 limpezas, notificações, relatórios de utilização — trata **todos** os utilizadores de CMD/eIDAS
 recentes como dormentes.
 
-### 7 — LEDG-2463 · As contas com conteúdo, e as 4 organizações com admin único *(operação)*
+### 7 — LEDG-2465 · Login recusado tratado como sucesso *(backend)*
+
+O `flask_login.login_user` devolve `False` **sem estabelecer sessão** quando a conta não está
+activa. O plugin chamava-o e **ignorava o retorno**.
+
+**Alcançável, e não teórico:** `active = field(BooleanField())` — **sem default** no modelo.
+Uma conta legada importada sem o campo cai aqui, e é a mesma população que este refinamento
+trata. Nenhuma guarda do funil olha para `active`: os gates antes do login são `user is None`,
+`user.deleted`, o marcador de confirmação pendente e o `requires_confirmation`. Confirmado por
+tracing.
+
+**Com o login recusado, o que a função faz a seguir:** `session["saml_login"] = True`, o log
+diz `login_user OK`, o `_audit_saml("success", …)` **já foi emitido a montante**, e há **302
+para o portal** sem mensagem de erro.
+
+🚨 **Pior no caminho do link por email:** quando se chega ao `login_user`, o `user.save()`
+anterior **já ligou a identidade e queimou o token de uso único**. A conta fica ligada, o link
+não se repete, não há sessão, e o CMD seguinte recusa pela mesma razão. **A pessoa perde a
+única prova de posse que lhe foi enviada.**
+
+⚠️ **O LEDG-2462 só corrigiu 5 dos ~8 registos da função** — condicionou a escrita dos campos
+de sessão ao retorno, com teste e mutação. A flag de sessão, o log, a auditoria e o redirect
+ficaram, de propósito: decidir qual é a resposta certa a uma conta inactiva num fluxo SAML é
+âmbito próprio.
+
+⚠️ **Cuidado com a assimetria:** a auditoria de sucesso é emitida na rota ACS, **antes** do
+funil correr. Corrigir só o funil deixa a linha de auditoria errada.
+
+### 8 — LEDG-2466 · `datastore.commit()` é no-op em Mongo *(backend)*
+
+O `Datastore.commit()` da classe base do `flask_security` é literalmente `pass`, e o
+`MongoEngineDatastore` **não o sobrepõe** — não precisa, porque o seu `put()` já é
+`model.save()`. Logo `datastore.commit()` **não faz nada** nesta aplicação, e está usado como
+se fizesse flush em **três** sítios do plugin (`_create_saml_user`,
+`_create_pending_saml_user`, e o ramo de auto-confirm do funil de login).
+
+**A consequência real:** no auto-confirm, o `user.confirmed_at` é atribuído e o `commit()` não
+o grava. O valor só chega à base de dados quando o registo do `auth_provider` mais abaixo calha
+salvar — o que **não acontece num login repetido com o provedor já gravado**. A intenção
+escrita no próprio comentário do código não se cumpre.
+
+**Como apareceu, e porque saiu do LEDG-2462:** a primeira versão daquela correcção escrevia com
+`user.save()` e reparava dois destes três sítios **por efeito colateral**. Isso foi desfeito
+(ver o ponto 6), logo o defeito volta ao estado original. ✅ **É melhor assim:** em vez de dois
+sítios reparados por acidente e três chamadas mentirosas a ficar no código, este ponto trata o
+problema todo.
+
+⚠️ **A correcção não pode ser um `save()`** — tem de ser escrita restrita ao campo, como o
+`_record_login_activity` passou a fazer, senão reintroduz o problema do nome legado.
+E o `_create_pending_saml_user` é o caso em que a chamada é **só** enganadora: ali o
+`confirmed_at` fica por desenho sem valor, e a conta é barrada antes de chegar ao funil.
+
+> 💡 **É a terceira ocorrência da mesma classe de bug deste refinamento:** código que muta e
+> não grava, ou que grava sem que se veja.
+
+### 9 — LEDG-2463 · As contas com conteúdo, e as 4 organizações com admin único *(operação)*
 
 **Não é código — é uma decisão sobre organizações reais**, e é por isso que bloqueia o
 LEDG-2431: qualquer regra de "recusar quando há conteúdo" tem de saber o que fazer com estes
@@ -1068,7 +1163,7 @@ uma deixa a organização órfã**, e a da AGIT leva 5 datasets consigo.
 — promover outro membro, ou associar a conta sintética ao seu dono real primeiro. **Decisão da
 AMA, não do código.**
 
-### 8 — LEDG-2464 · Login ambíguo: identificador duplicado resolvido por `.first()` *(backend)*
+### 10 — LEDG-2464 · Login ambíguo: identificador duplicado resolvido por `.first()` *(backend)*
 
 O passo 1 do resolvedor faz `User.objects(extras__auth_nic=…).first()`. Com duas contas a
 partilhar o identificador, **devolve uma arbitrária** — e a mesma pessoa pode entrar hoje numa
@@ -1089,7 +1184,7 @@ o login com mensagem clara e registo de auditoria) em vez de escolher uma conta 
 escolha arbitrária num caminho de autenticação é pior do que uma recusa: dá acesso a uma conta
 que pode não ser a da pessoa.
 
-### 9 — LEDG-2435 · Uma identidade, uma conta *(backend)*
+### 11 — LEDG-2435 · Uma identidade, uma conta *(backend)*
 
 Invariante: **uma identidade CMD/eIDAS → no máximo uma conta.** Cobre as duas classes:
 
@@ -1104,7 +1199,7 @@ Invariante: **uma identidade CMD/eIDAS → no máximo uma conta.** Cobre as duas
 A fechar de passagem, por estarem na mesma zona: a guarda em falta na `/saml/migration/skip`, e
 o alinhamento dos três defaults da flag.
 
-### 10 — LEDG-2431 · Associar a uma conta tradicional existente *(a lacuna real)*
+### 12 — LEDG-2431 · Associar a uma conta tradicional existente *(a lacuna real)*
 
 Três restrições obrigatórias: **prova de posse** do email de destino, **resposta genérica** (já
 construída pelo ponto 2 — **estender, não reinventar**: o aviso ao dono da caixa passa a ser um
@@ -1114,7 +1209,7 @@ ponto 5). Entra pelo `_link_identity_and_login`.
 É também aqui que entra a decisão 6: **um campo de email**, com o endereço do CMD pré-preenchido
 quando existe, e a prova por link mantida mesmo nesse caso.
 
-### 11 — LEDG-2438 · Estrangeiros: a identidade é o documento, não o NIC *(backend)*
+### 13 — LEDG-2438 · Estrangeiros: a identidade é o documento, não o NIC *(backend)*
 
 Um cidadão estrangeiro com CMD **não tem NIC**. O portal pede o NIC como obrigatório e **não
 pede** nenhum dos três atributos que o identificam:
@@ -1137,7 +1232,7 @@ Resolver este primeiro **tira os estrangeiros do âmbito do LEDG-2436**.
 
 **O ponto 4 ajuda aqui:** o tipo declarado dá a verificação cruzada contra o que a asserção traz.
 
-### 12 — LEDG-2436 · Identidade sem identificador *(bug)*
+### 14 — LEDG-2436 · Identidade sem identificador *(bug)*
 
 ⚠️ **Afeta os dois provedores**, não só o eIDAS: os handlers ACS são idênticos a partir do
 `_find_or_create_saml_user`. **Uma correção num handler só deixa o outro intacto.**
@@ -1157,7 +1252,7 @@ LEDG-2288 e pelo LEDG-2438.
 **Não tem código.** Fecha quando a promoção `ppr → main` do frontend for feita — e essa, **por
 decisão de 2026-09-08, só acontece quando toda a reformulação estiver completa e validada**.
 
-Técnicamente **não depende de nenhum dos pontos 1 a 12**, mas a decisão de promover em bloco
+Técnicamente **não depende de nenhum dos pontos 1 a 14**, mas a decisão de promover em bloco
 prevalece.
 
 Verificado que o `7d5c9b50` **não está em `ppr`**, logo a promoção traz a página que falta em

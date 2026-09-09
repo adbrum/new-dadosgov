@@ -346,6 +346,103 @@ o `migrate-nics` também não porque só itera o prefixo.
 | grupos com o mesmo identificador | **13** | **14** | 13 |
 | colisões de capitalização | **2** | **2** | 2 |
 
+#### 🎯 DADOS DE PRODUÇÃO — backup de 2026-08-24 restaurado em DEV, medido a 2026-09-09
+
+A VM de DEV (`10.55.37.143`) recebeu um backup de PRD de **2026-08-24**. É a primeira medição
+com a população real. **PPR (`10.53.37.70`) e PRD (`10.51.37.51`) não são alcançáveis** desta
+máquina — testado, timeout nos dois.
+
+##### Pergunta 1 — contas com endereço sintético: **120**
+
+Nenhuma apagada. Criadas entre **2026-06-09 e 2026-08-24**, a ritmo estável: 44 em junho,
+35 em julho, 41 em agosto — **~40/mês**.
+
+⚠️ **Discrepância a resolver:** extrapolando ~1,6/dia, a 2026-09-09 seriam **~145**. A
+verificação no backoffice de produção diz **~200**. Ou a estimativa visual é grosseira, ou o
+ritmo acelerou depois de 24/08. **Não inventar a explicação** — vê-se contando no backoffice
+por mês.
+
+##### Pergunta 7 — ❌ a hipótese central do ticket NÃO se confirma
+
+**120 contas → 120 identificadores distintos. Uma conta por pessoa.**
+
+A pergunta 7 previa que "as ~200 contas não são ~200 pessoas" — que a mesma identidade
+recebia uma conta nova em **cada** login, e que o número real de pessoas seria muito menor.
+**Nos dados não há um único caso**: nenhum identificador aparece duas vezes.
+
+Isso **simplifica** a reconciliação — é 1:1, não muitos-para-um — e **muda a comunicação**:
+são ~200 pessoas, não ~200 contas de umas dezenas de pessoas.
+
+⚠️ E remove a justificação do desenho que assumia multiplicação. O LEDG-2435 não precisa de
+reconciliar N contas de uma pessoa.
+
+**Contas sem identificador nenhum: 0.** A população do [LEDG-2436](https://ticapp.atlassian.net/browse/LEDG-2436)
+— identidade sem identificador — **está vazia nesta amostra**. O ticket pode continuar a
+justificar-se pelo eIDAS, mas não por estas contas.
+
+##### Pergunta 2 — a que mais pesa: **6 de 120 têm conteúdo ou pertença**
+
+| | |
+| --- | --- |
+| contas com algo | **6 de 120** (5%) |
+| datasets no total | **2** |
+| reuses | **0** |
+| membros de organização | 5 |
+| **admin de organização** | **4** |
+
+✅ **Isto decide o [LEDG-2431](https://ticapp.atlassian.net/browse/LEDG-2431): recusar quando
+há conteúdo.** Para 114 das 120 não há nada a transferir, e transferir conteúdo é onde um erro
+custa dados de utilizadores. O ticket já antecipava esta bifurcação; os dados escolhem o ramo
+simples.
+
+🚨 **Mas os 6 casos não são "uns poucos à mão" — são um risco de integridade.** Todos os 4
+admins são **o ÚNICO administrador** das suas organizações:
+
+| Conta | Organização | |
+| --- | --- | --- |
+| `saml-dde8d633@…` | **AGIT** (3 registos: "AGIT", "AGIT - Agência…", "AGIT (Agência…") | 🚨 único admin |
+| `saml-9a4b1075@…` | **Instituto Nacional de Administração, I.P.** | 🚨 único admin |
+| `saml-64f971fb@…` | GREEN METRICS LDA | 🚨 único admin |
+| `saml-c0437c35@…` | EazyAL | 🚨 único admin |
+
+Organismos públicos reais administrados por uma conta **cujo endereço não existe**, que não
+recebe correio, e que — pelo [LEDG-2437](https://ticapp.atlassian.net/browse/LEDG-2437) — leva
+**404 em produção a cada login**. Recusar ou apagar qualquer uma delas **deixa a organização
+órfã**. Estes seis precisam de um plano nomeado, não de "tratamento manual".
+
+> 💡 E os três registos "AGIT" sugerem organizações duplicadas, não só contas duplicadas —
+> fora do âmbito deste refinamento, mas vale um ticket.
+
+##### Pergunta 3 — ⚠️ NÃO É RESPONDÍVEL, e a razão é um defeito
+
+As 120 têm `last_login_at`, `current_login_at`, `login_count` e `last_login_ip` **todos
+vazios**. A leitura fácil — "nenhuma voltou a entrar" — **está errada** e não a assumi.
+
+O plugin SAML importa o `login_user` do **`flask_login`** ([saml_govpt.py:31](backend/udata/auth/saml/saml_plugin/saml_govpt.py#L31)),
+que **não escreve** nenhum destes campos; quem os escreve é o `login_user` do
+`flask_security`, que não é importado. E os dados confirmam a consequência, por data de
+criação das contas **com** `auth_nic`:
+
+| criadas | contas | com `last_login_at` |
+| --- | --- | --- |
+| antes de 2026-01 | 2456 | 2034 — **83%** |
+| 2026-01 a 05 | 190 | 108 — 57% |
+| **2026-06 a 08** | 232 | **7 — 3%** |
+
+**O campo deixou de ser mantido**, com a queda a completar-se exactamente quando as contas
+sintéticas começam a aparecer (2026-06-09). Os 83% históricos vêm de contas antigas — não de
+o fluxo SAML os escrever.
+
+**Duas consequências:**
+
+1. **A pergunta 3 do LEDG-2434 não tem resposta possível pelos dados**, e é preciso outra
+   fonte (logs de acesso) ou corrigir o defeito e esperar.
+2. **É um defeito por si só**, e não está em nenhum dos nove pontos: qualquer lógica que
+   dependa de inactividade — limpezas, notificações, relatórios de utilização — trata
+   **todos** os utilizadores de CMD/eIDAS recentes como dormentes. Merece ticket próprio.
+
+---
+
 #### ⚠️ Antes de ler os números: nenhum destes ambientes é produção
 
 Idade dos dados, medida a 2026-09-09:

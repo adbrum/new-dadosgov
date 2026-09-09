@@ -1281,7 +1281,8 @@ problema causado por divergência entre branches.
 
 - `udata/tests/frontend/test_saml.py` — **149 testes** de base, **160 depois do LEDG-2433** (as
   duas classes do provedor), **169 depois do LEDG-2457** (`SAMLDeclaredCitizenTypeTest`), e
-  **170 + 8 subtests** hoje, com o teste do link por email. Medido em `develop`.
+  **183 depois do LEDG-2462** (`SAMLTrackableLoginFieldsTest` + o teste do clique no link).
+  Medido em `develop`.
 - `udata/tests/test_legacy_vulns_auth_enumeration.py` — regressão de enumeração. **O LEDG-2456
   acrescentou a classe que faltava** para o change-email: o ficheiro tinha uma por cada vetor da
   auditoria e nenhuma para este, que é a razão pela qual a fuga sobreviveu.
@@ -1301,6 +1302,8 @@ Deixaram passar todos os problemas deste refinamento:
    os três defaults não concordam.
 2. **Testes de logins repetidos** da mesma identidade, a afirmar que o número de contas não
    aumenta. Testar um login só nunca revelaria a classe 1.
+   ⚠️ **O LEDG-2462 acrescentou testes de segundo login**, mas para os campos de sessão — não
+   para a contagem de contas. **Continua aberta.**
 3. **Um teste com capitalização diferente** (`Maria@x.pt` vs `maria@x.pt`). Sem ele a classe 2
    sobrevive a qualquer correção e não aparece em contagem nenhuma.
    🚨 **Deixou de ser hipótese:** o levantamento encontrou `Pablolira@hotmail.com` e
@@ -1325,6 +1328,19 @@ Deixaram passar todos os problemas deste refinamento:
    o caminho de quem entra por CMD sem email na asserção — nem raro, nem canto. Apareceu porque
    **alguém a exercitou à mão**, não porque a suite se queixasse. Fechada com dois testes,
    provados por mutação nos dois sentidos.
+
+   🚨 **E voltou a acontecer no LEDG-2462, em forma nova — vale mais do que a primeira.** Ali a
+   lacuna não era um caminho sem teste: era **o teste a substituir a coisa que decide**. Nove
+   dos onze testes faziam `patch` do `login_user` com um mock **sempre truthy**, logo nenhum
+   exercitava o ramo verdadeiro da guarda com a função real. E o teste da própria guarda
+   apontava para um `User.save` que deixara de ser chamado, ou seja **passava sem exercitar
+   nada**. Ambos foram apanhados pela revisão adversarial, não pela suite.
+
+   ⚠️ **A lição, generalizada:** onde a suite faz `patch` da função que toma a decisão, ninguém
+   está a testar a decisão — e o ficheiro tem uma razão legítima para fazer esse patch (o
+   `current_user` fica preso depois de um login real), o que torna o hábito invisível. **Sempre
+   que se acrescentar um caminho que depende do retorno de uma função patcheada, é preciso um
+   teste que a deixe correr a sério.**
 
 ---
 

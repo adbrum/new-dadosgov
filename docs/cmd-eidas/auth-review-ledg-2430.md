@@ -592,7 +592,7 @@ recebe correio, e que — pelo [LEDG-2437](https://ticapp.atlassian.net/browse/L
 pertença do script não filtrava organizações apagadas. Corrigido (`1a662faa`), e a correcção
 está no próprio script para não voltar a acontecer.
 
-❌ **E o ticket NOVO-D (organizações AGIT duplicadas) NÃO se cria.** A suspeita vinha de três
+❌ **E o quarto ticket (organizações AGIT duplicadas) NÃO se cria.** A suspeita vinha de três
 registos com nomes parecidos. A consulta mostra que os **três foram criados no mesmo dia
 (2026-07-18)**, que **dois já estão apagados** com 0 datasets, e que só o terceiro está vivo:
 foi alguém a criar a organização três vezes até acertar no nome, e a limpeza já foi feita.
@@ -831,20 +831,21 @@ entre os dois passa a ser o sinal de IdP mal configurado que hoje falta ao LEDG-
 | **2** | LEDG-2456 | Fuga de existência de conta **+ e-mails em inglês** | Backend | ✅ **Sim** — em `develop` e `tst` | Nenhuma — e torna o 10 menor |
 | **3** | LEDG-2433 | Campo do método de autenticação (CMD/eIDAS) | Backend | ✅ **Sim** — 6 commits, suite completa verde; em `develop` e `tst` | Nenhuma — aditivo |
 | **4** | LEDG-2457 | Tipo de cidadão **declarado** (nacional/estrangeiro) | Full-stack | ✅ **Sim** — 5 commits nos dois repos; em `develop` e `tst` | **Depende do 3** |
-| 5 | LEDG-2434 | Levantamento — **falta a pergunta 9 e as 2/3/4** | Spike | 🟡 Parcial | Nenhuma. ⚠️ **A pergunta 9 primeiro** — pode encolher tudo o que vem abaixo |
-| 6 | **NOVO-A** | **Campos de sessão vazios no login SAML** (`last_login_at`, `current_login_at`, `login_count`, `last_login_ip`) | Backend | ❌ Não | Nenhuma. Paralelo ao 5 — **este é código, o 5 é humano** |
-| 7 | **NOVO-B** | **As 6 contas com conteúdo, 4 delas admin ÚNICO** — plano nomeado | Operação | ❌ Não | **Pré-requisito do 10.** Bloqueia qualquer recusa ou limpeza |
-| 8 | **NOVO-C** | **Login ambíguo:** identificador duplicado resolvido por `.first()` | Backend | ❌ Não | Nenhuma — verificado no código, independente das contas sintéticas |
+| 5 | LEDG-2434 | Levantamento — **falta PPR e as perguntas 2/3/4 fora de PRD** | Spike | 🟡 Parcial | Nenhuma |
+| 6 | **LEDG-2462** | **Campos de sessão vazios no login SAML** (`last_login_at`, `current_login_at`, `login_count`, `last_login_ip`) | Backend | ❌ Não | Nenhuma. Paralelo ao 5 — **este é código, o 5 é humano** |
+| 7 | **LEDG-2463** | **As 6 contas com conteúdo, 4 delas admin ÚNICO** — plano nomeado | Operação | ❌ Não | **Pré-requisito do LEDG-2431.** Bloqueia qualquer recusa ou limpeza |
+| 8 | **LEDG-2464** | **Login ambíguo:** identificador duplicado resolvido por `.first()` | Backend | ❌ Não | Nenhuma — verificado no código, independente das contas sintéticas |
 | 9 | LEDG-2435 | **Uma identidade, uma conta** — as duas classes de duplicado | Backend | ❌ Não | Depende do **5**. 🟢 **Mais simples do que desenhado:** reconciliação é 1:1 |
 | 10 | LEDG-2431 | Associar a uma conta tradicional existente | Full-stack | ❌ Não | Depende do **2**, **5**, **7** e **9**. ✅ **Desenho decidido pelos dados: recusar quando há conteúdo** |
 | 11 | LEDG-2438 | **Estrangeiros: identidade por documento em vez de NIC** | Backend | ❌ Não | Confirmar sobreposição com LEDG-2288 |
 | 12 | LEDG-2436 | Identidade sem identificador (eIDAS **e** CMD) | Backend | ❌ Não | **Depende do 11**. 🔻 **Despromovido:** zero casos nas 120; só se justifica pelo eIDAS |
-| — | **NOVO-D** | **Organizações AGIT duplicadas** (3 registos) | A confirmar | ❌ Não | Fora do caminho crítico — âmbito a confirmar |
+| — | ~~NOVO-D~~ | ~~**Organizações AGIT duplicadas** (3 registos)~~ | — | ❌ **Não se cria** | A consulta desfez a suspeita — ver acima |
 
 **Próximo a implementar:** o **5** (LEDG-2434). Os pontos 1 a 4 estão em `develop` e `tst`, e
-o 5 é o único que não depende de nada — e é o que desbloqueia o desenho do 6 e do 7. O dry-run
-já correu (ver acima); falta versionar o script de levantamento, acrescentar-lhe os dois eixos
-de colisão, e correr nos quatro ambientes.
+o 5 é o único que não depende de nada — e é o que desbloqueia o desenho do LEDG-2435 e do
+LEDG-2431. O dry-run já correu, o script de levantamento já está versionado com os dois eixos
+de colisão, e DEV e TST já foram medidos (ver acima); **falta PPR**, e as perguntas 2/3/4 fora
+de PRD.
 
 > ⚠️ **Os números desta tabela mudam.** Entrou o LEDG-2457 e tudo o que vinha depois desceu uma
 > posição. Quatro tickets referiam-se ao seu próprio lugar por número (*"é o ponto 2 da
@@ -874,8 +875,8 @@ incluído.
 
 A verificação saiu do form (que só sabe recusar) e entrou na view (que pode responder igual nos
 dois casos) — **avisa o dono da caixa** e devolve a resposta do ramo livre. **Zero alterações no
-frontend.** A resposta genérica construída aqui **é a restrição 2 do ponto 7** — o 7 estende-a
-em vez de a reinventar.
+frontend.** A resposta genérica construída aqui **é a restrição 2 do LEDG-2431** — o
+LEDG-2431 estende-a em vez de a reinventar.
 
 ### 3 — LEDG-2433 · Campo do método de autenticação *(backend)* ✅ FEITO
 
@@ -899,9 +900,9 @@ O percurso é **paralelo ao `next`**, que já faz esta viagem: `CmdTab` → `bui
 ⚠️ **A allowlist é no backend** — o valor chega em query string controlada pelo utilizador, e um
 valor não reconhecido **não grava nada**, nem cru nem default.
 
-⚠️ **Este valor nunca gateia nada.** Vem de um radio button. Quando o ponto 8 trouxer o provado,
-**o provado ganha** — e o desacordo entre os dois passa a ser o sinal de IdP mal configurado que
-falta ao ponto 9.
+⚠️ **Este valor nunca gateia nada.** Vem de um radio button. Quando o LEDG-2438 trouxer o
+provado, **o provado ganha** — e o desacordo entre os dois passa a ser o sinal de IdP mal
+configurado que falta ao LEDG-2436.
 
 **Dois achados da implementação, que valem para os pontos seguintes:**
 
@@ -997,7 +998,7 @@ presumivelmente um dump restaurado — de **origem e data desconhecidas**. Conse
    dúvida: `maria.filomena.delgado@funchal.pt` → `'mafide'`,
    `iolanda.sofia.fernandes@funchal.pt` → `'iosofe'`, `carlos.mora@techframe.pt` → `'CMTF'`.
    **Só um parece documento:** `'4595P5L28'`, com letras — forma de título de residência, não
-   NIC português. **Prova a favor do ponto 8 (LEDG-2438).**
+   NIC português. **Prova a favor do LEDG-2438.**
 
 5. **13 emails malformados** — 10 com espaço final, `dora.canelas` e `gmrmatos` sem `@`, e
    `Nelinho_33@hotmail,com` com vírgula em vez de ponto. **Todos no grupo dos 1070**, que se
@@ -1012,14 +1013,14 @@ dados. Não existe limite de 12 no código de escrita, e não vale a pena procur
 chave), logo estes números **não são portáveis** e o levantamento é obrigatoriamente **por
 ambiente**. Uma rotação de chave invalida todos os links existentes.
 
-### 6 — LEDG-2435 · Uma identidade, uma conta *(backend)*
+### 9 — LEDG-2435 · Uma identidade, uma conta *(backend)*
 
 Invariante: **uma identidade CMD/eIDAS → no máximo uma conta.** Cobre as duas classes:
 
 - **(a) IdP sem email** → não criar a conta ainda: identidade em sessão, encaminhar para o
   registo. **Inclui desacoplar da flag** — **sem remover as guardas `nic_required`**.
 - **(b) email já pertence a outra conta** → encaminhar para a associação.
-  ⚠️ **Não pode ser desligado antes do ponto 7 existir.**
+  ⚠️ **Não pode ser desligado antes do LEDG-2431 existir.**
 - **(c) capitalização diferente** → alinhar a verificação `exact` com a `ci`.
   ⚠️ **O mesmo problema existe no `change_email`**, e o LEDG-2456 deixou-o registado como achado
   rejeitado para este ponto o apanhar. **Cobrir os dois sítios.**
@@ -1027,7 +1028,7 @@ Invariante: **uma identidade CMD/eIDAS → no máximo uma conta.** Cobre as duas
 A fechar de passagem, por estarem na mesma zona: a guarda em falta na `/saml/migration/skip`, e
 o alinhamento dos três defaults da flag.
 
-### 7 — LEDG-2431 · Associar a uma conta tradicional existente *(a lacuna real)*
+### 10 — LEDG-2431 · Associar a uma conta tradicional existente *(a lacuna real)*
 
 Três restrições obrigatórias: **prova de posse** do email de destino, **resposta genérica** (já
 construída pelo ponto 2 — **estender, não reinventar**: o aviso ao dono da caixa passa a ser um
@@ -1037,7 +1038,7 @@ ponto 5). Entra pelo `_link_identity_and_login`.
 É também aqui que entra a decisão 6: **um campo de email**, com o endereço do CMD pré-preenchido
 quando existe, e a prova por link mantida mesmo nesse caso.
 
-### 8 — LEDG-2438 · Estrangeiros: a identidade é o documento, não o NIC *(backend)*
+### 11 — LEDG-2438 · Estrangeiros: a identidade é o documento, não o NIC *(backend)*
 
 Um cidadão estrangeiro com CMD **não tem NIC**. O portal pede o NIC como obrigatório e **não
 pede** nenhum dos três atributos que o identificam:
@@ -1053,14 +1054,14 @@ um hash); o `DocNumber` **sozinho não é único**, o que abriria a porta a duas
 partilharem a mesma conta; e o identificador é **menos estável do que um NIC** — um documento
 renovado muda de número, e a pessoa deixa de ser reconhecida pela sua própria conta.
 
-**Porque vem antes do 9:** os dois handlers ACS são idênticos, logo um estrangeiro com CMD cai
-**exactamente** no bug do ponto 9 — mas a resposta certa é oposta. O 9 recomenda **rejeitar**
-quem não tem identificador; um estrangeiro **tem**, só não lho pedimos. Resolver o 8 primeiro
-**tira os estrangeiros do âmbito do 9**.
+**Porque vem antes do LEDG-2436:** os dois handlers ACS são idênticos, logo um estrangeiro com
+CMD cai **exactamente** no bug do LEDG-2436 — mas a resposta certa é oposta. O LEDG-2436
+recomenda **rejeitar** quem não tem identificador; um estrangeiro **tem**, só não lho pedimos.
+Resolver este primeiro **tira os estrangeiros do âmbito do LEDG-2436**.
 
 **O ponto 4 ajuda aqui:** o tipo declarado dá a verificação cruzada contra o que a asserção traz.
 
-### 9 — LEDG-2436 · Identidade sem identificador *(bug)*
+### 12 — LEDG-2436 · Identidade sem identificador *(bug)*
 
 ⚠️ **Afeta os dois provedores**, não só o eIDAS: os handlers ACS são idênticos a partir do
 `_find_or_create_saml_user`. **Uma correção num handler só deixa o outro intacto.**
@@ -1069,9 +1070,9 @@ Com a flag a `True`, **os três ramos do wizard recusam a identidade com `nic_re
 beco sem saída por desenho, e a recusa está no sítio errado. Com a flag a `False`, **cada login
 cria uma conta nova**.
 
-**A metade da multiplicação de contas não depende de decisão nenhuma** e pode sair com o ponto 6.
-O que está bloqueado é só **a escolha entre rejeitar e ligar pelo email** — pelo LEDG-2288 e pelo
-ponto 8.
+**A metade da multiplicação de contas não depende de decisão nenhuma** e pode sair com o
+LEDG-2435. O que está bloqueado é só **a escolha entre rejeitar e ligar pelo email** — pelo
+LEDG-2288 e pelo LEDG-2438.
 
 ---
 

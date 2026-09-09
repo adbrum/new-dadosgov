@@ -365,8 +365,37 @@ absoluta lida aqui descreve *esses* ambientes, **não produção**.
 
 1. ❌ **RETRACTADO — "a estimativa de ~200 contas sintéticas está errada por 50×".** Escrevi
    isso com base nos 4 de DEV e 3 de TST. **Não se sustenta:** esses ambientes não têm a
-   população de produção, logo não dizem nada sobre os ~200. **A pergunta 1 continua sem
-   resposta**, e só produção a pode dar.
+   população de produção, logo não dizem nada sobre os ~200.
+
+   ✅ **E a estimativa foi CONFIRMADA em produção**, por verificação no backoffice
+   (2026-09-09): **~200 contas com `saml-…@autenticacao.gov.pt` em PRD**. A pergunta 1 tem
+   resposta. ⚠️ É uma **contagem de listagem, não uma consulta** — dá o número de contas, não
+   quantas pessoas distintas são (pergunta 7) nem quantas têm conteúdo (pergunta 2).
+
+   **PPR (`10.53.37.70`) e PRD (`10.51.37.51`) não são alcançáveis** desta máquina (timeout de
+   selecção de servidor nos dois), logo tudo o que dependa de consulta a produção **é trabalho
+   humano**, não automatizável a partir daqui.
+
+   🔍 **A discrepância é o achado mais accionável de todo o levantamento:** **~200 em PRD
+   contra 4 em DEV e 3 em TST**, sendo que DEV e TST estão activos (logins hoje). Se os
+   endereços sintéticos fossem uma consequência inevitável do código, DEV e TST — que correm o
+   mesmo código — teriam a mesma proporção. **Não têm.**
+
+   **Hipótese, explicitamente não verificada:** a diferença é o `MIGRATION_MODE_ENABLED`. Com
+   a flag a `True` o assistente corre e a conta sintética **não é criada**; com `False` o
+   candidato é descartado e o `_create_saml_user` fabrica o endereço. Se PRD tiver `False` e
+   DEV/TST `True`, isso explica os três números — e implica que **mudar a flag em produção
+   trava a hemorragia**, sem esperar por nenhum dos nove pontos.
+
+   **Como confirmar, por ordem de custo:**
+   - ler o `MIGRATION_MODE_ENABLED` no `.env` de PRD, PPR, DEV e TST → **é a pergunta 9**, e
+     passa a ser a pergunta mais importante do ticket, não uma nota de rodapé;
+   - ver no backoffice as **datas de criação** das ~200: se se concentram a partir de uma
+     data, essa data é quando a flag mudou ou o código entrou.
+
+   ⚠️ **Não tratar a hipótese como conclusão.** Este documento já retractou duas conclusões
+   tiradas de dados de ambientes que não são produção; esta fica marcada como hipótese até
+   alguém ler os quatro `.env`.
 2. ❌ **RETRACTADO — "os `unrecognized` estão a acumular (23 → 30 → 39)".** Li a ordenação
    entre três ambientes como uma série temporal. **Não é:** são três populações distintas e
    sem relação de idade entre si. Que DEV tenha 39 e a local 23 não é crescimento — é outra

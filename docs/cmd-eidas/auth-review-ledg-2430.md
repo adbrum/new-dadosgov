@@ -270,8 +270,20 @@ classificador que discorda da produção produz contagens erradas.
 
 > 💡 **É a mesma classe de bug que originou esta revisão inteira:** duas funções que decidem a
 > mesma coisa e não concordam, como o `_find_user_by_email_ci` versus o `find_user` da classe 2.
-> A correcção é fazer os predicados **virem do `nic.py`**, para que o levantamento conte pelo
-> mesmo critério que o login usa, por construção.
+
+✅ **CORRIGIDO em 2026-09-09** (`eeb2c4f3`). Os predicados passam a ser importados do `nic.py`
+— `is_nic_hashed`, `is_nic_legacy_encrypted`, `is_nic_plain` — logo o levantamento e o
+`migrate-nics` põem cada conta no mesmo balde **por construção**, não por dois autores
+concordarem. Verificado: hex maiúsculo dá agora `stale (unrecognized)` nos dois, como a
+produção.
+
+Custo zero em runtime (os predicados não pedem contexto de app; só o `hash_nic` pede, para o
+`SECRET_KEY`), mas o script passa a correr dentro do venv — `uv run python …`, como as linhas
+de uso agora dizem. Continua estritamente só de leitura.
+
+Três commits na branch, de propósito: o resgate como estava (`261cb5b6`), a formatação
+(`5549b81f`) e o fix (`eeb2c4f3`). Sem essa separação o fix ficava enterrado debaixo de
+sessenta linhas de literais reformatados.
 
 ⚠️ **O que lhe falta:** os dois eixos de colisão — `auth_nic` repetido (pergunta 7) e
 `email` repetido em minúsculas (pergunta 8). É a extensão a fazer, e resolve de uma vez a

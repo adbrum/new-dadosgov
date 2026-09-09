@@ -626,7 +626,8 @@ o fluxo SAML os escrever.
 2. **É um defeito por si só**, e não estava em nenhum dos pontos quando isto foi escrito:
    qualquer lógica que dependa de inactividade — limpezas, notificações, relatórios de
    utilização — trata **todos** os utilizadores de CMD/eIDAS recentes como dormentes.
-   ✅ **Já tem ticket próprio: o LEDG-2462**, o ponto 6, com PR aberto para `develop`.
+   ✅ **Já corrigido pelo LEDG-2462**, o ponto 6, em `develop` e `tst`. ⚠️ **Mas não
+   retroactivamente** — ver esse ponto.
 
 ---
 
@@ -833,7 +834,7 @@ entre os dois passa a ser o sinal de IdP mal configurado que hoje falta ao LEDG-
 | **3** | LEDG-2433 | Campo do método de autenticação (CMD/eIDAS) | Backend | ✅ **Sim** — 6 commits, suite completa verde; em `develop` e `tst` | Nenhuma — aditivo |
 | **4** | LEDG-2457 | Tipo de cidadão **declarado** (nacional/estrangeiro) | Full-stack | ✅ **Sim** — 5 commits nos dois repos; em `develop` e `tst` | **Depende do 3** |
 | 5 | LEDG-2434 | Levantamento — **falta PPR e as perguntas 2/3/4 fora de PRD** | Spike | 🟡 Parcial | Nenhuma |
-| 6 | **LEDG-2462** | **Campos de sessão vazios no login SAML** (`last_login_at`, `current_login_at`, `login_count`, `last_login_ip`) | Backend | 🔧 **PR aberto** para `develop`; 6 commits, suite completa verde, 13 testes novos | Nenhuma. Paralelo ao 5 — **este é código, o 5 é humano** |
+| **6** | LEDG-2462 | **Campos de sessão vazios no login SAML** (os cinco campos trackable) | Backend | ✅ **Sim** — PR #266; 6 commits, suite completa verde, 13 testes novos; em `develop` e `tst` | Nenhuma. Paralelo ao 5 — **este é código, o 5 é humano** |
 | **7** | **LEDG-2465** | **Login recusado tratado como sucesso:** sessão marcada, log diz `OK`, auditoria diz `success`, e o link de uso único fica queimado | Backend | ❌ Não | Nenhuma — mas mexe nas **mesmas duas funções** do 6, logo é mais barato a seguir a ele |
 | **8** | **LEDG-2466** | **`datastore.commit()` é no-op em Mongo:** 3 chamadas que não gravam nada, e o `confirmed_at` do auto-confirm perde-se | Backend | ❌ Não | Nenhuma — o 6 deixou de o reparar de lado, deliberadamente |
 | 9 | LEDG-2463 | **As 6 contas com conteúdo, 4 delas admin ÚNICO** — plano nomeado | Operação | ❌ Não | **Pré-requisito do LEDG-2431.** Bloqueia qualquer recusa ou limpeza |
@@ -1073,8 +1074,15 @@ dos 11 testes faziam `patch` do `login_user` com um mock **sempre truthy**, logo
 exercitava o ramo verdadeiro da guarda com a função real. E o teste da guarda apontava para o
 `User.save`, que deixou de ser chamado — **passava sem exercitar a guarda**.
 
-✅ **Estado: PR aberto para `develop`**, 6 commits, suite completa verde, 13 testes novos.
-Fez aparecer os pontos 7 (LEDG-2465) e 8 (LEDG-2466).
+✅ **Estado: em `develop` e `tst`** (PR #266), 6 commits, suite completa verde, 13 testes novos.
+`ppr` e `main` retidos pela decisão de promoção em bloco. **Fez aparecer os pontos 7
+(LEDG-2465) e 8 (LEDG-2466)**, e ambos mexem nestas mesmas duas funções.
+
+⚠️ **A confirmar antes de `ppr`/`main`, não em `tst`:** o valor efectivo de
+`YEARS_OF_INACTIVITY_BEFORE_DELETION` em cada ambiente, porque as contas de CMD/eIDAS entram
+na maquinaria de inactividade pela primeira vez (com data recente, logo protegidas); e o
+`PROXY_FIX_X_FOR`, porque o IP gravado é o que o Flask vê e o ProxyFix não valida que é um IP
+— pré-existente e já pior no rate limiter, que usa a mesma fonte, mas agora o valor persiste.
 
 ⚠️ **Não recupera o passado.** As 232 contas criadas desde junho ficam sem histórico; os campos
 só têm significado a partir do deploy. **A pergunta 3 do LEDG-2434 continua sem resposta para o

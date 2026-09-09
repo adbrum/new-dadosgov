@@ -346,20 +346,42 @@ o `migrate-nics` também não porque só itera o prefixo.
 | grupos com o mesmo identificador | **13** | **14** | 13 |
 | colisões de capitalização | **2** | **2** | 2 |
 
-**Quatro conclusões, e a primeira derruba a premissa do pedido:**
+#### ⚠️ Antes de ler os números: nenhum destes ambientes é produção
 
-1. 🚨 **A estimativa de "~200 contas com endereço fabricado" está errada por ~50×.** São
-   **4 em DEV e 3 em TST**. O problema que deu origem ao pedido é o **menor** dos três.
-2. 🚨 **As colisões de identificador estão VIVAS em DEV e TST, não são um risco de migração.**
-   Nesses ambientes os valores já estão hasheados (`plain NIC = 0`), logo os 13/14 grupos
-   partilham o **mesmo hash agora**: para ~26–28 contas o login CMD resolve por `.first()` e
-   devolve **uma arbitrária**. É um defeito de correcção em produção-like, não um efeito
-   colateral futuro. **É o maior dos três problemas** e nenhuma contagem por `saml-` o vê.
-3. **O `migrate-nics` já correu em DEV e TST** — zero em claro, e o `legacy-encrypted`
-   permaneceu **1201** nos dois, exactamente como localmente (1203). Prova empírica de que o
-   comando **não toca** nesse balde: correu, e os 1201 continuam lá.
-4. ⚠️ **Os `unrecognized` estão a acumular:** 23 local → 30 TST → **39 DEV**. Não é um resíduo
-   histórico estável; algo continua a escrever nomes e usernames no slot do NIC.
+Idade dos dados, medida a 2026-09-09:
+
+| | conta mais recente | último login | total (com apagadas) |
+| --- | --- | --- | --- |
+| **DEV** | 2026-09-08 | **2026-09-09** | 9202 |
+| **TST** | 2026-09-08 | 2026-09-08 | 9047 |
+| local | 2026-05-22 | 2026-08-04 | 8846 |
+
+**DEV e TST estão activos** — contas criadas ontem, logins hoje. **A desactualizada é a
+local**, 3,5 meses atrás. Mas o que importa é outro eixo: **DEV e TST não são cópias de
+produção**, são ambientes com a sua própria população de teste. Logo qualquer contagem
+absoluta lida aqui descreve *esses* ambientes, **não produção**.
+
+**Duas conclusões, e duas retractações:**
+
+1. ❌ **RETRACTADO — "a estimativa de ~200 contas sintéticas está errada por 50×".** Escrevi
+   isso com base nos 4 de DEV e 3 de TST. **Não se sustenta:** esses ambientes não têm a
+   população de produção, logo não dizem nada sobre os ~200. **A pergunta 1 continua sem
+   resposta**, e só produção a pode dar.
+2. ❌ **RETRACTADO — "os `unrecognized` estão a acumular (23 → 30 → 39)".** Li a ordenação
+   entre três ambientes como uma série temporal. **Não é:** são três populações distintas e
+   sem relação de idade entre si. Que DEV tenha 39 e a local 23 não é crescimento — é outra
+   população. **Se algo continua a escrever nomes no slot do NIC, isto não o prova.**
+3. ⚠️ **REENQUADRADO — as colisões de identificador.** Em DEV e TST os valores estão todos
+   hasheados (`plain NIC = 0`), logo os 13/14 grupos partilham o **mesmo hash nesses
+   ambientes agora**: para ~26–28 contas o login CMD resolve por `.first()` e devolve uma
+   arbitrária. Isso é real e verificado **ali**. Para produção é um **limite inferior
+   plausível** — as contas não costumam ser apagadas e o mecanismo que as cria é o mesmo —
+   mas **não é uma medição de produção**. E a ambiguidade não depende de estarem hasheadas: o
+   passo 1b faz `.first()` sobre valores em claro igualmente.
+4. ✅ **MANTÉM-SE — o `migrate-nics` não toca no balde legado.** É a única conclusão que não
+   depende da população, porque é sobre o **comportamento do comando**: DEV e TST têm zero em
+   claro (logo algo os hasheou) e o `legacy-encrypted` ficou em **1201** nos dois, contra 1203
+   na local que nunca foi migrada. Correu, e os 1201 continuam lá.
 
 **E a classe 2, num exemplar de manual:**
 

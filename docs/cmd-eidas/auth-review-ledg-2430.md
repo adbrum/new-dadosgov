@@ -366,6 +366,12 @@ por mês.
 
 **120 contas → 120 identificadores distintos. Uma conta por pessoa.**
 
+⚠️ **Medido duas vezes, porque a primeira consulta estava mal.** Agrupei só as 120 sintéticas
+entre si — o que **não** apanharia um par *(conta real + conta sintética)* com o mesmo NIC, que
+é exactamente a forma que a multiplicação teria. Reagrupado sobre **todas** as contas: **13
+grupos, 26 contas, e nenhum inclui uma conta sintética.** A conclusão aguenta-se; a primeira
+consulta é que não a suportava.
+
 A pergunta 7 previa que "as ~200 contas não são ~200 pessoas" — que a mesma identidade
 recebia uma conta nova em **cada** login, e que o número real de pessoas seria muito menor.
 **Nos dados não há um único caso**: nenhum identificador aparece duas vezes.
@@ -379,6 +385,58 @@ reconciliar N contas de uma pessoa.
 **Contas sem identificador nenhum: 0.** A população do [LEDG-2436](https://ticapp.atlassian.net/browse/LEDG-2436)
 — identidade sem identificador — **está vazia nesta amostra**. O ticket pode continuar a
 justificar-se pelo eIDAS, mas não por estas contas.
+
+##### 🔑 Pergunta 9 — o que a flag FAZ em produção, lido no código de `main`
+
+`main` está **154 commits** atrás de `develop` no backend, logo o comportamento tinha de ser
+lido ali. Das 9 ocorrências de `MIGRATION_MODE_ENABLED`, **só 2 são código** (uma linha de log
+e o `_migration_enabled()`); as outras 7 são testes. O que decide são os **8 chamadores**, e o
+central é este:
+
+```python
+user, status = _find_or_create_saml_user(user_email, user_nic, first_name, last_name)
+
+if status == "migration_candidate":
+    if _migration_enabled():
+        return _handle_migration_redirect(...)     # → assistente em /migrate-account
+    # Migration wizard disabled: never log into an unproven account —
+    # fall back to creating a new one (scenario 4).
+    user = _create_saml_user(...)                  # → conta NOVA
+    status = "new"
+```
+
+🚨 **E em `main` uma identidade JÁ LIGADA devolve `migration_candidate`**, não `existing_saml`
+como em `develop`:
+
+```python
+if user_nic:
+    user = User.objects(extras__auth_nic=_hash_nic(user_nic)).first()
+    if user:
+        return user, "migration_candidate"        # develop: "existing_saml"
+```
+
+**Se a flag estiver desligada, isto implica uma conta nova em cada login de quem já está
+ligado** — a multiplicação que a pergunta 7 previa. **Mas os dados dizem que ela não acontece**
+(ver abaixo). As duas coisas só se reconciliam de duas maneiras: **a flag está ligada em
+produção**, ou ninguém entrou duas vezes — e a segunda não é verificável, porque os campos de
+sessão não são escritos (pergunta 3).
+
+> ✅ **É isto que torna a pergunta 9 decisiva, e não uma nota de rodapé.** O valor da flag
+> **discrimina entre duas histórias causais diferentes** para as mesmas 120 contas, e a
+> correcção é diferente em cada uma. Não é "registar para completude" — é o que diz qual é o
+> problema.
+
+**Verificações feitas antes de considerar mexer na flag em produção:**
+
+| Verificação | Resultado |
+| --- | --- |
+| `migrate-account` (o assistente) existe em `main`? | ✅ **sim** |
+| `complete-registration` (o que a conta sintética precisa) existe em `main`? | ❌ **não** — é o 404 do LEDG-2437 |
+| O frontend em `main` esconde o formulário por alguma flag? | ✅ **não** — zero referências; o bug do LEDG-2432 nunca chegou a produção |
+| O backend em `main` devolve `migration_required` no login tradicional? | ✅ **não** — logo a flag **não pode** partir o login por email |
+
+⚠️ **Não mexer na flag até se saber o seu valor actual**, precisamente porque ela discrimina
+entre as duas histórias. Ligá-la sem saber pode estar a "corrigir" algo que já está ligado.
 
 ##### Pergunta 2 — a que mais pesa: **6 de 120 têm conteúdo ou pertença**
 

@@ -887,7 +887,7 @@ seguro: o 10 arruma 4 casos, o 9 impede que voltem.
 | **18** | **LEDG-2472** | **Consolidação self-service:** avisar que só haverá uma conta por pessoa, e deixar a pessoa mover os dados das secundárias para a principal | Full-stack | ❌ Não | Depende do **requisito 4 do 14** e do **9**. 🛑 **Tem de vir ANTES do 19** — depois da obrigatoriedade, quem perdeu o email de uma conta secundária já não entra nela para empurrar o conteúdo |
 | **19** | **LEDG-2471** | **Descontinuar o login por email e palavra-passe:** inventário e gate no backend | Full-stack | ❌ Não | Depende do **15**, **17**, **18**, e do LEDG-2437 e LEDG-2467 |
 | **20** | **LEDG-1277** | **Obrigatoriedade do Autenticação.gov** — o fim do arco | Produto | 🟡 Em curso | Depende do **19**. ⚠️ **Não activar antes dele** |
-| — | **LEDG-2467** | **Recuperação de palavra-passe:** quatro razões de recusa dão a mesma resposta de sucesso | Backend | ❌ Não | **Fora da decomposição** — não é CMD/eIDAS. Mas é **pré-requisito do 19** |
+| — | **LEDG-2467** | **Recuperação de palavra-passe:** os mails do flask_security saíam de `webmaster@udata` | Backend | 🟡 **Remetente corrigido** — PR #270, em `develop`; **as quatro recusas indistinguíveis ficam abertas** | **Fora da decomposição** — não é CMD/eIDAS. Mas é **pré-requisito do 19** |
 | — | ~~NOVO-D~~ | ~~**Organizações AGIT duplicadas** (3 registos)~~ | — | ❌ **Não se cria** | A consulta desfez a suspeita — ver acima |
 
 **Próximo a implementar:** o **8** (LEDG-2466) — mexe no **mesmo ficheiro** que o 7 acabou de
@@ -1595,8 +1595,51 @@ apagada, email inexistente — produzem a mesma UI de "enviámos-lhe uma mensage
 anti-enumeração, indistinguível de uma avaria.
 
 ✅ **E a via de diagnóstico existe:** o `AuditMailUtil` escreve `mail_dispatch kind="reset_instructions"
-recipient=m*** result=sent|error`, legível em `/admin/system/logs`. **Sem linha** = recusa de
-formulário; `result=error` = o envio falhou; `result=sent` e não chegou = o relay.
+recipient=m*** result=sent|error`, legível em `/admin/system/logs`.
+
+#### 🎯 RESOLVIDO a 2026-09-10 — e a causa não era nenhuma das hipóteses acima
+
+**Os mails do flask_security saíam de `webmaster@udata`**, um domínio que não é sequer um TLD válido.
+Confirmado num mail **entregue**, não inferido.
+
+A cadeia: o `app.log` do DEV tinha `mail_dispatch kind="reset_instructions" … result=sent error=-`,
+logo **não houve recusa de formulário** (uma recusa não emite linha nenhuma) e **não houve erro de
+envio**. E o remetente estava congelado, porque o `udata/settings.py` fazia, dentro da mesma classe:
+
+```python
+line  72:  MAIL_DEFAULT_SENDER   = "webmaster@udata"
+line 161:  SECURITY_EMAIL_SENDER = MAIL_DEFAULT_SENDER   # copia o VALOR de classe
+```
+
+O `=` no corpo da classe **copia, não liga**. O `.env` sobrepõe só o `MAIL_DEFAULT_SENDER`, logo as
+duas chaves ficavam sem relação. E o default que essa linha substituiu era
+`LocalProxy(lambda: current_app.config.get("MAIL_DEFAULT_SENDER", ...))` — **resolução lazy, que
+daria o valor certo**. ⇒ A correcção foi **apagar a linha**, não sobrepô-la.
+
+⚠️ **A linha é upstream** (PR #436 do udata original, 2016), não da AMA — logo o comentário foi
+mantido em 2 linhas, deixando o diff em **−1/+2**. A guarda contra reintrodução é o teste
+(`SecurityMailSenderTest`), que vive em ficheiro nosso. **É um bug upstream e vale reportá-lo.**
+
+**Afectava os seis mails do flask_security**, não só o reset: recuperação e alteração de palavra-passe,
+registo, confirmação de endereço e instruções de login. Os mails enviados pelo código do udata
+(`auth/views.py`) já usavam o remetente correcto — era essa a assimetria visível na caixa de correio.
+
+✅ **Verificado em DEV depois do deploy:** mail recebido de `noreply.dados.gov@arte.gov.pt`.
+
+🚩 **E dois bugs encontrados pelo caminho:**
+* o `SEND_MAIL` **não era desligável** — o `udata.cfg` usava `_env` (string crua), logo `SEND_MAIL=False`
+  dava `"False"`, que é truthy. Corrigido para `_env_bool`. ✅ **Confirmado que a variável não existe em
+  `.env` nenhum**, logo o default `True` aplica-se nos quatro e a alteração não muda comportamento;
+* o subject hardcoded em português do `reset_instructions()` é **código morto no envio** — o assunto
+  real vem do `SECURITY_EMAIL_SUBJECT_PASSWORD_RESET`, traduzido. ❌ **Correcção ao que aqui estava
+  escrito antes:** não é um assunto mal traduzido, é um campo que ninguém lê.
+
+⚠️ **O QUE FICA ABERTO, e é o que este ponto tinha de original:** as **quatro razões de recusa
+indistinguíveis** continuam lá. Não eram a causa deste relato, mas são um problema real — e ficaram
+**mais graves** com o ponto 7: uma conta inactiva passou a ser recusada no login SAML *e* continua a
+receber "enviado" sem envio na recuperação, logo **não tem via de entrada nenhuma nem explicação**.
+Precisa de decisão de produto, e o precedente a estudar é o do LEDG-2456: **a resposta no browser é
+igual nos dois casos, e é o conteúdo do email que difere.**
 
 ---
 

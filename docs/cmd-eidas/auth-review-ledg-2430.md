@@ -28,10 +28,11 @@ a reformulação CMD/eIDAS estiver feita e validada. **Não se promove por ticke
   | 2026-09-08 | 1 a 4 | 85 | 80 |
   | 2026-09-09 | + o 6 (LEDG-2462) | **103** | 80 |
   | 2026-09-10 | + o 7 (LEDG-2465) | **108** | 80 |
+  | 2026-09-10 | + o LEDG-2467 (fora da decomposição) | **113** | 80 |
 
   Uma parte é anterior a este refinamento e já lá estava; o ponto é que **o número não desce**,
   e a promoção final não será revisível commit a commit. O frontend não se moveu porque os pontos
-  6 e 7 são só backend. ⚠️ **Os +23 do backend não são todos deste refinamento** — o `tst` recebe
+  6 e 7 e o LEDG-2467 são só backend. ⚠️ **Os +28 do backend não são todos deste refinamento** — o `tst` recebe
   também trabalho de outras frentes, e é isso que torna a promoção final difícil de rever.
   Para referência, `ppr → main` está em **86** no backend e **122** no frontend.
 - ⚠️ **O LEDG-2437 deixa de ser uma ação de release independente.** Fechava com um
@@ -857,7 +858,8 @@ seguro: o 10 arruma 4 casos, o 9 impede que voltem.
 > contas sozinha fecha quando o login por palavra-passe deixar de existir. **Duas capacidades que as decisões
 > pressupunham já existiam** — publicar em nome de uma organização e transferir conteúdo entre conta e
 > organização — logo o ponto 11 é migração de dados, não construção. E a **recuperação de palavra-passe**
-> (LEDG-2467) entrou como linha sem número: não é CMD/eIDAS, mas é pré-requisito do 18.
+> (LEDG-2467) entrou como linha sem número: não é CMD/eIDAS. Ficou feita a 2026-09-10, e o que
+> nela era pré-requisito do 19 passou para o LEDG-2474.
 >
 > 🔄 **Reordenado a 2026-09-09, com os dados de produção.** A ordem anterior assumia que o
 > problema eram as ~200 contas sintéticas e que essas contas eram poucas pessoas com muitas
@@ -885,9 +887,10 @@ seguro: o 10 arruma 4 casos, o 9 impede que voltem.
 | 16 | LEDG-2438 | **Estrangeiros: identidade por documento em vez de NIC** | Backend | ❌ Não | Confirmar sobreposição com LEDG-2288 |
 | 17 | LEDG-2436 | Identidade sem identificador (eIDAS **e** CMD) | Backend | ❌ Não | **Depende do 13**. 🔻 **Despromovido:** zero casos nas 120; só se justifica pelo eIDAS |
 | **18** | **LEDG-2472** | **Consolidação self-service:** avisar que só haverá uma conta por pessoa, e deixar a pessoa mover os dados das secundárias para a principal | Full-stack | ❌ Não | Depende do **requisito 4 do 14** e do **9**. 🛑 **Tem de vir ANTES do 19** — depois da obrigatoriedade, quem perdeu o email de uma conta secundária já não entra nela para empurrar o conteúdo |
-| **19** | **LEDG-2471** | **Descontinuar o login por email e palavra-passe:** inventário e gate no backend | Full-stack | ❌ Não | Depende do **15**, **17**, **18**, e do LEDG-2437 e LEDG-2467 |
+| **19** | **LEDG-2471** | **Descontinuar o login por email e palavra-passe:** inventário e gate no backend | Full-stack | ❌ Não | Depende do **15**, **17**, **18**, e do LEDG-2437 e **LEDG-2474** (era o LEDG-2467, que ficou feito — a substância passou para o 2474) |
 | **20** | **LEDG-1277** | **Obrigatoriedade do Autenticação.gov** — o fim do arco | Produto | 🟡 Em curso | Depende do **19**. ⚠️ **Não activar antes dele** |
-| — | **LEDG-2467** | **Recuperação de palavra-passe:** os mails do flask_security saíam de `webmaster@udata` | Backend | 🟡 **Remetente corrigido** — PR #270, em `develop`; **as quatro recusas indistinguíveis ficam abertas** | **Fora da decomposição** — não é CMD/eIDAS. Mas é **pré-requisito do 19** |
+| — | **LEDG-2467** | **Recuperação de palavra-passe:** os mails do flask_security saíam de `webmaster@udata` | Backend | ✅ **Sim** — PR #270; em `develop` e `tst`, e **verificado em DEV** com mail recebido do remetente certo | **Fora da decomposição** — não é CMD/eIDAS |
+| — | **LEDG-2474** | **Quatro razões de recusa dão a mesma resposta de sucesso** na recuperação — e uma conta inactiva fica **sem via de entrada nenhuma** | Backend + Produto | ❌ Não | **Fora da decomposição.** Bloqueado em **decisão da AMA**. 🚨 **Passou a ser o pré-requisito do 19** que o 2467 era, e agravou-se com o **7** |
 | — | ~~NOVO-D~~ | ~~**Organizações AGIT duplicadas** (3 registos)~~ | — | ❌ **Não se cria** | A consulta desfez a suspeita — ver acima |
 
 **Próximo a implementar:** o **8** (LEDG-2466) — mexe no **mesmo ficheiro** que o 7 acabou de
@@ -1642,6 +1645,57 @@ Precisa de decisão de produto, e o precedente a estudar é o do LEDG-2456: **a 
 igual nos dois casos, e é o conteúdo do email que difere.**
 
 ---
+
+## 🔎 Encontrado na mesma investigação, e FORA deste refinamento
+
+O diagnóstico do LEDG-2467 passou pelos logs e pela configuração dos ambientes, e apanhou coisas
+que **não são de autenticação**. Ficam registadas aqui para não se perderem, e **deliberadamente
+fora da tabela de decomposição** — meter trabalho não-CMD/eIDAS nessa tabela dilui-a.
+
+### LEDG-2475 · O formulário de Ajuda e contactos devolve 400 em PPR e PRD
+
+`POST /api/1/site/contact/` → **400**, com `Content-Length: 54`. Em DEV e TST devolve **204** e a
+mensagem chega. O `udata.cfg` é versionado e igual para todos, logo a diferença está na
+configuração de ambiente.
+
+🎯 **Não é problema de correio — falha antes de qualquer envio.** O `SupportContactForm.validate`
+(`core/site/forms.py:46`) chama o `validate_recaptcha()` primeiro e devolve `False` de imediato.
+
+E o tamanho da resposta isola a causa. O corpo tem o formato `{"errors": {…}}`, e **só uma
+mensagem dá 54 bytes** (referências medidas contra o DEV, com uma sonda que falha na validação e
+por isso não envia mail):
+
+| Bytes | Corpo | Significado |
+| --- | --- | --- |
+| **54** | `{"errors": {"recaptcha_token": ["Invalid reCAPTCHA"]}}` | 🎯 o observado em PRD |
+| 60 | a mesma em português | — |
+| 66 | `reCAPTCHA validation required` | token ausente |
+| **14** | `{"errors": {}}` | falha de **rede** ao contactar o Google |
+
+⇒ **O Google respondeu e rejeitou o token.** Exclui a hipótese benigna: sem alcance ao
+`siteverify`, o `except RequestException` (`auth/forms.py:56-58`) devolvia `False` **sem pôr
+mensagem no campo** → 14 bytes.
+
+⚠️ **Causa quase certa:** o par site/secret do reCAPTCHA partilha o prefixo do registo. Em DEV a
+site key e o segredo batem (`6Lcimo4s…`) e funciona; em PPR/PRD a site key é de outro registo
+(`6LfoyIMt…`). **Se o segredo desses ambientes for o de DEV, está aí a causa.** Encaixa numa
+pendência já registada do lote VULN-2092: *"falta re-teste Devoteam + chaves reCAPTCHA"*.
+
+### 🚩 As traduções não fazem efeito em PPR/PRD
+
+Os 54 bytes são a mensagem **em inglês**. A tradução existe
+(`translations/pt/LC_MESSAGES/udata.po:2826` → `reCAPTCHA inválido`) e daria 60. O DEV responde em
+português; o PRD não.
+
+⇒ Afecta **todas** as mensagens de erro da API nesses ambientes. Consistente com a matriz de
+branches acima: o i18n do LEDG-2456 está em `develop` e `tst`, não em `ppr`/`main`. **Verificar se
+os `.mo` estão compilados no deploy** — está dentro do LEDG-2475 como verificação.
+
+### ⚠️ E um desvio temporário a não esquecer
+
+O `.env` de DEV tem o `MAIL_DEFAULT_RECEIVER` apontado para um endereço pessoal, com o comentário
+`# trocar temporariamente`. É a caixa onde o formulário de contacto aterra. **Vale confirmar que o
+mesmo desvio não ficou noutro ambiente.**
 
 ## 🛑 LEDG-2437 — retido pela decisão de promoção
 

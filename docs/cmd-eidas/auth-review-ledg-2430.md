@@ -873,7 +873,7 @@ seguro: o 10 arruma 4 casos, o 9 impede que voltem.
 | **4** | LEDG-2457 | Tipo de cidadão **declarado** (nacional/estrangeiro) | Full-stack | ✅ **Sim** — 5 commits nos dois repos; em `develop` e `tst` | **Depende do 3** |
 | 5 | LEDG-2434 | Levantamento — **falta PPR e as perguntas 2/3/4 fora de PRD** | Spike | 🟡 Parcial | Nenhuma |
 | **6** | LEDG-2462 | **Campos de sessão vazios no login SAML** (os cinco campos trackable) | Backend | ✅ **Sim** — PR #266; 6 commits, suite completa verde, 13 testes novos; em `develop` e `tst` | Nenhuma. Paralelo ao 5 — **este é código, o 5 é humano** |
-| **7** | **LEDG-2465** | **Login recusado tratado como sucesso:** sessão marcada, log diz `OK`, auditoria diz `success`, e o link de uso único fica queimado | Backend | ✅ **Sim** — PR #268; 3 commits, suite completa verde, 13 testes novos; em `develop` e `tst` | Nenhuma — mexeu nas **mesmas duas funções** do 6, e foi de facto mais barato a seguir a ele |
+| **7** | **LEDG-2465** | **Login recusado tratado como sucesso:** sessão marcada, log diz `OK`, auditoria diz `success`, e o link de uso único fica queimado | Backend | ✅ **Sim** — PR #268; 3 commits, suite completa verde, 11 testes novos; em `develop` e `tst` | Nenhuma — mexeu nas **mesmas duas funções** do 6, e foi de facto mais barato a seguir a ele |
 | **8** | **LEDG-2466** | **`datastore.commit()` é no-op em Mongo:** 3 chamadas que não gravam nada, e o `confirmed_at` do auto-confirm perde-se | Backend | ❌ Não | Nenhuma — o 6 deixou de o reparar de lado, deliberadamente |
 | **9** | **LEDG-2468** | **Nada impede uma organização de ficar sem administrador** — remover membro e trocar role não contam admins | Backend | ❌ Não | Nenhuma — e **quanto mais cedo entrar, menos casos o 10 trata à mão** |
 | 10 | LEDG-2463 | **As 6 contas com conteúdo, 4 delas admin ÚNICO** — plano nomeado | Operação | ❌ Não | **Pré-requisito do LEDG-2431.** Bloqueia qualquer recusa ou limpeza |
@@ -1170,7 +1170,7 @@ funil correr. Corrigir só o funil deixa a linha de auditoria errada.
 
 #### ✅ Feito — PR #268, em `develop` e `tst` (2026-09-10)
 
-3 commits, suite completa verde, **13 testes novos e nenhum a fazer patch do `login_user`** — que
+3 commits, suite completa verde, **11 testes novos (8 nas rotas + 3 no link) e nenhum a fazer patch do `login_user`** — que
 era exactamente a lacuna que o LEDG-2462 deixou. Provas: 6 dos 8 testes das rotas vermelhos sem a
 guarda, 2 dos 3 do link vermelhos sem o check, e a mutação do `user and` mata **exactamente um**
 teste.
@@ -1626,8 +1626,12 @@ problema causado por divergência entre branches.
 
 - `udata/tests/frontend/test_saml.py` — **149 testes** de base, **160 depois do LEDG-2433** (as
   duas classes do provedor), **169 depois do LEDG-2457** (`SAMLDeclaredCitizenTypeTest`), e
-  **183 depois do LEDG-2462** (`SAMLTrackableLoginFieldsTest` + o teste do clique no link).
-  Medido em `develop`.
+  **183 depois do LEDG-2462** (`SAMLTrackableLoginFieldsTest` + o teste do clique no link), e
+  **194 depois do LEDG-2465** (`SAMLInactiveAccountRefusalTest` + 3 no clique do link).
+  Medido em `develop` com `pytest --collect-only`.
+  ⚠️ **Os totais medidos são a fonte, não os resumos por ticket.** O resumo do 2465 dizia
+  "13 testes novos" e o real é **11** (194 − 183) — corrigido. Vale reverificar o do 2462 pela
+  mesma via, porque 183 − 169 dá **14** e o resumo dele também diz 13.
 - `udata/tests/test_legacy_vulns_auth_enumeration.py` — regressão de enumeração. **O LEDG-2456
   acrescentou a classe que faltava** para o change-email: o ficheiro tinha uma por cada vetor da
   auditoria e nenhuma para este, que é a razão pela qual a fuga sobreviveu.

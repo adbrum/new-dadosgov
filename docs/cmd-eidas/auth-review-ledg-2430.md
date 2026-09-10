@@ -27,10 +27,11 @@ a reformulação CMD/eIDAS estiver feita e validada. **Não se promove por ticke
   | --- | --- | --- | --- |
   | 2026-09-08 | 1 a 4 | 85 | 80 |
   | 2026-09-09 | + o 6 (LEDG-2462) | **103** | 80 |
+  | 2026-09-10 | + o 7 (LEDG-2465) | **108** | 80 |
 
   Uma parte é anterior a este refinamento e já lá estava; o ponto é que **o número não desce**,
-  e a promoção final não será revisível commit a commit. O frontend não se moveu porque o ponto
-  6 é só backend. ⚠️ **Os +18 do backend não são todos deste refinamento** — o `tst` recebe
+  e a promoção final não será revisível commit a commit. O frontend não se moveu porque os pontos
+  6 e 7 são só backend. ⚠️ **Os +23 do backend não são todos deste refinamento** — o `tst` recebe
   também trabalho de outras frentes, e é isso que torna a promoção final difícil de rever.
   Para referência, `ppr → main` está em **86** no backend e **122** no frontend.
 - ⚠️ **O LEDG-2437 deixa de ser uma ação de release independente.** Fechava com um
@@ -872,7 +873,7 @@ seguro: o 10 arruma 4 casos, o 9 impede que voltem.
 | **4** | LEDG-2457 | Tipo de cidadão **declarado** (nacional/estrangeiro) | Full-stack | ✅ **Sim** — 5 commits nos dois repos; em `develop` e `tst` | **Depende do 3** |
 | 5 | LEDG-2434 | Levantamento — **falta PPR e as perguntas 2/3/4 fora de PRD** | Spike | 🟡 Parcial | Nenhuma |
 | **6** | LEDG-2462 | **Campos de sessão vazios no login SAML** (os cinco campos trackable) | Backend | ✅ **Sim** — PR #266; 6 commits, suite completa verde, 13 testes novos; em `develop` e `tst` | Nenhuma. Paralelo ao 5 — **este é código, o 5 é humano** |
-| **7** | **LEDG-2465** | **Login recusado tratado como sucesso:** sessão marcada, log diz `OK`, auditoria diz `success`, e o link de uso único fica queimado | Backend | ❌ Não | Nenhuma — mas mexe nas **mesmas duas funções** do 6, logo é mais barato a seguir a ele |
+| **7** | **LEDG-2465** | **Login recusado tratado como sucesso:** sessão marcada, log diz `OK`, auditoria diz `success`, e o link de uso único fica queimado | Backend | ✅ **Sim** — PR #268; 3 commits, suite completa verde, 13 testes novos; em `develop` e `tst` | Nenhuma — mexeu nas **mesmas duas funções** do 6, e foi de facto mais barato a seguir a ele |
 | **8** | **LEDG-2466** | **`datastore.commit()` é no-op em Mongo:** 3 chamadas que não gravam nada, e o `confirmed_at` do auto-confirm perde-se | Backend | ❌ Não | Nenhuma — o 6 deixou de o reparar de lado, deliberadamente |
 | **9** | **LEDG-2468** | **Nada impede uma organização de ficar sem administrador** — remover membro e trocar role não contam admins | Backend | ❌ Não | Nenhuma — e **quanto mais cedo entrar, menos casos o 10 trata à mão** |
 | 10 | LEDG-2463 | **As 6 contas com conteúdo, 4 delas admin ÚNICO** — plano nomeado | Operação | ❌ Não | **Pré-requisito do LEDG-2431.** Bloqueia qualquer recusa ou limpeza |
@@ -889,7 +890,10 @@ seguro: o 10 arruma 4 casos, o 9 impede que voltem.
 | — | **LEDG-2467** | **Recuperação de palavra-passe:** quatro razões de recusa dão a mesma resposta de sucesso | Backend | ❌ Não | **Fora da decomposição** — não é CMD/eIDAS. Mas é **pré-requisito do 19** |
 | — | ~~NOVO-D~~ | ~~**Organizações AGIT duplicadas** (3 registos)~~ | — | ❌ **Não se cria** | A consulta desfez a suspeita — ver acima |
 
-**Próximo a implementar:** o **5** (LEDG-2434). Os pontos 1 a 4 estão em `develop` e `tst`, e
+**Próximo a implementar:** o **8** (LEDG-2466) — mexe no **mesmo ficheiro** que o 7 acabou de
+tocar, e o 6 deixou-o deliberadamente sem reparar de lado. Depois dele o **9** (LEDG-2468), cujos
+pontos 1 e 2 são implementáveis já; os 3, 4 e 5 estão bloqueados numa decisão da AMA. Os pontos
+1 a 4, 6 e 7 estão em `develop` e `tst`, e
 o 5 é o único que não depende de nada — e é o que desbloqueia o desenho do LEDG-2435 e do
 LEDG-2431. O dry-run já correu, o script de levantamento já está versionado com os dois eixos
 de colisão, e DEV e TST já foram medidos (ver acima); **falta PPR**, e as perguntas 2/3/4 fora
@@ -1163,6 +1167,41 @@ ficaram, de propósito: decidir qual é a resposta certa a uma conta inactiva nu
 
 ⚠️ **Cuidado com a assimetria:** a auditoria de sucesso é emitida na rota ACS, **antes** do
 funil correr. Corrigir só o funil deixa a linha de auditoria errada.
+
+#### ✅ Feito — PR #268, em `develop` e `tst` (2026-09-10)
+
+3 commits, suite completa verde, **13 testes novos e nenhum a fazer patch do `login_user`** — que
+era exactamente a lacuna que o LEDG-2462 deixou. Provas: 6 dos 8 testes das rotas vermelhos sem a
+guarda, 2 dos 3 do link vermelhos sem o check, e a mutação do `user and` mata **exactamente um**
+teste.
+
+**A guarda ficou nas duas rotas ACS, imediatamente depois do `_find_or_create_saml_user` e antes
+do ramo do wizard** — e não no retorno do `login_user`, que era o sítio óbvio e é tarde demais:
+nessa altura o funil já auto-confirmou a conta e já estampou o `auth_provider`, logo recusar
+depois deixaria uma conta confirmada e marcada como tendo autenticado por CMD por um login
+recusado. E ficar antes do ramo do wizard é o que torna a recusa **alcançável** para a conta
+legada não ligada, que é por construção quem recebe links de validação.
+
+No caminho do link, o check entrou no `_migration_link_token_status`, que é **read-only por
+construção** — o não-consumo do token passa a ser propriedade da *posição*, não de lembrar de
+desfazer algo.
+
+**Duas correcções ao plano, ambas apanhadas na execução:**
+
+* 🚩 **O `caplog` do pytest não é injectável nesta suite.** O `APITestCase` desce de
+  `unittest.TestCase`, onde o `caplog` não entra. Usa-se `self.assertLogs`, que faz o mesmo
+  trabalho — anexa handler e fixa o nível — e sem isso a asserção "nenhuma linha `success`"
+  passaria sobre uma captura vazia.
+* ✅ **O risco de regressão grave foi descartado por verificação, não por memória.** A guarda
+  podia recusar um registo CMD **novo** se as contas nascessem sem `active`. O
+  `_create_saml_user` vai pelo `datastore.create_user`, e o `_prepare_create_user_args` do
+  flask_security faz `kwargs.setdefault("active", True)`. Nascem activas.
+
+⚠️ **E um defeito real que este ponto NÃO corrigiu, deliberadamente:** a linha `outcome=success`
+prematura continua a existir para os ramos `deleted` e confirmação-pendente, que são alcançados
+antes da emissão da rota. Quem contar `outcome=success` continua a contar a mais nesses dois.
+Corrigi-lo exige decidir o vocabulário de cada ramo — em particular, a confirmação pendente **não
+é** uma recusa de segurança e já tem `migration_pending`. **Recomendação: ticket próprio.**
 
 ### 8 — LEDG-2466 · `datastore.commit()` é no-op em Mongo *(backend)*
 

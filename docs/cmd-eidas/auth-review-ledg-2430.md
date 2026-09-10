@@ -1206,6 +1206,68 @@ as arrumar à mão. **O 10 trata 4 casos; este trata a causa.**
 sem admin não pode promover ninguém de dentro. O `audit_institutional_users.py` já sabe contar
 pertenças e papéis, e é o sítio para acrescentar essa contagem.
 
+#### 🚨 Âmbito alargado a 2026-09-10 — os endpoints de membro NÃO são o pior caminho
+
+A versão anterior deste ponto deixava o apagamento de conta **fora de âmbito**, como risco nomeado a
+medir depois. **Verificado no código, esse adiamento estava errado** — e o caminho excluído é mais
+grave do que o incluído.
+
+O `User.mark_as_deleted` (`udata/core/user/models.py:306`) **termina a remover a pessoa de todas as
+organizações, com escrita directa no modelo**:
+
+```python
+for organization in self.organizations:
+    organization.members = [
+        member for member in organization.members if member.user != self
+    ]
+    organization.save()
+```
+
+🔑 **Não passa pelo `MemberAPI`** — logo uma guarda posta nos dois endpoints **não é executada por
+este caminho**, e o ticket, como estava desenhado, deixaria o buraco maior aberto e pareceria fechado.
+
+**Quatro chamadores, e nenhum passa pelos endpoints:**
+
+| Onde | O quê | Alcance |
+| --- | --- | --- |
+| `user/api.py:118` | `DELETE /api/1/me/` — a pessoa apaga a própria conta | 🚨 **sem condição nenhuma** |
+| `user/api.py:733` | um administrador apaga a conta de outro | sempre disponível |
+| `user/tasks.py:75` | o job `delete-inactive-users` | ⚠️ gated — ver abaixo |
+| `user/commands.py:84` | `udata user delete` (CLI) | sempre disponível |
+
+🚨 **O primeiro é o que importa: o único administrador de uma organização consegue deixá-la órfã
+apagando o seu próprio perfil.** Sem admin envolvido, sem aviso, sem guarda, sem privilégio nenhum.
+
+**E um quinto caminho, que não limpa nada:** o `dup._delete()` do `_merge_cmd_duplicates` é **hard
+delete** — nem passa pelo `mark_as_deleted`, logo **nem chega a remover a pertença**. Deixa uma
+referência de membro pendurada para uma conta que já não existe: estado pior do que órfã, é
+inconsistente.
+
+⚠️ **O job automatizado está desligado por omissão, mas ninguém verificou os ambientes.** O
+`delete_inactive_users` sai logo se `YEARS_OF_INACTIVITY_BEFORE_DELETION` for falsy, e o default é
+`None` (`udata/settings.py:186`). 🚨 **O valor efectivo vem da configuração do ambiente, e é a mesma
+classe de desconhecido que a flag `MIGRATION_MODE_ENABLED`** — que já produziu duas regressões neste
+refinamento por se ter assumido um valor. **Acrescentado às perguntas do ponto 5.**
+
+E se estiver ligado, a população em risco é precisamente a das 4 organizações: as contas sintéticas
+levam 404 a cada login (LEDG-2437), logo são candidatas naturais a deixar de entrar → tornarem-se
+inactivas → serem apagadas → **organização órfã, sem ninguém ter feito nada.** Não se afirma que
+aconteça; afirma-se que **nada o impede** e que o valor não é conhecido.
+
+#### A consequência de desenho
+
+⚠️ **A guarda não pode ser duplicada em cinco sítios** — o sexto caminho que aparecer fica sem ela,
+que é exactamente como este defeito existe hoje. Tem de ser **uma função reutilizável** chamada pelos
+dois endpoints **e** pelo `mark_as_deleted`.
+
+🚨 **E recusar o `DELETE /api/1/me/` prenderia a pessoa à conta**, o que tem implicações de protecção
+de dados: quem quer sair do portal não pode ficar retido por ser a única administradora de uma
+organização. A saída provável é exigir a passagem do papel antes, ou apagar e escalar a organização
+para sysadmin com registo — **decisão da AMA, escrita antes de haver código.**
+
+🔑 **E isto passou a ser pré-requisito do 14 e do 18**, que apagam contas **por desenho**: o 14 funde
+os 13 grupos, e no 18 apagar a conta secundária depois de a esvaziar é uma das opções em cima da mesa.
+
 ⚠️ **E a guarda destes dois endpoints não fecha os outros caminhos:** o `mark_as_deleted` e o
 `dup._delete()` do `migrate-nics` também podem deixar uma organização órfã, e não passam por aqui.
 

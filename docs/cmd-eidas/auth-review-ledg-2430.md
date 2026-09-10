@@ -850,8 +850,10 @@ seguro: o 10 arruma 4 casos, o 9 impede que voltem.
 
 ## Decomposição, pela ordem de implementação
 
-> 🔄 **Reordenado a 2026-09-10, com as três decisões de produto da decisão 10.** Entraram cinco
-> tickets e a tabela passou de catorze pontos a dezanove. **Duas capacidades que as decisões
+> 🔄 **Reordenado a 2026-09-10, com as três decisões de produto da decisão 10.** Entraram seis
+> tickets e a tabela passou de catorze pontos a vinte. **O LEDG-2472 entrou por último**, da ideia
+> de consolidação self-service: fica **antes** do 19, porque a janela para a pessoa juntar as suas
+> contas sozinha fecha quando o login por palavra-passe deixar de existir. **Duas capacidades que as decisões
 > pressupunham já existiam** — publicar em nome de uma organização e transferir conteúdo entre conta e
 > organização — logo o ponto 11 é migração de dados, não construção. E a **recuperação de palavra-passe**
 > (LEDG-2467) entrou como linha sem número: não é CMD/eIDAS, mas é pré-requisito do 18.
@@ -881,9 +883,10 @@ seguro: o 10 arruma 4 casos, o 9 impede que voltem.
 | 15 | LEDG-2431 | Associar a uma conta tradicional existente | Full-stack | ❌ Não | Depende do **2**, **5**, **10** e **13**. ✅ **Desenho decidido pelos dados: recusar quando há conteúdo** |
 | 16 | LEDG-2438 | **Estrangeiros: identidade por documento em vez de NIC** | Backend | ❌ Não | Confirmar sobreposição com LEDG-2288 |
 | 17 | LEDG-2436 | Identidade sem identificador (eIDAS **e** CMD) | Backend | ❌ Não | **Depende do 13**. 🔻 **Despromovido:** zero casos nas 120; só se justifica pelo eIDAS |
-| **18** | **LEDG-2471** | **Descontinuar o login por email e palavra-passe:** inventário e gate no backend | Full-stack | ❌ Não | Depende do **15**, **17**, e do LEDG-2437 e LEDG-2467 |
-| **19** | **LEDG-1277** | **Obrigatoriedade do Autenticação.gov** — o fim do arco | Produto | 🟡 Em curso | Depende do **18**. ⚠️ **Não activar antes dele** |
-| — | **LEDG-2467** | **Recuperação de palavra-passe:** quatro razões de recusa dão a mesma resposta de sucesso | Backend | ❌ Não | **Fora da decomposição** — não é CMD/eIDAS. Mas é **pré-requisito do 18** |
+| **18** | **LEDG-2472** | **Consolidação self-service:** avisar que só haverá uma conta por pessoa, e deixar a pessoa mover os dados das secundárias para a principal | Full-stack | ❌ Não | Depende do **requisito 4 do 14** e do **9**. 🛑 **Tem de vir ANTES do 19** — depois da obrigatoriedade, quem perdeu o email de uma conta secundária já não entra nela para empurrar o conteúdo |
+| **19** | **LEDG-2471** | **Descontinuar o login por email e palavra-passe:** inventário e gate no backend | Full-stack | ❌ Não | Depende do **15**, **17**, **18**, e do LEDG-2437 e LEDG-2467 |
+| **20** | **LEDG-1277** | **Obrigatoriedade do Autenticação.gov** — o fim do arco | Produto | 🟡 Em curso | Depende do **19**. ⚠️ **Não activar antes dele** |
+| — | **LEDG-2467** | **Recuperação de palavra-passe:** quatro razões de recusa dão a mesma resposta de sucesso | Backend | ❌ Não | **Fora da decomposição** — não é CMD/eIDAS. Mas é **pré-requisito do 19** |
 | — | ~~NOVO-D~~ | ~~**Organizações AGIT duplicadas** (3 registos)~~ | — | ❌ **Não se cria** | A consulta desfez a suspeita — ver acima |
 
 **Próximo a implementar:** o **5** (LEDG-2434). Os pontos 1 a 4 estão em `develop` e `tst`, e
@@ -1366,7 +1369,76 @@ cria uma conta nova**.
 LEDG-2435. O que está bloqueado é só **a escolha entre rejeitar e ligar pelo email** — pelo
 LEDG-2288 e pelo LEDG-2438.
 
-### 18 — LEDG-2471 · Descontinuar o login por email e palavra-passe *(full-stack)*
+### 18 — LEDG-2472 · Consolidação self-service *(full-stack)*
+
+**A ideia:** quem entra numa conta tradicional vê um aviso de que no futuro só será possível ter
+uma conta por pessoa, e quem tiver várias move os dados para a que quer manter. Facultativo,
+enquanto o login por palavra-passe existir.
+
+#### 🔑 O fluxo é ao contrário do que parece, e é isso que o torna seguro
+
+A intuição é *"entro na conta principal e puxo os dados das outras"*. **O código não permite, e faz
+bem.** O `TransferPermission` (`udata/features/transfer/permissions.py`) exige
+`UserNeed(subject.owner.fs_uniquifier)` — só o **dono** pode iniciar a transferência — e o
+`TransferResponsePermission` exige ser o **destinatário** para aceitar.
+
+⇒ **Entrar na conta secundária → empurrar para a principal → a principal aceita.** Duas
+propriedades vêm de graça: a **prova de posse é o próprio login** (só se move conteúdo de uma conta
+em que se consegue entrar) e **ninguém recebe conteúdo sem consentir**.
+
+#### ❓ "Como é que a app sabe qual é a principal e qual é a secundária?"
+
+**Não sabe, e não deve decidir.** *Principal* não é um atributo da conta: é a resposta a *para onde
+apontaste a transferência*. A conta de onde se empurra é, por esse acto, a secundária; a que aceita
+é a principal. Não há nada a calcular — e qualquer heurística (a mais antiga, a com mais conteúdo,
+a do último login) estaria errada para alguém. **Quem decide é a pessoa, e decide fazendo.**
+
+#### 🚨 Mas nomear o destino é o furo, e a lista de pesquisa não serve
+
+O `RecipientSelect.tsx` escolhe hoje o destinatário com `suggestUsers`, e essa lista **já está
+endurecida**: o `user_suggestion_fields` (`udata/core/user/api_fields.py:204-220`) passa o email por
+`member_email_with_visibility_check`, logo um não-admin vê **só o domínio**.
+
+Bom contra enumeração, **inútil aqui**: não se distinguem duas contas próprias quando ambas
+aparecem como *"Nome Apelido · @dominio.pt"* — e **dois homónimos são indistinguíveis**, logo picar
+a errada envia o dataset para um estranho a quem só falta clicar em aceitar.
+
+⇒ **O destino tem de ser uma conta cuja posse foi provada, não uma escolhida de uma lista.** E esse
+mecanismo já existe, construído para isto: `sendMigrationLink()`
+(`frontend/src/service/api/migration/index.ts`), com o comentário *"Takes no argument on purpose:
+the recipient is never one the caller names."* — o backend envia o link para o endereço que já está
+na conta, e **o clique é a designação**.
+
+Há portanto estado a criar: um **destino confirmado por pessoa**. Mas estabelecido por prova,
+**nunca inferido**.
+
+#### 🚨 Sugerir "contas semelhantes" — rejeitado, por três razões
+
+1. **É o oráculo de enumeração que este refinamento fechou duas vezes** (LEDG-2361 e LEDG-2456): um
+   ecrã que diz *"estas também parecem suas"* ensina endereços a quem entrar em qualquer conta.
+2. **A semelhança seria por nome ou email** — o fallback do `_merge_cmd_duplicates`, que o
+   LEDG-2431 já registou como *não replicar*: **entre homónimos, é tomada de conta**.
+3. **E é redundante:** como só se empurra de uma conta em que se entra, a pessoa **já sabe quais são
+   as suas** — são aquelas em que consegue fazer login.
+
+**Excepção legítima, e estreita:** duas contas com o mesmo `extras.auth_nic` são provadamente a
+mesma pessoa. Mas é circular — o 12 (LEDG-2464) vai recusar esse login por ambíguo, logo a pessoa
+não entra em nenhuma. **São os 13 grupos, e por isso são fusão operacional no 14, não self-service.**
+
+#### ⚠️ A janela fecha — é a razão de estar antes do 19
+
+Depois da obrigatoriedade, quem perdeu acesso ao email de uma conta secundária **já não entra nela**,
+logo já não pode empurrar o conteúdo, que fica órfão sem via self-service. Fazer o 19 primeiro
+converte um problema self-service num problema de suporte, conta a conta.
+
+#### Dependências
+
+**Requisito 4 do 14** (LEDG-2469) se oferecer *"mover tudo"* — é lá que nasce a capacidade repetível
+de fundir contas com conteúdo. Sem ela, este ponto só pode guiar a pessoa pela UI objecto a objecto:
+versão mais pobre, mas entregável. **E do 9** (LEDG-2468) se a conta secundária puder ser apagada no
+fim — o `mark_as_deleted` não verifica se ela é administradora única de alguma organização.
+
+### 19 — LEDG-2471 · Descontinuar o login por email e palavra-passe *(full-stack)*
 
 O LEDG-1277 (ponto 19) é o dono da decisão e já especifica a versão suave: *"se tiver e-mail e
 palavra-passe, consigo aceder mas recebo mensagem informativa em como devo aceder via
@@ -1397,7 +1469,7 @@ não deve ser activado antes), o LEDG-2437 (o 404 em produção), o **LEDG-2467*
 palavra-passe: enquanto o login por password existir, é a via de quem não tem CMD) e o 17 (quem não
 consegue ligar CMD ficaria sem entrada nenhuma).
 
-### 19 — LEDG-1277 · Obrigatoriedade do Autenticação.gov *(produto)*
+### 20 — LEDG-1277 · Obrigatoriedade do Autenticação.gov *(produto)*
 
 O fim do arco, e o único ponto que já estava *In Progress* antes deste refinamento. ⚠️ **Não activar
 antes do 18**, e o LEDG-2431 diz porquê em texto: enquanto a migração é opcional, uma conta com

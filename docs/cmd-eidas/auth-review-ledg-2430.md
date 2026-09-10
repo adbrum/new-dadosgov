@@ -38,7 +38,7 @@ a reformulação CMD/eIDAS estiver feita e validada. **Não se promove por ticke
   produção mantém-se até lá** — risco aceite, e agora por mais tempo do que o previsto.
 - Quanto mais o `tst` acumular, **mais importa testar lá cada ponto à medida que entra**, e não
   só no fim. Uma regressão descoberta na promoção final é muito mais caro de localizar entre
-  catorze pontos do que entre um.
+  dezanove pontos do que entre um.
 
 ## Objetivo
 
@@ -831,8 +831,31 @@ entre os dois passa a ser o sinal de IdP mal configurado que hoje falta ao LEDG-
 
 ---
 
+**10. Decidido a 2026-09-10 — três decisões de produto, e o que cada uma mexeu.**
+
+* **Só se entra no portal por CMD e eIDAS.** O login por email e palavra-passe é descontinuado — o
+  **18** faz o levantamento e o gate, o **19** activa. ⚠️ **Facultativo primeiro**, com mensagem
+  informativa, que é o que o LEDG-1277 já especificava desde o início.
+* **Uma pessoa, uma conta.** O **13** pára o crescimento; o **14** funde o que existe e põe o índice
+  que o torna impossível. ⚠️ **O 14 é novo porque ninguém tinha o passado** — o 13 e o 12 tratam do
+  futuro e da recusa, e as 26 contas dos 13 grupos ficavam sem dono.
+* **As contas institucionais deixam de existir.** Publicar passa a ser sempre por conta pessoal, em
+  nome próprio ou de uma organização de que a pessoa é membro — o **11**. ✅ **A capacidade já
+  existe**; o que falta é migrar quem está no modelo antigo.
+
+⇒ **Duas coisas mudaram de natureza com isto.** O **11** pode ser a **causa** das contas sintéticas
+que o **13** trata como efeito — se a hipótese das caixas partilhadas se confirmar, a decisão de
+produto elimina a raiz. E o **9** deixou de ser detalhe do 10 para ser a guarda de código que o torna
+seguro: o 10 arruma 4 casos, o 9 impede que voltem.
+
 ## Decomposição, pela ordem de implementação
 
+> 🔄 **Reordenado a 2026-09-10, com as três decisões de produto da decisão 10.** Entraram cinco
+> tickets e a tabela passou de catorze pontos a dezanove. **Duas capacidades que as decisões
+> pressupunham já existiam** — publicar em nome de uma organização e transferir conteúdo entre conta e
+> organização — logo o ponto 11 é migração de dados, não construção. E a **recuperação de palavra-passe**
+> (LEDG-2467) entrou como linha sem número: não é CMD/eIDAS, mas é pré-requisito do 18.
+>
 > 🔄 **Reordenado a 2026-09-09, com os dados de produção.** A ordem anterior assumia que o
 > problema eram as ~200 contas sintéticas e que essas contas eram poucas pessoas com muitas
 > contas cada. **Os dados dizem o contrário** (120 contas = 120 pessoas, e só 6 com conteúdo),
@@ -842,19 +865,25 @@ entre os dois passa a ser o sinal de IdP mal configurado que hoje falta ao LEDG-
 | # | Ticket | O quê | Onde | Feito? | Dependência |
 | --- | --- | --- | --- | --- | --- |
 | **1** | LEDG-2432 | Repor o login por email e palavra-passe | Frontend | ✅ **Sim** — em `develop` e `tst` | 🚨 Regressão; desbloqueou o `tst → ppr` |
-| **2** | LEDG-2456 | Fuga de existência de conta **+ e-mails em inglês** | Backend | ✅ **Sim** — em `develop` e `tst` | Nenhuma — e torna o 12 menor |
+| **2** | LEDG-2456 | Fuga de existência de conta **+ e-mails em inglês** | Backend | ✅ **Sim** — em `develop` e `tst` | Nenhuma — e torna o 15 menor |
 | **3** | LEDG-2433 | Campo do método de autenticação (CMD/eIDAS) | Backend | ✅ **Sim** — 6 commits, suite completa verde; em `develop` e `tst` | Nenhuma — aditivo |
 | **4** | LEDG-2457 | Tipo de cidadão **declarado** (nacional/estrangeiro) | Full-stack | ✅ **Sim** — 5 commits nos dois repos; em `develop` e `tst` | **Depende do 3** |
 | 5 | LEDG-2434 | Levantamento — **falta PPR e as perguntas 2/3/4 fora de PRD** | Spike | 🟡 Parcial | Nenhuma |
 | **6** | LEDG-2462 | **Campos de sessão vazios no login SAML** (os cinco campos trackable) | Backend | ✅ **Sim** — PR #266; 6 commits, suite completa verde, 13 testes novos; em `develop` e `tst` | Nenhuma. Paralelo ao 5 — **este é código, o 5 é humano** |
 | **7** | **LEDG-2465** | **Login recusado tratado como sucesso:** sessão marcada, log diz `OK`, auditoria diz `success`, e o link de uso único fica queimado | Backend | ❌ Não | Nenhuma — mas mexe nas **mesmas duas funções** do 6, logo é mais barato a seguir a ele |
 | **8** | **LEDG-2466** | **`datastore.commit()` é no-op em Mongo:** 3 chamadas que não gravam nada, e o `confirmed_at` do auto-confirm perde-se | Backend | ❌ Não | Nenhuma — o 6 deixou de o reparar de lado, deliberadamente |
-| 9 | LEDG-2463 | **As 6 contas com conteúdo, 4 delas admin ÚNICO** — plano nomeado | Operação | ❌ Não | **Pré-requisito do LEDG-2431.** Bloqueia qualquer recusa ou limpeza |
-| 10 | LEDG-2464 | **Login ambíguo:** identificador duplicado resolvido por `.first()` | Backend | ❌ Não | Nenhuma — verificado no código, independente das contas sintéticas |
-| 11 | LEDG-2435 | **Uma identidade, uma conta** — as duas classes de duplicado | Backend | ❌ Não | Depende do **5**. 🟢 **Mais simples do que desenhado:** reconciliação é 1:1 |
-| 12 | LEDG-2431 | Associar a uma conta tradicional existente | Full-stack | ❌ Não | Depende do **2**, **5**, **9** e **11**. ✅ **Desenho decidido pelos dados: recusar quando há conteúdo** |
-| 13 | LEDG-2438 | **Estrangeiros: identidade por documento em vez de NIC** | Backend | ❌ Não | Confirmar sobreposição com LEDG-2288 |
-| 14 | LEDG-2436 | Identidade sem identificador (eIDAS **e** CMD) | Backend | ❌ Não | **Depende do 13**. 🔻 **Despromovido:** zero casos nas 120; só se justifica pelo eIDAS |
+| **9** | **LEDG-2468** | **Nada impede uma organização de ficar sem administrador** — remover membro e trocar role não contam admins | Backend | ❌ Não | Nenhuma — e **quanto mais cedo entrar, menos casos o 10 trata à mão** |
+| 10 | LEDG-2463 | **As 6 contas com conteúdo, 4 delas admin ÚNICO** — plano nomeado | Operação | ❌ Não | **Pré-requisito do LEDG-2431.** Bloqueia qualquer recusa ou limpeza |
+| **11** | **LEDG-2470** | **Contas institucionais deixam de existir:** publicar passa a ser sempre por conta pessoal, em nome próprio ou de uma organização | Operação | ❌ Não | Depende do **9**. **Contém o 10** como subconjunto, e pode ser a **causa** que o 13 trata como efeito |
+| 12 | LEDG-2464 | **Login ambíguo:** identificador duplicado resolvido por `.first()` | Backend | ❌ Não | Nenhuma — verificado no código, independente das contas sintéticas |
+| 13 | LEDG-2435 | **Uma identidade, uma conta** — as duas classes de duplicado | Backend | ❌ Não | Depende do **5**. 🟢 **Mais simples do que desenhado:** reconciliação é 1:1 |
+| **14** | **LEDG-2469** | **Fundir os duplicados que já existem** e depois impedi-los na BD (o `extras.auth_nic` não tem índice de unicidade) | Backend + Operação | ❌ Não | Depende do **9**, **12** e **13**. Fundir antes de o crescimento parar é limpar uma torneira aberta |
+| 15 | LEDG-2431 | Associar a uma conta tradicional existente | Full-stack | ❌ Não | Depende do **2**, **5**, **10** e **13**. ✅ **Desenho decidido pelos dados: recusar quando há conteúdo** |
+| 16 | LEDG-2438 | **Estrangeiros: identidade por documento em vez de NIC** | Backend | ❌ Não | Confirmar sobreposição com LEDG-2288 |
+| 17 | LEDG-2436 | Identidade sem identificador (eIDAS **e** CMD) | Backend | ❌ Não | **Depende do 13**. 🔻 **Despromovido:** zero casos nas 120; só se justifica pelo eIDAS |
+| **18** | **LEDG-2471** | **Descontinuar o login por email e palavra-passe:** inventário e gate no backend | Full-stack | ❌ Não | Depende do **15**, **17**, e do LEDG-2437 e LEDG-2467 |
+| **19** | **LEDG-1277** | **Obrigatoriedade do Autenticação.gov** — o fim do arco | Produto | 🟡 Em curso | Depende do **18**. ⚠️ **Não activar antes dele** |
+| — | **LEDG-2467** | **Recuperação de palavra-passe:** quatro razões de recusa dão a mesma resposta de sucesso | Backend | ❌ Não | **Fora da decomposição** — não é CMD/eIDAS. Mas é **pré-requisito do 18** |
 | — | ~~NOVO-D~~ | ~~**Organizações AGIT duplicadas** (3 registos)~~ | — | ❌ **Não se cria** | A consulta desfez a suspeita — ver acima |
 
 **Próximo a implementar:** o **5** (LEDG-2434). Os pontos 1 a 4 estão em `develop` e `tst`, e
@@ -1159,7 +1188,25 @@ E o `_create_pending_saml_user` é o caso em que a chamada é **só** enganadora
 > 💡 **É a terceira ocorrência da mesma classe de bug deste refinamento:** código que muta e
 > não grava, ou que grava sem que se veja.
 
-### 9 — LEDG-2463 · As contas com conteúdo, e as 4 organizações com admin único *(operação)*
+### 9 — LEDG-2468 · Nada impede uma organização de ficar sem administrador *(backend)*
+
+`MemberAPI.put` e `MemberAPI.delete` (`udata/core/organization/api.py:748-780`) verificam **só** quem
+pode gerir membros. **Nenhuma verifica que sobra pelo menos um administrador.** O `is_admin`
+(`organization/models.py:363-365`) e o `by_role` são de leitura e não bloqueiam nada; procurei uma
+guarda de "último admin" em todo o `udata/core/organization/` e **não existe**.
+
+**É o vazio estrutural por trás do ponto 10.** As 4 organizações públicas cujo único administrador é
+uma conta sintética existem porque nada o impediu — e nada impede que voltem a existir depois de o 10
+as arrumar à mão. **O 10 trata 4 casos; este trata a causa.**
+
+⚠️ **Contar as que já estão órfãs antes de decidir** — a guarda nova não as repara, e uma organização
+sem admin não pode promover ninguém de dentro. O `audit_institutional_users.py` já sabe contar
+pertenças e papéis, e é o sítio para acrescentar essa contagem.
+
+⚠️ **E a guarda destes dois endpoints não fecha os outros caminhos:** o `mark_as_deleted` e o
+`dup._delete()` do `migrate-nics` também podem deixar uma organização órfã, e não passam por aqui.
+
+### 10 — LEDG-2463 · As contas com conteúdo, e as 4 organizações com admin único *(operação)*
 
 **Não é código — é uma decisão sobre organizações reais**, e é por isso que bloqueia o
 LEDG-2431: qualquer regra de "recusar quando há conteúdo" tem de saber o que fazer com estes
@@ -1183,7 +1230,35 @@ uma deixa a organização órfã**, e a da AGIT leva 5 datasets consigo.
 — promover outro membro, ou associar a conta sintética ao seu dono real primeiro. **Decisão da
 AMA, não do código.**
 
-### 10 — LEDG-2464 · Login ambíguo: identificador duplicado resolvido por `.first()` *(backend)*
+### 11 — LEDG-2470 · Contas institucionais deixam de existir *(operação)*
+
+Decisão de produto de 2026-09-10: publicar passa a ser sempre a partir de uma **conta pessoal**, em
+nome próprio ou de uma **organização** de que a pessoa é membro.
+
+✅ **A capacidade já existe, e isso reduz o ticket a uma migração.** Verificado: o mixin `Owned`
+(`udata/core/owned.py:80-102`) tem `owner` e `organization`; o `check_organization_is_valid_for_current_user`
+(`:62-73`) exige ser admin/editor; as permissões seguem o dono (`dataset/permissions.py:16-27`); e o
+frontend **já tem o selector de produtor** (`DatasetWizardStep2.tsx:173-195`) com "conta pessoal" por
+omissão. E `udata/features/transfer/` move `Dataset`/`Reuse`/`Dataservice` entre `User` e
+`Organization` nos dois sentidos, com fluxo `pending`/`accepted`/`refused` e UI.
+
+🚨 **"Conta institucional" NÃO existe como conceito no código.** Não há campo, flag, role nem tipo — o
+docstring do `audit_institutional_users.py:1-22` di-lo: *"There is no 'institutional account' flag in
+the user model... 'Institutional' is therefore a heuristic applied on top."* A heurística classifica
+por local-part genérico (`geral@`, `dados@`, `sig@`), domínio `.gov.pt`, ou pertença a organização.
+⇒ **Deixar de existir é uma operação sobre dados**, sobre uma população identificável só por convenção.
+
+🔑 **E pode ser a causa das 120 contas sintéticas.** A hipótese das caixas partilhadas — um `geral@` já
+ligado à identidade do colega nº 1, o colega nº 2 entra com o seu CMD, a asserção traz o mesmo
+endereço, a conta não pode ser candidata, conta nova, endereço fabricado — tem a favor as **386 contas
+com aparência institucional E link CMD**. ⚠️ **Continua não verificada, e é a primeira coisa a fazer
+aqui**, porque decide se este ponto é uma limpeza ou a correcção da raiz do 13.
+
+⚠️ **A heurística dá 722 contas (336 sem CMD, 386 com), e não são todas institucionais** — o critério
+inclui "ser membro de uma organização", o que apanha contas pessoais legítimas. A lista tem de ser
+**revista por humano** antes de qualquer acção.
+
+### 12 — LEDG-2464 · Login ambíguo: identificador duplicado resolvido por `.first()` *(backend)*
 
 O passo 1 do resolvedor faz `User.objects(extras__auth_nic=…).first()`. Com duas contas a
 partilhar o identificador, **devolve uma arbitrária** — e a mesma pessoa pode entrar hoje numa
@@ -1204,7 +1279,7 @@ o login com mensagem clara e registo de auditoria) em vez de escolher uma conta 
 escolha arbitrária num caminho de autenticação é pior do que uma recusa: dá acesso a uma conta
 que pode não ser a da pessoa.
 
-### 11 — LEDG-2435 · Uma identidade, uma conta *(backend)*
+### 13 — LEDG-2435 · Uma identidade, uma conta *(backend)*
 
 Invariante: **uma identidade CMD/eIDAS → no máximo uma conta.** Cobre as duas classes:
 
@@ -1219,7 +1294,33 @@ Invariante: **uma identidade CMD/eIDAS → no máximo uma conta.** Cobre as duas
 A fechar de passagem, por estarem na mesma zona: a guarda em falta na `/saml/migration/skip`, e
 o alinhamento dos três defaults da flag.
 
-### 12 — LEDG-2431 · Associar a uma conta tradicional existente *(a lacuna real)*
+### 14 — LEDG-2469 · Fundir os duplicados que já existem, e depois impedi-los na BD *(backend + operação)*
+
+O 13 deixa de **criar** duplicados e o 12 faz o login **recusar** um identificador ambíguo. Nenhum
+funde os **13 grupos, 26 contas** que já existem — pares de contas com **endereço real**, a mesma
+pessoa com dois endereços a segundos de distância. ⇒ **Sem este ponto, o 12 tranca ~26 pessoas fora do
+portal e não há mecanismo para as destrancar.**
+
+🚨 **E não existe fusão de contas com conteúdo.** O `_merge_cmd_duplicates`
+(`user/commands.py:159-262`) e o `merge_saml` (`:344`) fundem **só o identificador** e apagam o
+duplicado — **não movem datasets, reuses, dataservices, discussões nem pertenças**. São seguros só
+porque a população que tratam é tipicamente vazia (114 das 120 não têm nada); **os 13 grupos não têm
+essa garantia, e ninguém a mediu.** Aplicar-lhes o `merge_saml` apagaria conteúdo.
+
+✅ **A primitiva certa existe:** o `udata/features/transfer/` move um objecto de cada vez entre contas e
+organizações. Uma fusão construída por cima dele orquestra transferência em vez de a inventar.
+
+🚨 **E o fecho é um índice que não existe.** O `extras.auth_nic` **não tem índice de unicidade nenhum**
+— é um `MapField` (`user/models.py:123`) e os únicos índices declarados (`:141-149`) são o de texto, o
+`-created_at` e o `slug`. A unicidade é aplicada **só em código**, e é exactamente por isso que os 13
+grupos existem. ⚠️ **O índice só pode ser criado depois de os duplicados estarem fundidos** — é a razão
+pela qual isto é um ponto e não dois.
+
+⚠️ **Segunda unicidade a decidir, e é a raiz da classe 2:** o `email` é `unique=True` mas
+**case-sensitive** (`models.py:76`, sem collation). Se o 13 decidir normalizar na escrita, o índice tem
+de passar a insensível e as **401 contas com maiúsculas** migradas. Alinhar com o 13 antes de tocar.
+
+### 15 — LEDG-2431 · Associar a uma conta tradicional existente *(a lacuna real)*
 
 Três restrições obrigatórias: **prova de posse** do email de destino, **resposta genérica** (já
 construída pelo ponto 2 — **estender, não reinventar**: o aviso ao dono da caixa passa a ser um
@@ -1229,7 +1330,7 @@ ponto 5). Entra pelo `_link_identity_and_login`.
 É também aqui que entra a decisão 6: **um campo de email**, com o endereço do CMD pré-preenchido
 quando existe, e a prova por link mantida mesmo nesse caso.
 
-### 13 — LEDG-2438 · Estrangeiros: a identidade é o documento, não o NIC *(backend)*
+### 16 — LEDG-2438 · Estrangeiros: a identidade é o documento, não o NIC *(backend)*
 
 Um cidadão estrangeiro com CMD **não tem NIC**. O portal pede o NIC como obrigatório e **não
 pede** nenhum dos três atributos que o identificam:
@@ -1252,7 +1353,7 @@ Resolver este primeiro **tira os estrangeiros do âmbito do LEDG-2436**.
 
 **O ponto 4 ajuda aqui:** o tipo declarado dá a verificação cruzada contra o que a asserção traz.
 
-### 14 — LEDG-2436 · Identidade sem identificador *(bug)*
+### 17 — LEDG-2436 · Identidade sem identificador *(bug)*
 
 ⚠️ **Afeta os dois provedores**, não só o eIDAS: os handlers ACS são idênticos a partir do
 `_find_or_create_saml_user`. **Uma correção num handler só deixa o outro intacto.**
@@ -1265,6 +1366,65 @@ cria uma conta nova**.
 LEDG-2435. O que está bloqueado é só **a escolha entre rejeitar e ligar pelo email** — pelo
 LEDG-2288 e pelo LEDG-2438.
 
+### 18 — LEDG-2471 · Descontinuar o login por email e palavra-passe *(full-stack)*
+
+O LEDG-1277 (ponto 19) é o dono da decisão e já especifica a versão suave: *"se tiver e-mail e
+palavra-passe, consigo aceder mas recebo mensagem informativa em como devo aceder via
+autenticacao.gov"*, com um TODO aberto — *"detalhar comportamento caso tenham e-mail e palavra-passe"*.
+Este ponto é o **levantamento e o gate**, porque há coisas que dependem da palavra-passe que não são o
+ecrã de login.
+
+🚨 **As duas que quebram primeiro, e nenhuma é UI:**
+
+1. **O OAuth2 `PasswordGrant` está registado e activo** (`udata/api/oauth2.py:255-260`, autentica em
+   `:398` por `verify_password`). **É autenticação de API por email+palavra-passe**, e desligar o
+   formulário no frontend não a afecta — é o tipo de dependência que se descobre em produção.
+2. **O CLI `udata user create` exige palavra-passe** (`user/commands.py:30-59`), e é assim que se cria o
+   primeiro sysadmin de um ambiente novo.
+
+✅ **Duas coisas já estão do lado certo:** a arquitectura **já tolera contas sem palavra-passe**
+(`saml_govpt.py:1699`: *"the account may have been created through SAML and have no usable password"*),
+e a prova por palavra-passe **já não completa a associação** (`:3068-3080`) — identifica a conta e envia
+o link.
+
+🚨 **E a armadilha tem precedente:** não existe flag para desligar o login tradicional, e **há um teste
+que impede reintroduzir uma no frontend** (`migration-flag-guard.test.ts`), porque foi isso que causou
+o LEDG-2432. ⇒ **A descontinuação é decidida no backend e por conta, nunca por uma flag lida no
+frontend.**
+
+**Pré-requisitos já conhecidos:** o 15 (associar conta tradicional — o próprio ticket diz que o 1277
+não deve ser activado antes), o LEDG-2437 (o 404 em produção), o **LEDG-2467** (a recuperação de
+palavra-passe: enquanto o login por password existir, é a via de quem não tem CMD) e o 17 (quem não
+consegue ligar CMD ficaria sem entrada nenhuma).
+
+### 19 — LEDG-1277 · Obrigatoriedade do Autenticação.gov *(produto)*
+
+O fim do arco, e o único ponto que já estava *In Progress* antes deste refinamento. ⚠️ **Não activar
+antes do 18**, e o LEDG-2431 diz porquê em texto: enquanto a migração é opcional, uma conta com
+endereço sintético é um problema de **contactabilidade**; quando passar a obrigatória, passa a ser de
+**perda de acesso irreversível** — o endereço não existe, a recuperação de palavra-passe é impossível,
+e se a pessoa perder o acesso ao meio Gov não há canal para a reidentificar.
+
+### — LEDG-2467 · Recuperação de palavra-passe *(fora da decomposição)*
+
+Não é CMD/eIDAS, logo não leva número — mas é **pré-requisito do 18**.
+
+**Duas hipóteses óbvias, refutadas.** ❌ Não é busca exacta por email: o `ForgotPasswordForm` do
+flask_security usa `find_user(case_insensitive=...)` com o `SECURITY_USER_IDENTITY_ATTRIBUTES`, que tem
+`case_insensitive: True` por omissão e o udata não sobrepõe — **este fluxo é case-insensitive**, ao
+contrário das quatro convenções da pergunta 5. ❌ E o `SEND_MAIL` tem default `True` no `udata.cfg`;
+só os perfis `Testing` e `Debug` o fixam a `False`.
+
+🚨 **A causa provável é por desenho:** `SECURITY_RETURN_GENERIC_RESPONSES = True` (`settings.py:170`)
+suprime os erros do formulário, e o frontend trata **qualquer 200 como sucesso**
+(`auth/reset-password/route.ts:55-58`). ⇒ **Quatro razões distintas — conta inactiva, não confirmada,
+apagada, email inexistente — produzem a mesma UI de "enviámos-lhe uma mensagem".** Correcto em
+anti-enumeração, indistinguível de uma avaria.
+
+✅ **E a via de diagnóstico existe:** o `AuditMailUtil` escreve `mail_dispatch kind="reset_instructions"
+recipient=m*** result=sent|error`, legível em `/admin/system/logs`. **Sem linha** = recusa de
+formulário; `result=error` = o envio falhou; `result=sent` e não chegou = o relay.
+
 ---
 
 ## 🛑 LEDG-2437 — retido pela decisão de promoção
@@ -1272,7 +1432,7 @@ LEDG-2288 e pelo LEDG-2438.
 **Não tem código.** Fecha quando a promoção `ppr → main` do frontend for feita — e essa, **por
 decisão de 2026-09-08, só acontece quando toda a reformulação estiver completa e validada**.
 
-Técnicamente **não depende de nenhum dos pontos 1 a 14**, mas a decisão de promover em bloco
+Técnicamente **não depende de nenhum dos pontos 1 a 19**, mas a decisão de promover em bloco
 prevalece.
 
 Verificado que o `7d5c9b50` **não está em `ppr`**, logo a promoção traz a página que falta em

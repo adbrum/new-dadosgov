@@ -30,10 +30,11 @@ a reformulação CMD/eIDAS estiver feita e validada. **Não se promove por ticke
   | 2026-09-10 | + o 7 (LEDG-2465) | **108** | 80 |
   | 2026-09-10 | + o LEDG-2467 (fora da decomposição) | **113** | 80 |
   | 2026-09-11 | + o 8 (LEDG-2466) | **116** | 80 |
+  | 2026-09-11 | + o 9 (LEDG-2464) | **122** | 80 |
 
   Uma parte é anterior a este refinamento e já lá estava; o ponto é que **o número não desce**,
   e a promoção final não será revisível commit a commit. O frontend não se moveu porque os pontos
-  6 e 7 e o LEDG-2467 são só backend. ⚠️ **Os +28 do backend não são todos deste refinamento** — o `tst` recebe
+  6, 7, 8, 9 e o LEDG-2467 são só backend. ⚠️ **Os +37 do backend não são todos deste refinamento** — o `tst` recebe
   também trabalho de outras frentes, e é isso que torna a promoção final difícil de rever.
   Para referência, `ppr → main` está em **86** no backend e **122** no frontend.
 - ⚠️ **O LEDG-2437 deixa de ser uma ação de release independente.** Fechava com um
@@ -888,8 +889,8 @@ seguro: o 11 arruma 4 casos, o 10 impede que voltem.
 | 5 | LEDG-2434 | Levantamento — **falta PPR e as perguntas 2/3/4 fora de PRD** | Spike | 🟡 Parcial | Nenhuma |
 | **6** | LEDG-2462 | **Campos de sessão vazios no login SAML** (os cinco campos trackable) | Backend | ✅ **Sim** — PR #266; 6 commits, suite completa verde, 13 testes novos; em `develop` e `tst` | Nenhuma. Paralelo ao 5 — **este é código, o 5 é humano** |
 | **7** | **LEDG-2465** | **Login recusado tratado como sucesso:** sessão marcada, log diz `OK`, auditoria diz `success`, e o link de uso único fica queimado | Backend | ✅ **Sim** — PR #268; 3 commits, suite completa verde, 11 testes novos; em `develop` e `tst` | Nenhuma — mexeu nas **mesmas duas funções** do 6, e foi de facto mais barato a seguir a ele |
-| **8** | **LEDG-2466** | **`datastore.commit()` é no-op em Mongo:** 3 chamadas que não gravam nada, e o `confirmed_at` **nunca chegava à BD** | Backend | ✅ **Sim** — PR #272, suite completa verde, 4 testes novos; em `develop` | Nenhuma — o 6 deixou de o reparar de lado, deliberadamente |
-| **9** | **LEDG-2464** | **Login ambíguo:** identificador duplicado resolvido por `.first()` — devolvia **sempre a conta mais recente** | Backend | ✅ **Sim** — PR #273, 6 testes novos; em `develop` | Nenhuma. 🚨 **Nega acesso a ~26 contas** até o 14 as fundir |
+| **8** | **LEDG-2466** | **`datastore.commit()` é no-op em Mongo:** 3 chamadas que não gravam nada, e o `confirmed_at` **nunca chegava à BD** | Backend | ✅ **Sim** — PR #272, 4 testes novos; em `develop` e `tst` | Nenhuma — o 6 deixou de o reparar de lado, deliberadamente |
+| **9** | **LEDG-2464** | **Login ambíguo:** identificador duplicado resolvido por `.first()` — devolvia **sempre a conta mais recente** | Backend | ✅ **Sim** — PR #273, 6 testes novos; em `develop` e `tst` | Nenhuma. 🚨 **Nega acesso a ~26 contas** até o 14 as fundir |
 | 10 | LEDG-2468 | **Nada impede uma organização de ficar sem administrador** — os dois endpoints de membro **e** os quatro caminhos de apagamento | Backend | ❌ Não | Nenhuma para começar; os pontos 3/4/5 dependem da AMA. **Quanto mais cedo entrar, menos casos o 11 trata à mão** |
 | 11 | LEDG-2463 | **As 6 contas com conteúdo, 4 delas admin ÚNICO** — plano nomeado | Operação | ❌ Não | **Pré-requisito do LEDG-2431.** Bloqueia qualquer recusa ou limpeza |
 | **12** | **LEDG-2470** | **Contas institucionais deixam de existir:** publicar passa a ser sempre por conta pessoal, em nome próprio ou de uma organização | Operação | ❌ Não | Depende do **10**. **Contém o 11** como subconjunto, e pode ser a **causa** que o 13 trata como efeito |
@@ -1245,7 +1246,7 @@ E o `_create_pending_saml_user` é o caso em que a chamada é **só** enganadora
 > 💡 **É a terceira ocorrência da mesma classe de bug deste refinamento:** código que muta e
 > não grava, ou que grava sem que se veja.
 
-#### ✅ Feito — PR #272, em `develop` (2026-09-11)
+#### ✅ Feito — PR #272, em `develop` e `tst` (2026-09-11)
 
 🚨 **O defeito era maior do que este documento descrevia.** Dizia que o `confirmed_at` *"se perde"*;
 na verdade **nunca chegava à base de dados**. O `create_user` termina em `put(user)` → `model.save()`,
@@ -1293,7 +1294,7 @@ o login com mensagem clara e registo de auditoria) em vez de escolher uma conta 
 escolha arbitrária num caminho de autenticação é pior do que uma recusa: dá acesso a uma conta
 que pode não ser a da pessoa.
 
-#### ✅ Feito — PR #273, em `develop` (2026-09-11)
+#### ✅ Feito — PR #273, em `develop` e `tst` (2026-09-11)
 
 🚩 **E o ticket estava errado num ponto que importa.** Dizia *"devolve uma arbitrária, sem ordenação
 definida"* e que *"a pessoa pode entrar hoje numa conta e amanhã na outra"*. **Confirmado em runtime:

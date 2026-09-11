@@ -31,6 +31,7 @@ a reformulação CMD/eIDAS estiver feita e validada. **Não se promove por ticke
   | 2026-09-10 | + o LEDG-2467 (fora da decomposição) | **113** | 80 |
   | 2026-09-11 | + o 8 (LEDG-2466) | **116** | 80 |
   | 2026-09-11 | + o 9 (LEDG-2464) | **122** | 80 |
+  | 2026-09-11 | + o 10 parcial (LEDG-2468) | **125** | 80 |
 
   Uma parte é anterior a este refinamento e já lá estava; o ponto é que **o número não desce**,
   e a promoção final não será revisível commit a commit. O frontend não se moveu porque os pontos
@@ -891,7 +892,7 @@ seguro: o 11 arruma 4 casos, o 10 impede que voltem.
 | **7** | **LEDG-2465** | **Login recusado tratado como sucesso:** sessão marcada, log diz `OK`, auditoria diz `success`, e o link de uso único fica queimado | Backend | ✅ **Sim** — PR #268; 3 commits, suite completa verde, 11 testes novos; em `develop` e `tst` | Nenhuma — mexeu nas **mesmas duas funções** do 6, e foi de facto mais barato a seguir a ele |
 | **8** | **LEDG-2466** | **`datastore.commit()` é no-op em Mongo:** 3 chamadas que não gravam nada, e o `confirmed_at` **nunca chegava à BD** | Backend | ✅ **Sim** — PR #272, 4 testes novos; em `develop` e `tst` | Nenhuma — o 6 deixou de o reparar de lado, deliberadamente |
 | **9** | **LEDG-2464** | **Login ambíguo:** identificador duplicado resolvido por `.first()` — devolvia **sempre a conta mais recente** | Backend | ✅ **Sim** — PR #273, 6 testes novos; em `develop` e `tst` | Nenhuma. 🚨 **Nega acesso a ~26 contas** até o 14 as fundir |
-| 10 | LEDG-2468 | **Nada impede uma organização de ficar sem administrador** — os dois endpoints de membro **e** os quatro caminhos de apagamento | Backend | 🟡 **Parcial** — PR #275: os **dois endpoints** guardados, em `develop`. 🚨 **O `mark_as_deleted` continua a orfanar** | Os pontos 3/4/5 dependem da AMA. **Quanto mais cedo o resto entrar, menos casos o 11 trata à mão** |
+| 10 | LEDG-2468 | **Nada impede uma organização de ficar sem administrador** — os dois endpoints de membro **e** os quatro caminhos de apagamento | Backend | 🟡 **Parcial** — PR #275: os **dois endpoints** guardados, em `develop` e `tst`. 🚨 **O `mark_as_deleted` continua a orfanar** | Os pontos 3/4/5 dependem da AMA. **Quanto mais cedo o resto entrar, menos casos o 11 trata à mão** |
 | 11 | LEDG-2463 | **As 6 contas com conteúdo, 4 delas admin ÚNICO** — plano nomeado | Operação | ❌ Não | **Pré-requisito do LEDG-2431.** Bloqueia qualquer recusa ou limpeza |
 | **12** | **LEDG-2470** | **Contas institucionais deixam de existir:** publicar passa a ser sempre por conta pessoal, em nome próprio ou de uma organização | Operação | ❌ Não | Depende do **10**. **Contém o 11** como subconjunto, e pode ser a **causa** que o 13 trata como efeito |
 | 13 | LEDG-2435 | **Uma identidade, uma conta** — as duas classes de duplicado | Backend | ❌ Não | Depende do **5**. 🟢 **Mais simples do que desenhado:** reconciliação é 1:1 |
@@ -1409,7 +1410,7 @@ os 13 grupos, e no 18 apagar a conta secundária depois de a esvaziar é uma das
 ⚠️ **E a guarda destes dois endpoints não fecha os outros caminhos:** o `mark_as_deleted` e o
 `dup._delete()` do `migrate-nics` também podem deixar uma organização órfã, e não passam por aqui.
 
-#### 🟡 Parcialmente feito — PR #275, em `develop` (2026-09-11)
+#### 🟡 Parcialmente feito — PR #275, em `develop` e `tst` (2026-09-11)
 
 **Os dois endpoints de membro estão guardados.** Um só predicado no modelo (`is_last_admin`), chamado
 pelo `delete` e pelo `put` — **no modelo e não na API**, porque quando o comportamento do apagamento
@@ -1788,10 +1789,28 @@ por isso não envia mail):
 `siteverify`, o `except RequestException` (`auth/forms.py:56-58`) devolvia `False` **sem pôr
 mensagem no campo** → 14 bytes.
 
-⚠️ **Causa quase certa:** o par site/secret do reCAPTCHA partilha o prefixo do registo. Em DEV a
-site key e o segredo batem (`6Lcimo4s…`) e funciona; em PPR/PRD a site key é de outro registo
-(`6LfoyIMt…`). **Se o segredo desses ambientes for o de DEV, está aí a causa.** Encaixa numa
-pendência já registada do lote VULN-2092: *"falta re-teste Devoteam + chaves reCAPTCHA"*.
+🎯 **CAUSA PROVADA a 2026-09-11 — o par de chaves está trocado.** Já não é hipótese: as site keys
+foram extraídas dos bundles JS públicos de cada ambiente, e o segredo confirmado na configuração.
+
+| Ambiente | Site key (JS público) | Secret (config) | Bate? |
+| --- | --- | --- | --- |
+| DEV | `6Lcimo4s…` | `6Lcimo4s…` | ✅ sim — e funciona |
+| PPR | **`6LfoyIMt…`** | **`6Lcimo4s…`** | 🚨 **NÃO** |
+| PRD | **`6LfoyIMt…`** | por confirmar | 🚨 sintoma idêntico |
+
+⇒ O frontend pede tokens a um registo e o backend valida-os com o segredo de outro. **Não é código —
+é uma variável de ambiente.** Encaixa numa pendência já registada do lote VULN-2092: *"falta re-teste
+Devoteam + chaves reCAPTCHA"*.
+
+❌ **Hipótese de um WAF à frente, excluída.** Há infraestrutura — em PRD os cabeçalhos mostram
+**Dynatrace** (`X-OneAgent-JS-Injection`, `X-ruxit-JS-Agent`) e os cabeçalhos de segurança vêm
+duplicados; em PPR é `nginx` simples. Mas o **tamanho da resposta** decide: um WAF a bloquear não
+devolveria o formato de erro do udata, e um WAF a **retirar** o token daria `reCAPTCHA validation
+required` (66 bytes). O observado é `Invalid reCAPTCHA` (54) ⇒ **o token chegou intacto e foi o Google
+que o rejeitou.** O Dynatrace é monitorização, não filtragem.
+
+⚠️ **A correcção é pôr o segredo do registo `6LfoyIMt`, não trocar a site key** — o `6Lcimo4s` é o
+registo de desenvolvimento e não está autorizado para os domínios públicos.
 
 ### 🚩 As traduções não fazem efeito em PPR/PRD
 

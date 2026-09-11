@@ -891,7 +891,7 @@ seguro: o 11 arruma 4 casos, o 10 impede que voltem.
 | **7** | **LEDG-2465** | **Login recusado tratado como sucesso:** sessão marcada, log diz `OK`, auditoria diz `success`, e o link de uso único fica queimado | Backend | ✅ **Sim** — PR #268; 3 commits, suite completa verde, 11 testes novos; em `develop` e `tst` | Nenhuma — mexeu nas **mesmas duas funções** do 6, e foi de facto mais barato a seguir a ele |
 | **8** | **LEDG-2466** | **`datastore.commit()` é no-op em Mongo:** 3 chamadas que não gravam nada, e o `confirmed_at` **nunca chegava à BD** | Backend | ✅ **Sim** — PR #272, 4 testes novos; em `develop` e `tst` | Nenhuma — o 6 deixou de o reparar de lado, deliberadamente |
 | **9** | **LEDG-2464** | **Login ambíguo:** identificador duplicado resolvido por `.first()` — devolvia **sempre a conta mais recente** | Backend | ✅ **Sim** — PR #273, 6 testes novos; em `develop` e `tst` | Nenhuma. 🚨 **Nega acesso a ~26 contas** até o 14 as fundir |
-| 10 | LEDG-2468 | **Nada impede uma organização de ficar sem administrador** — os dois endpoints de membro **e** os quatro caminhos de apagamento | Backend | ❌ Não | Nenhuma para começar; os pontos 3/4/5 dependem da AMA. **Quanto mais cedo entrar, menos casos o 11 trata à mão** |
+| 10 | LEDG-2468 | **Nada impede uma organização de ficar sem administrador** — os dois endpoints de membro **e** os quatro caminhos de apagamento | Backend | 🟡 **Parcial** — PR #275: os **dois endpoints** guardados, em `develop`. 🚨 **O `mark_as_deleted` continua a orfanar** | Os pontos 3/4/5 dependem da AMA. **Quanto mais cedo o resto entrar, menos casos o 11 trata à mão** |
 | 11 | LEDG-2463 | **As 6 contas com conteúdo, 4 delas admin ÚNICO** — plano nomeado | Operação | ❌ Não | **Pré-requisito do LEDG-2431.** Bloqueia qualquer recusa ou limpeza |
 | **12** | **LEDG-2470** | **Contas institucionais deixam de existir:** publicar passa a ser sempre por conta pessoal, em nome próprio ou de uma organização | Operação | ❌ Não | Depende do **10**. **Contém o 11** como subconjunto, e pode ser a **causa** que o 13 trata como efeito |
 | 13 | LEDG-2435 | **Uma identidade, uma conta** — as duas classes de duplicado | Backend | ❌ Não | Depende do **5**. 🟢 **Mais simples do que desenhado:** reconciliação é 1:1 |
@@ -906,7 +906,7 @@ seguro: o 11 arruma 4 casos, o 10 impede que voltem.
 | — | **LEDG-2474** | **Quatro razões de recusa dão a mesma resposta de sucesso** na recuperação — e uma conta inactiva fica **sem via de entrada nenhuma** | Backend + Produto | ❌ Não | **Fora da decomposição.** Bloqueado em **decisão da AMA**. 🚨 **Passou a ser o pré-requisito do 19** que o 2467 era, e agravou-se com o **7** |
 | — | ~~NOVO-D~~ | ~~**Organizações AGIT duplicadas** (3 registos)~~ | — | ❌ **Não se cria** | A consulta desfez a suspeita — ver acima |
 
-**Próximo a implementar:** o **10** (LEDG-2468) — mexe no **mesmo ficheiro** que o 7 acabou de
+**Próximo a implementar:** o **11** (LEDG-2463) — ou o resto do **10**, quando a AMA decidir — mexe no **mesmo ficheiro** que o 7 acabou de
 tocar, e o 6 deixou-o deliberadamente sem reparar de lado. Depois dele o **9** (LEDG-2468), cujos
 pontos 1 e 2 são implementáveis já; os 3, 4 e 5 estão bloqueados numa decisão da AMA. Os pontos
 1 a 4, 6 e 7 estão em `develop` e `tst`, e
@@ -1408,6 +1408,43 @@ os 13 grupos, e no 18 apagar a conta secundária depois de a esvaziar é uma das
 
 ⚠️ **E a guarda destes dois endpoints não fecha os outros caminhos:** o `mark_as_deleted` e o
 `dup._delete()` do `migrate-nics` também podem deixar uma organização órfã, e não passam por aqui.
+
+#### 🟡 Parcialmente feito — PR #275, em `develop` (2026-09-11)
+
+**Os dois endpoints de membro estão guardados.** Um só predicado no modelo (`is_last_admin`), chamado
+pelo `delete` e pelo `put` — **no modelo e não na API**, porque quando o comportamento do apagamento
+de conta for decidido esses caminhos têm de fazer **a mesma pergunta**, não repetir a regra.
+
+Três decisões de desenho: dispara numa **mudança** de papel e não em qualquer actualização do registo;
+**não** dispara numa organização que já está órfã (recusar ali congelava uma organização já presa, por
+uma operação que não a piora — tem teste próprio, porque é o tipo de decisão que um leitor futuro
+tomaria por esquecimento); e no `put` corre **antes** do `populate_obj`, lendo o papel novo do
+formulário — depois de populado o membro já tem o papel novo, logo o predicado diria `False` e a
+guarda nunca dispararia.
+
+🚩 **Uma lacuna apanhada por mutação, no próprio código novo:** remover a condição do papel novo
+deixava **todos** os testes verdes. Sem ela, um `PUT` que mantém o último admin como admin passaria a
+ser recusado, e nada notava. Teste acrescentado.
+
+## 🚨 E fica metade por fazer — a metade maior
+
+Varrimento de todo o backend: há **exactamente dois** caminhos de remoção de membros.
+
+| Caminho | Coberto? |
+| --- | --- |
+| `organization/api.py:801` — os dois endpoints | ✅ sim |
+| `user/models.py:337` — o `mark_as_deleted`, com **escrita directa** | ❌ **não** |
+
+⇒ **Uma organização pode continuar a ficar sem administrador** por apagamento de conta: pela própria
+pessoa, por um admin, pelo job de inactividade, ou pelo CLI.
+
+⚠️ **Não é "pôr a mesma guarda".** Recusar o `DELETE /api/1/me/` prenderia a pessoa a uma conta que
+quer abandonar, com implicações de protecção de dados. **É decisão da AMA**, e está escrita no
+CHANGELOG e no corpo do PR — não em rodapé, porque *"organizações não podem ficar sem administrador"*
+é exactamente a frase que alguém leria como fechada.
+
+⚠️ **E ninguém contou as organizações que JÁ estão órfãs.** Esta guarda impede novas; não repara
+antigas, e uma organização sem admin **não pode promover ninguém de dentro**.
 
 ### 11 — LEDG-2463 · As contas com conteúdo, e as 4 organizações com admin único *(operação)*
 

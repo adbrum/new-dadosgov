@@ -1084,6 +1084,54 @@ dados. Não existe limite de 12 no código de escrita, e não vale a pena procur
 chave), logo estes números **não são portáveis** e o levantamento é obrigatoriamente **por
 ambiente**. Uma rotação de chave invalida todos os links existentes.
 
+#### Segunda execução — 2026-09-11, agora contra o **DEV**, com o script estendido
+
+O `audit_institutional_users.py` passou a responder, numa só execução e sem `SECRET_KEY`, às
+três contagens que estavam a bloquear decisões noutros tickets. Contra o DEV, 9 075 contas:
+
+```
+accounts with NO confirmation date  2059
+  ...of those, CMD-linked ......... 730
+
+accounts sharing one stored NIC ... 13 group(s)
+  (content check live: 102 accounts own content overall)
+  ⚠ groups with content on MORE THAN ONE side: 0
+
+organizations with NO administrator  63
+membership rows pointing at a MISSING user  0
+```
+
+**O que cada número desbloqueia:**
+
+1. **2 059 contas sem data de confirmação, 730 delas com link CMD.** É a população que a
+   recuperação de palavra-passe recusa em silêncio — a resposta genérica anti-enumeração faz
+   a recusa parecer um email enviado, e por isso ninguém a tinha contado. O subconjunto com
+   CMD é o que o LEDG-2466 corrigiu **para o futuro**: as contas já criadas continuam com o
+   campo a nulo e continuam a não conseguir recuperar a palavra-passe. **Falta decidir se são
+   confirmadas em massa por migração** — é o critério 6 do LEDG-2466, e agora tem número.
+
+2. **63 organizações já sem administrador.** A guarda do LEDG-2468 impede que se criem novas;
+   **não repara nenhuma destas**. Cada uma está encravada: ninguém gere membros, aceita
+   transferências nem a edita, e não pode promover ninguém a partir de dentro. O relatório
+   lista-as pelo nome, portanto a reparação tem lista de trabalho. **Isto é o ponto 4 do
+   LEDG-2468**, que estava a ser discutido sem nenhum número por trás.
+
+3. **Zero referências de membro penduradas.** Contas apagadas em *soft delete* não contam
+   como em falta — o documento continua lá; só conta um id sem documento nenhum, que é o que
+   um apagamento duro deixa para trás. Neste ambiente não há nenhuma.
+
+4. **Nenhum dos 13 grupos duplicados tem conteúdo dos dois lados.** Isto é o requisito 1 do
+   LEDG-2469: se só um lado tiver conteúdo, mover o identificador chega; se ambos tiverem,
+   o comando de fusão existente **apaga** o duplicado sem transferir nada. A linha
+   `content check live: 102` está lá de propósito — prova que o detetor deteta, logo o zero
+   é **medido**, não um varrimento partido. Dos 13 grupos, 4 têm um lado que administra uma
+   organização e 2 têm um lado que é membro.
+
+🚨 **Estes números são de DEV e não respondem às perguntas.** Esta doc já teve de retratar
+uma conclusão tirada de DEV/TST: são populações próprias. A execução prova que **o script
+funciona**, não que os números sejam os de produção. Quem tiver acesso a produção tem de o
+correr lá — é um comando, e é a mesma saída.
+
 ### 6 — LEDG-2462 · Campos de sessão vazios no login SAML *(backend)*
 
 O plugin importa o `login_user` do **`flask_login`** (`saml_govpt.py:31`), que **não escreve**
@@ -1267,8 +1315,13 @@ campo** — não `save()`, que arrastaria `about`/`first_name`/`last_name` pelo 
 
 ✅ **Critério do âmbito fechado sem código:** as 3 chamadas eram **as únicas do repositório inteiro**.
 
-⚠️ **Fica por fazer, por falta de acesso:** a contagem de contas com `confirmed_at` em falta exige
-produção. **Recomendação: não fazer migração** — o próximo login de cada conta resolve-o.
+✅ **A contagem já existe — em DEV: 2 059 contas sem data de confirmação, 730 delas com link CMD.**
+A separação é o que importa: **as 730 curam-se sozinhas** no próximo login CMD, agora que a escrita
+chega à base de dados — a recomendação de **não fazer migração** mantém-se e passa a ter número. As
+outras ~1 329 são contas tradicionais que nunca validaram o email, o que é o comportamento normal e
+não se corrige por migração nenhuma. ⚠️ **Mas nenhuma das 730 consegue recuperar a palavra-passe
+até voltar a entrar por CMD** — se alguma delas perdeu o acesso ao CMD, está presa nos dois lados.
+🚨 O número é de DEV; o de produção exige acesso a produção, e é o mesmo comando.
 
 ⚠️ **E uma pergunta de produto:** se alguma conta legítima depende de estar não-confirmada para ficar
 bloqueada, isto desbloqueia-a. Pela leitura o auto-confirm é deliberado e não se aplica aos endereços
@@ -1444,6 +1497,11 @@ quer abandonar, com implicações de protecção de dados. **É decisão da AMA*
 CHANGELOG e no corpo do PR — não em rodapé, porque *"organizações não podem ficar sem administrador"*
 é exactamente a frase que alguém leria como fechada.
 
+✅ **Já estão contadas — em DEV: 63 organizações sem administrador nenhum**, listadas pelo nome no
+`audit_institutional_users.py`, e **zero** referências de membro penduradas. O número é de DEV; o de
+produção é de quem tiver acesso, e é o mesmo comando. O que isto muda no ponto 4: deixa de ser uma
+pergunta em aberto e passa a ser uma lista de reparação.
+
 ⚠️ **E ninguém contou as organizações que JÁ estão órfãs.** Esta guarda impede novas; não repara
 antigas, e uma organização sem admin **não pode promover ninguém de dentro**.
 
@@ -1525,7 +1583,15 @@ portal e não há mecanismo para as destrancar.**
 (`user/commands.py:159-262`) e o `merge_saml` (`:344`) fundem **só o identificador** e apagam o
 duplicado — **não movem datasets, reuses, dataservices, discussões nem pertenças**. São seguros só
 porque a população que tratam é tipicamente vazia (114 das 120 não têm nada); **os 13 grupos não têm
-essa garantia, e ninguém a mediu.** Aplicar-lhes o `merge_saml` apagaria conteúdo.
+essa garantia, e ninguém a mediu.**
+
+✅ **Agora está medida — em DEV.** O `audit_institutional_users.py` marca cada conta de cada grupo
+com o que ela detém, e em DEV **nenhum dos 13 grupos tem conteúdo dos dois lados**; 4 grupos têm um
+lado que **administra** uma organização e 2 têm um lado que é membro. Se isso se confirmar em
+produção, mover o identificador chega para todos — mas as pertenças ainda têm de ir com ele, senão
+fundir um lado administrador deixa uma organização órfã, que é exactamente o ponto 4 do LEDG-2468.
+🚨 **Este número é de DEV**, e a medição em produção é de quem tem acesso lá. Até lá, aplicar o
+`merge_saml` continua a poder apagar conteúdo.
 
 ✅ **A primitiva certa existe:** o `udata/features/transfer/` move um objecto de cada vez entre contas e
 organizações. Uma fusão construída por cima dele orquestra transferência em vez de a inventar.

@@ -31,7 +31,7 @@ a reformulação CMD/eIDAS estiver feita e validada. **Não se promove por ticke
   | 2026-09-10 | + o LEDG-2467 (fora da decomposição) | **113** | 80 |
   | 2026-09-11 | + o 8 (LEDG-2466) | **116** | 80 |
   | 2026-09-11 | + o 9 (LEDG-2464) | **122** | 80 |
-  | 2026-09-11 | + o 10 parcial (LEDG-2468) | **125** | 80 |
+  | 2026-09-11 | + o 10 parcial (LEDG-2468) | **126** | 80 |
 
   Uma parte é anterior a este refinamento e já lá estava; o ponto é que **o número não desce**,
   e a promoção final não será revisível commit a commit. O frontend não se moveu porque os pontos

@@ -840,16 +840,16 @@ entre os dois passa a ser o sinal de IdP mal configurado que hoje falta ao LEDG-
   **18** faz o levantamento e o gate, o **19** activa. ⚠️ **Facultativo primeiro**, com mensagem
   informativa, que é o que o LEDG-1277 já especificava desde o início.
 * **Uma pessoa, uma conta.** O **13** pára o crescimento; o **14** funde o que existe e põe o índice
-  que o torna impossível. ⚠️ **O 14 é novo porque ninguém tinha o passado** — o 13 e o 12 tratam do
+  que o torna impossível. ⚠️ **O 14 é novo porque ninguém tinha o passado** — o 13 e o 9 tratam do
   futuro e da recusa, e as 26 contas dos 13 grupos ficavam sem dono.
 * **As contas institucionais deixam de existir.** Publicar passa a ser sempre por conta pessoal, em
-  nome próprio ou de uma organização de que a pessoa é membro — o **11**. ✅ **A capacidade já
+  nome próprio ou de uma organização de que a pessoa é membro — o **12**. ✅ **A capacidade já
   existe**; o que falta é migrar quem está no modelo antigo.
 
-⇒ **Duas coisas mudaram de natureza com isto.** O **11** pode ser a **causa** das contas sintéticas
+⇒ **Duas coisas mudaram de natureza com isto.** O **12** pode ser a **causa** das contas sintéticas
 que o **13** trata como efeito — se a hipótese das caixas partilhadas se confirmar, a decisão de
-produto elimina a raiz. E o **9** deixou de ser detalhe do 10 para ser a guarda de código que o torna
-seguro: o 10 arruma 4 casos, o 9 impede que voltem.
+produto elimina a raiz. E o **10** deixou de ser detalhe do 11 para ser a guarda de código que o torna
+seguro: o 11 arruma 4 casos, o 10 impede que voltem.
 
 ## Decomposição, pela ordem de implementação
 
@@ -868,6 +868,17 @@ seguro: o 10 arruma 4 casos, o 9 impede que voltem.
 > o que simplifica o 2435, esvazia a justificação do 2436 por esta via, e faz aparecer quatro
 > problemas que não estavam em ponto nenhum.
 
+> 🔄 **Reordenado a 2026-09-11 — o LEDG-2464 sobe do 12 para o 9.** Não depende de nada (a própria
+> tabela já o dizia), é o **único ponto de código sem dependências** que restava, e os três que
+> estavam à frente dele param todos fora do código: o antigo 9 tem três dos cinco pontos em decisão
+> da AMA, e o 10 e o 11 são operação humana. 🚨 **E a severidade justifica-o por si:** um identificador
+> duplicado resolve por `.first()` e devolve uma conta **arbitrária** — com os 13 grupos duplicados
+> medidos em produção, é entrar na conta de outra pessoa por acaso de ordenação.
+>
+> ⚠️ **É a quinta vez que estes números mudam**, e é exactamente por isso que a regra transversal diz
+> **referir dependências por CHAVE, nunca por número**. As células de dependência desta tabela ainda
+> usam números e são o que dá trabalho a cada reordenação.
+
 | # | Ticket | O quê | Onde | Feito? | Dependência |
 | --- | --- | --- | --- | --- | --- |
 | **1** | LEDG-2432 | Repor o login por email e palavra-passe | Frontend | ✅ **Sim** — em `develop` e `tst` | 🚨 Regressão; desbloqueou o `tst → ppr` |
@@ -878,23 +889,23 @@ seguro: o 10 arruma 4 casos, o 9 impede que voltem.
 | **6** | LEDG-2462 | **Campos de sessão vazios no login SAML** (os cinco campos trackable) | Backend | ✅ **Sim** — PR #266; 6 commits, suite completa verde, 13 testes novos; em `develop` e `tst` | Nenhuma. Paralelo ao 5 — **este é código, o 5 é humano** |
 | **7** | **LEDG-2465** | **Login recusado tratado como sucesso:** sessão marcada, log diz `OK`, auditoria diz `success`, e o link de uso único fica queimado | Backend | ✅ **Sim** — PR #268; 3 commits, suite completa verde, 11 testes novos; em `develop` e `tst` | Nenhuma — mexeu nas **mesmas duas funções** do 6, e foi de facto mais barato a seguir a ele |
 | **8** | **LEDG-2466** | **`datastore.commit()` é no-op em Mongo:** 3 chamadas que não gravam nada, e o `confirmed_at` **nunca chegava à BD** | Backend | ✅ **Sim** — PR #272, suite completa verde, 4 testes novos; em `develop` | Nenhuma — o 6 deixou de o reparar de lado, deliberadamente |
-| **9** | **LEDG-2468** | **Nada impede uma organização de ficar sem administrador** — remover membro e trocar role não contam admins | Backend | ❌ Não | Nenhuma — e **quanto mais cedo entrar, menos casos o 10 trata à mão** |
-| 10 | LEDG-2463 | **As 6 contas com conteúdo, 4 delas admin ÚNICO** — plano nomeado | Operação | ❌ Não | **Pré-requisito do LEDG-2431.** Bloqueia qualquer recusa ou limpeza |
-| **11** | **LEDG-2470** | **Contas institucionais deixam de existir:** publicar passa a ser sempre por conta pessoal, em nome próprio ou de uma organização | Operação | ❌ Não | Depende do **9**. **Contém o 10** como subconjunto, e pode ser a **causa** que o 13 trata como efeito |
-| 12 | LEDG-2464 | **Login ambíguo:** identificador duplicado resolvido por `.first()` | Backend | ❌ Não | Nenhuma — verificado no código, independente das contas sintéticas |
+| **9** | **LEDG-2464** | **Login ambíguo:** identificador duplicado resolvido por `.first()` — devolve uma conta **arbitrária** | Backend | ❌ Não | Nenhuma. 🚨 **Subiu do 12 a 2026-09-11:** é o único ponto de código sem dependências, e com os 13 grupos duplicados em produção significa entrar na conta errada |
+| 10 | LEDG-2468 | **Nada impede uma organização de ficar sem administrador** — os dois endpoints de membro **e** os quatro caminhos de apagamento | Backend | ❌ Não | Nenhuma para começar; os pontos 3/4/5 dependem da AMA. **Quanto mais cedo entrar, menos casos o 11 trata à mão** |
+| 11 | LEDG-2463 | **As 6 contas com conteúdo, 4 delas admin ÚNICO** — plano nomeado | Operação | ❌ Não | **Pré-requisito do LEDG-2431.** Bloqueia qualquer recusa ou limpeza |
+| **12** | **LEDG-2470** | **Contas institucionais deixam de existir:** publicar passa a ser sempre por conta pessoal, em nome próprio ou de uma organização | Operação | ❌ Não | Depende do **10**. **Contém o 11** como subconjunto, e pode ser a **causa** que o 13 trata como efeito |
 | 13 | LEDG-2435 | **Uma identidade, uma conta** — as duas classes de duplicado | Backend | ❌ Não | Depende do **5**. 🟢 **Mais simples do que desenhado:** reconciliação é 1:1 |
-| **14** | **LEDG-2469** | **Fundir os duplicados que já existem** e depois impedi-los na BD (o `extras.auth_nic` não tem índice de unicidade) | Backend + Operação | ❌ Não | Depende do **9**, **12** e **13**. Fundir antes de o crescimento parar é limpar uma torneira aberta |
-| 15 | LEDG-2431 | Associar a uma conta tradicional existente | Full-stack | ❌ Não | Depende do **2**, **5**, **10** e **13**. ✅ **Desenho decidido pelos dados: recusar quando há conteúdo** |
+| **14** | **LEDG-2469** | **Fundir os duplicados que já existem** e depois impedi-los na BD (o `extras.auth_nic` não tem índice de unicidade) | Backend + Operação | ❌ Não | Depende do **9**, **10** e **13**. Fundir antes de o crescimento parar é limpar uma torneira aberta |
+| 15 | LEDG-2431 | Associar a uma conta tradicional existente | Full-stack | ❌ Não | Depende do **2**, **5**, **11** e **13**. ✅ **Desenho decidido pelos dados: recusar quando há conteúdo** |
 | 16 | LEDG-2438 | **Estrangeiros: identidade por documento em vez de NIC** | Backend | ❌ Não | Confirmar sobreposição com LEDG-2288 |
 | 17 | LEDG-2436 | Identidade sem identificador (eIDAS **e** CMD) | Backend | ❌ Não | **Depende do 13**. 🔻 **Despromovido:** zero casos nas 120; só se justifica pelo eIDAS |
-| **18** | **LEDG-2472** | **Consolidação self-service:** avisar que só haverá uma conta por pessoa, e deixar a pessoa mover os dados das secundárias para a principal | Full-stack | ❌ Não | Depende do **requisito 4 do 14** e do **9**. 🛑 **Tem de vir ANTES do 19** — depois da obrigatoriedade, quem perdeu o email de uma conta secundária já não entra nela para empurrar o conteúdo |
+| **18** | **LEDG-2472** | **Consolidação self-service:** avisar que só haverá uma conta por pessoa, e deixar a pessoa mover os dados das secundárias para a principal | Full-stack | ❌ Não | Depende do **requisito 4 do 14** e do **10**. 🛑 **Tem de vir ANTES do 19** — depois da obrigatoriedade, quem perdeu o email de uma conta secundária já não entra nela para empurrar o conteúdo |
 | **19** | **LEDG-2471** | **Descontinuar o login por email e palavra-passe:** inventário e gate no backend | Full-stack | ❌ Não | Depende do **15**, **17**, **18**, e do LEDG-2437 e **LEDG-2474** (era o LEDG-2467, que ficou feito — a substância passou para o 2474) |
 | **20** | **LEDG-1277** | **Obrigatoriedade do Autenticação.gov** — o fim do arco | Produto | 🟡 Em curso | Depende do **19**. ⚠️ **Não activar antes dele** |
 | — | **LEDG-2467** | **Recuperação de palavra-passe:** os mails do flask_security saíam de `webmaster@udata` | Backend | ✅ **Sim** — PR #270; em `develop` e `tst`, e **verificado em DEV** com mail recebido do remetente certo | **Fora da decomposição** — não é CMD/eIDAS |
 | — | **LEDG-2474** | **Quatro razões de recusa dão a mesma resposta de sucesso** na recuperação — e uma conta inactiva fica **sem via de entrada nenhuma** | Backend + Produto | ❌ Não | **Fora da decomposição.** Bloqueado em **decisão da AMA**. 🚨 **Passou a ser o pré-requisito do 19** que o 2467 era, e agravou-se com o **7** |
 | — | ~~NOVO-D~~ | ~~**Organizações AGIT duplicadas** (3 registos)~~ | — | ❌ **Não se cria** | A consulta desfez a suspeita — ver acima |
 
-**Próximo a implementar:** o **9** (LEDG-2468) — mexe no **mesmo ficheiro** que o 7 acabou de
+**Próximo a implementar:** o **9** (LEDG-2464) — mexe no **mesmo ficheiro** que o 7 acabou de
 tocar, e o 6 deixou-o deliberadamente sem reparar de lado. Depois dele o **9** (LEDG-2468), cujos
 pontos 1 e 2 são implementáveis já; os 3, 4 e 5 estão bloqueados numa decisão da AMA. Os pontos
 1 a 4, 6 e 7 estão em `develop` e `tst`, e
@@ -1261,7 +1272,28 @@ produção. **Recomendação: não fazer migração** — o próximo login de ca
 bloqueada, isto desbloqueia-a. Pela leitura o auto-confirm é deliberado e não se aplica aos endereços
 auto-declarados, mas é a AMA que confirma.
 
-### 9 — LEDG-2468 · Nada impede uma organização de ficar sem administrador *(backend)*
+### 9 — LEDG-2464 · Login ambíguo: identificador duplicado resolvido por `.first()` *(backend)*
+
+O passo 1 do resolvedor faz `User.objects(extras__auth_nic=…).first()`. Com duas contas a
+partilhar o identificador, **devolve uma arbitrária** — e a mesma pessoa pode entrar hoje numa
+conta e amanhã na outra, sem nada mudar.
+
+**Medido em dados de produção: 13 grupos, 26 contas.** E **nenhum inclui uma conta sintética** —
+são pares de contas com endereço real, tipicamente a mesma pessoa com dois endereços criados a
+segundos ou minutos de distância. **Independente do LEDG-2435**, portanto: não é o problema das
+contas sintéticas, é outro.
+
+⚠️ **O `migrate-nics --dry-run` não o reporta de forma fiável:** o `_find_shared_nics()` filtra
+por `is_nic_hashed`, logo num ambiente com valores em claro **subconta**, e num ambiente sem
+nada hasheado devolve zero garantido. O script de levantamento versionado no LEDG-2434 agrupa
+pelos valores **como estão guardados** e não tem esse ponto cego.
+
+**O que o ticket tem de decidir:** o resolvedor deve **recusar** uma identidade ambígua (falhar
+o login com mensagem clara e registo de auditoria) em vez de escolher uma conta ao acaso. Uma
+escolha arbitrária num caminho de autenticação é pior do que uma recusa: dá acesso a uma conta
+que pode não ser a da pessoa.
+
+### 10 — LEDG-2468 · Nada impede uma organização de ficar sem administrador *(backend)*
 
 `MemberAPI.put` e `MemberAPI.delete` (`udata/core/organization/api.py:748-780`) verificam **só** quem
 pode gerir membros. **Nenhuma verifica que sobra pelo menos um administrador.** O `is_admin`
@@ -1341,7 +1373,7 @@ os 13 grupos, e no 18 apagar a conta secundária depois de a esvaziar é uma das
 ⚠️ **E a guarda destes dois endpoints não fecha os outros caminhos:** o `mark_as_deleted` e o
 `dup._delete()` do `migrate-nics` também podem deixar uma organização órfã, e não passam por aqui.
 
-### 10 — LEDG-2463 · As contas com conteúdo, e as 4 organizações com admin único *(operação)*
+### 11 — LEDG-2463 · As contas com conteúdo, e as 4 organizações com admin único *(operação)*
 
 **Não é código — é uma decisão sobre organizações reais**, e é por isso que bloqueia o
 LEDG-2431: qualquer regra de "recusar quando há conteúdo" tem de saber o que fazer com estes
@@ -1365,7 +1397,7 @@ uma deixa a organização órfã**, e a da AGIT leva 5 datasets consigo.
 — promover outro membro, ou associar a conta sintética ao seu dono real primeiro. **Decisão da
 AMA, não do código.**
 
-### 11 — LEDG-2470 · Contas institucionais deixam de existir *(operação)*
+### 12 — LEDG-2470 · Contas institucionais deixam de existir *(operação)*
 
 Decisão de produto de 2026-09-10: publicar passa a ser sempre a partir de uma **conta pessoal**, em
 nome próprio ou de uma **organização** de que a pessoa é membro.
@@ -1392,27 +1424,6 @@ aqui**, porque decide se este ponto é uma limpeza ou a correcção da raiz do 1
 ⚠️ **A heurística dá 722 contas (336 sem CMD, 386 com), e não são todas institucionais** — o critério
 inclui "ser membro de uma organização", o que apanha contas pessoais legítimas. A lista tem de ser
 **revista por humano** antes de qualquer acção.
-
-### 12 — LEDG-2464 · Login ambíguo: identificador duplicado resolvido por `.first()` *(backend)*
-
-O passo 1 do resolvedor faz `User.objects(extras__auth_nic=…).first()`. Com duas contas a
-partilhar o identificador, **devolve uma arbitrária** — e a mesma pessoa pode entrar hoje numa
-conta e amanhã na outra, sem nada mudar.
-
-**Medido em dados de produção: 13 grupos, 26 contas.** E **nenhum inclui uma conta sintética** —
-são pares de contas com endereço real, tipicamente a mesma pessoa com dois endereços criados a
-segundos ou minutos de distância. **Independente do LEDG-2435**, portanto: não é o problema das
-contas sintéticas, é outro.
-
-⚠️ **O `migrate-nics --dry-run` não o reporta de forma fiável:** o `_find_shared_nics()` filtra
-por `is_nic_hashed`, logo num ambiente com valores em claro **subconta**, e num ambiente sem
-nada hasheado devolve zero garantido. O script de levantamento versionado no LEDG-2434 agrupa
-pelos valores **como estão guardados** e não tem esse ponto cego.
-
-**O que o ticket tem de decidir:** o resolvedor deve **recusar** uma identidade ambígua (falhar
-o login com mensagem clara e registo de auditoria) em vez de escolher uma conta ao acaso. Uma
-escolha arbitrária num caminho de autenticação é pior do que uma recusa: dá acesso a uma conta
-que pode não ser a da pessoa.
 
 ### 13 — LEDG-2435 · Uma identidade, uma conta *(backend)*
 

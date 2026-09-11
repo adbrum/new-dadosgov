@@ -889,7 +889,7 @@ seguro: o 11 arruma 4 casos, o 10 impede que voltem.
 | **6** | LEDG-2462 | **Campos de sessão vazios no login SAML** (os cinco campos trackable) | Backend | ✅ **Sim** — PR #266; 6 commits, suite completa verde, 13 testes novos; em `develop` e `tst` | Nenhuma. Paralelo ao 5 — **este é código, o 5 é humano** |
 | **7** | **LEDG-2465** | **Login recusado tratado como sucesso:** sessão marcada, log diz `OK`, auditoria diz `success`, e o link de uso único fica queimado | Backend | ✅ **Sim** — PR #268; 3 commits, suite completa verde, 11 testes novos; em `develop` e `tst` | Nenhuma — mexeu nas **mesmas duas funções** do 6, e foi de facto mais barato a seguir a ele |
 | **8** | **LEDG-2466** | **`datastore.commit()` é no-op em Mongo:** 3 chamadas que não gravam nada, e o `confirmed_at` **nunca chegava à BD** | Backend | ✅ **Sim** — PR #272, suite completa verde, 4 testes novos; em `develop` | Nenhuma — o 6 deixou de o reparar de lado, deliberadamente |
-| **9** | **LEDG-2464** | **Login ambíguo:** identificador duplicado resolvido por `.first()` — devolve uma conta **arbitrária** | Backend | ❌ Não | Nenhuma. 🚨 **Subiu do 12 a 2026-09-11:** é o único ponto de código sem dependências, e com os 13 grupos duplicados em produção significa entrar na conta errada |
+| **9** | **LEDG-2464** | **Login ambíguo:** identificador duplicado resolvido por `.first()` — devolvia **sempre a conta mais recente** | Backend | ✅ **Sim** — PR #273, 6 testes novos; em `develop` | Nenhuma. 🚨 **Nega acesso a ~26 contas** até o 14 as fundir |
 | 10 | LEDG-2468 | **Nada impede uma organização de ficar sem administrador** — os dois endpoints de membro **e** os quatro caminhos de apagamento | Backend | ❌ Não | Nenhuma para começar; os pontos 3/4/5 dependem da AMA. **Quanto mais cedo entrar, menos casos o 11 trata à mão** |
 | 11 | LEDG-2463 | **As 6 contas com conteúdo, 4 delas admin ÚNICO** — plano nomeado | Operação | ❌ Não | **Pré-requisito do LEDG-2431.** Bloqueia qualquer recusa ou limpeza |
 | **12** | **LEDG-2470** | **Contas institucionais deixam de existir:** publicar passa a ser sempre por conta pessoal, em nome próprio ou de uma organização | Operação | ❌ Não | Depende do **10**. **Contém o 11** como subconjunto, e pode ser a **causa** que o 13 trata como efeito |
@@ -905,7 +905,7 @@ seguro: o 11 arruma 4 casos, o 10 impede que voltem.
 | — | **LEDG-2474** | **Quatro razões de recusa dão a mesma resposta de sucesso** na recuperação — e uma conta inactiva fica **sem via de entrada nenhuma** | Backend + Produto | ❌ Não | **Fora da decomposição.** Bloqueado em **decisão da AMA**. 🚨 **Passou a ser o pré-requisito do 19** que o 2467 era, e agravou-se com o **7** |
 | — | ~~NOVO-D~~ | ~~**Organizações AGIT duplicadas** (3 registos)~~ | — | ❌ **Não se cria** | A consulta desfez a suspeita — ver acima |
 
-**Próximo a implementar:** o **9** (LEDG-2464) — mexe no **mesmo ficheiro** que o 7 acabou de
+**Próximo a implementar:** o **10** (LEDG-2468) — mexe no **mesmo ficheiro** que o 7 acabou de
 tocar, e o 6 deixou-o deliberadamente sem reparar de lado. Depois dele o **9** (LEDG-2468), cujos
 pontos 1 e 2 são implementáveis já; os 3, 4 e 5 estão bloqueados numa decisão da AMA. Os pontos
 1 a 4, 6 e 7 estão em `develop` e `tst`, e
@@ -1292,6 +1292,41 @@ pelos valores **como estão guardados** e não tem esse ponto cego.
 o login com mensagem clara e registo de auditoria) em vez de escolher uma conta ao acaso. Uma
 escolha arbitrária num caminho de autenticação é pior do que uma recusa: dá acesso a uma conta
 que pode não ser a da pessoa.
+
+#### ✅ Feito — PR #273, em `develop` (2026-09-11)
+
+🚩 **E o ticket estava errado num ponto que importa.** Dizia *"devolve uma arbitrária, sem ordenação
+definida"* e que *"a pessoa pode entrar hoje numa conta e amanhã na outra"*. **Confirmado em runtime:
+o `User._meta` tem `ordering: ["-created_at"]`** — o `.first()` devolvia **sempre a conta mais
+recente**, deterministicamente. Dois comentários do próprio ficheiro já o diziam.
+
+⚠️ **E determinístico é pior, não melhor.** Aleatório seria notado por quem lhe acontecesse; assim
+entrega sempre a mesma sessão errada, o mesmo conteúdo errado e as mesmas pertenças erradas, e nada
+contradiz a ilusão de que a conta é sua. ⇒ **Derruba o contra-argumento do próprio ticket** contra
+"tornar determinístico": já era. O que falta é **prova de posse**, que ali não existe — daí recusar.
+
+🔑 **E fechou um caso que o código não conseguia ver.** O lookup do hash corria primeiro e o de
+valores em claro **só quando o primeiro não encontrava nada** — logo uma conta com o hash e outra com
+o mesmo NIC em claro eram **invisíveis uma à outra**. A pergunta certa é *quantas contas reclamam
+esta identidade*, e só perguntar pelas duas formas responde.
+
+**Desenho:** o resolvedor reporta a ambiguidade como estado próprio, e as **duas rotas ACS** recusam —
+antes de qualquer escrita e antes do ramo do assistente, na mesma posição da guarda do ponto 7.
+A mensagem é a convenção do ficheiro, não o `GENERIC_AUTHN_FAILED` do flask_security, que diria
+*"identity or password invalid"* — enganador quando a identidade é válida e está duplicada.
+
+⚠️ **Numa revisão ao próprio código:** a primeira versão fazia **duas** consultas, e o
+`extras.auth_nic` **não tem índice** — cada lookup é um varrimento. Substituído por um `$in` numa só
+consulta, em commit próprio.
+
+🚨 **Nega acesso a ~26 contas** (os 13 grupos). É o resultado correcto — entrar na conta de outra
+pessoa é pior do que não entrar — e **o congelamento do `tst → ppr` é o que o torna seguro**: chega a
+`tst`, não a produção. O desbloqueio é o **14**.
+
+⚠️ **Fora de âmbito, com razão escrita:** o `.first()` de `:3407` usa o resultado como conta, mas o
+comentário do código diz *"Normally unreachable — rule 1"* e esta correcção recusa antes. Guardá-lo
+seria guardar estado inalcançável — o que a revisão do ponto 7 reprovou. **Nomeado como o sítio a
+rever se as guardas das rotas forem reordenadas.**
 
 ### 10 — LEDG-2468 · Nada impede uma organização de ficar sem administrador *(backend)*
 

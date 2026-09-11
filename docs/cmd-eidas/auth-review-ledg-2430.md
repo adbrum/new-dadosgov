@@ -32,12 +32,21 @@ a reformulação CMD/eIDAS estiver feita e validada. **Não se promove por ticke
   | 2026-09-11 | + o 8 (LEDG-2466) | **116** | 80 |
   | 2026-09-11 | + o 9 (LEDG-2464) | **122** | 80 |
   | 2026-09-11 | + o 10 parcial (LEDG-2468) | **126** | 80 |
+  | 2026-09-11 | + o 5 (LEDG-2434) | **132** | **101** |
 
   Uma parte é anterior a este refinamento e já lá estava; o ponto é que **o número não desce**,
-  e a promoção final não será revisível commit a commit. O frontend não se moveu porque os pontos
-  6, 7, 8, 9 e o LEDG-2467 são só backend. ⚠️ **Os +37 do backend não são todos deste refinamento** — o `tst` recebe
-  também trabalho de outras frentes, e é isso que torna a promoção final difícil de rever.
-  Para referência, `ppr → main` está em **86** no backend e **122** no frontend.
+  e a promoção final não será revisível commit a commit.
+
+  🚩 **E a última linha prova-o melhor do que qualquer argumento: o frontend subiu de 80 para 101
+  sem este refinamento lhe ter tocado.** O LEDG-2434 é backend puro — e só `scripts/`. Os 21
+  commits que apareceram no `tst` do frontend vieram de outras frentes, entre a medição de ontem e
+  a de hoje. ⚠️ **É esse o custo real da decisão de promover em bloco:** a dívida cresce por
+  trabalho que esta revisão não controla, e quem rever a promoção final vai ter de separar o que é
+  desta reformulação do que não é. Para referência, `ppr → main` está em **86** no backend e
+  **122** no frontend.
+
+  ⚠️ **A métrica inclui os merges** (`git log origin/ppr..origin/tst`), para ser comparável com as
+  medições anteriores. Sem merges, o backend está em 97.
 - ⚠️ **O LEDG-2437 deixa de ser uma ação de release independente.** Fechava com um
   `ppr → main` do frontend a qualquer momento; passa a esperar pelo conjunto. **O 404 em
   produção mantém-se até lá** — risco aceite, e agora por mais tempo do que o previsto.
@@ -887,13 +896,19 @@ seguro: o 11 arruma 4 casos, o 10 impede que voltem.
 > **referir dependências por CHAVE, nunca por número**. As células de dependência desta tabela ainda
 > usam números e são o que dá trabalho a cada reordenação.
 
+> ✅ **Revisto a 2026-09-11 sem reordenar.** Os pontos 1 a 10 estão feitos ou em curso pela ordem
+> da tabela. **O 11 e o 12 não são código** — param na AMA — e o único código que restava à frente
+> deles, a **alínea (c) do 13** (alinhar `exact` com `ci` nos dois sítios), não sobe sozinha porque
+> o **12 pode ser a causa** do que o 13 trata como efeito. Movê-la é **decisão de âmbito, não de
+> ordem** — e é isso que a distingue da subida do LEDG-2464, que não tinha essa dúvida.
+
 | # | Ticket | O quê | Onde | Feito? | Dependência |
 | --- | --- | --- | --- | --- | --- |
 | **1** | LEDG-2432 | Repor o login por email e palavra-passe | Frontend | ✅ **Sim** — em `develop` e `tst` | 🚨 Regressão; desbloqueou o `tst → ppr` |
 | **2** | LEDG-2456 | Fuga de existência de conta **+ e-mails em inglês** | Backend | ✅ **Sim** — em `develop` e `tst` | Nenhuma — e torna o 15 menor |
 | **3** | LEDG-2433 | Campo do método de autenticação (CMD/eIDAS) | Backend | ✅ **Sim** — 6 commits, suite completa verde; em `develop` e `tst` | Nenhuma — aditivo |
 | **4** | LEDG-2457 | Tipo de cidadão **declarado** (nacional/estrangeiro) | Full-stack | ✅ **Sim** — 5 commits nos dois repos; em `develop` e `tst` | **Depende do 3** |
-| 5 | LEDG-2434 | Levantamento — **falta PPR e as perguntas 2/3/4 fora de PRD** | Spike | 🟡 Parcial | Nenhuma |
+| **5** | LEDG-2434 | Levantamento — o script responde às três contagens numa só execução | Spike | 🟡 **Parcial** — PR #277/#278, corrido em DEV; em `develop` e `tst` | Nenhuma. 🚨 **Falta correr em PRODUÇÃO** — é acesso, não código |
 | **6** | LEDG-2462 | **Campos de sessão vazios no login SAML** (os cinco campos trackable) | Backend | ✅ **Sim** — PR #266; 6 commits, suite completa verde, 13 testes novos; em `develop` e `tst` | Nenhuma. Paralelo ao 5 — **este é código, o 5 é humano** |
 | **7** | **LEDG-2465** | **Login recusado tratado como sucesso:** sessão marcada, log diz `OK`, auditoria diz `success`, e o link de uso único fica queimado | Backend | ✅ **Sim** — PR #268; 3 commits, suite completa verde, 11 testes novos; em `develop` e `tst` | Nenhuma — mexeu nas **mesmas duas funções** do 6, e foi de facto mais barato a seguir a ele |
 | **8** | **LEDG-2466** | **`datastore.commit()` é no-op em Mongo:** 3 chamadas que não gravam nada, e o `confirmed_at` **nunca chegava à BD** | Backend | ✅ **Sim** — PR #272, 4 testes novos; em `develop` e `tst` | Nenhuma — o 6 deixou de o reparar de lado, deliberadamente |
@@ -1926,13 +1941,23 @@ problema causado por divergência entre branches.
 ## Cobertura de testes
 
 - `udata/tests/frontend/test_saml.py` — **149 testes** de base, **160 depois do LEDG-2433** (as
-  duas classes do provedor), **169 depois do LEDG-2457** (`SAMLDeclaredCitizenTypeTest`), e
-  **183 depois do LEDG-2462** (`SAMLTrackableLoginFieldsTest` + o teste do clique no link), e
-  **194 depois do LEDG-2465** (`SAMLInactiveAccountRefusalTest` + 3 no clique do link).
-  Medido em `develop` com `pytest --collect-only`.
+  duas classes do provedor), **169 depois do LEDG-2457** (`SAMLDeclaredCitizenTypeTest`),
+  **183 depois do LEDG-2462** (`SAMLTrackableLoginFieldsTest` + o teste do clique no link),
+  **194 depois do LEDG-2465** (`SAMLInactiveAccountRefusalTest` + 3 no clique do link),
+  **198 depois do LEDG-2466** (`SAMLConfirmedAtPersistenceTest`) e **204 depois do LEDG-2464**
+  (`SAMLAmbiguousIdentityTest`). Medido em `develop` com `pytest --collect-only`.
   ⚠️ **Os totais medidos são a fonte, não os resumos por ticket.** O resumo do 2465 dizia
   "13 testes novos" e o real é **11** (194 − 183) — corrigido. Vale reverificar o do 2462 pela
   mesma via, porque 183 − 169 dá **14** e o resumo dele também diz 13.
+- `udata/tests/api/test_organizations_api.py` — **101 testes**, **6 deles** acrescentados pelo
+  LEDG-2468 para a guarda do último administrador.
+  🚩 **Uma mutação provou que faltava um dos seis:** retirar a condição do papel novo
+  (`form.role.data != "admin"`) deixava a suite toda verde, ou seja, ninguém testava a diferença
+  entre *alterar o último admin* e *tirar-lhe o papel*. O teste que faltava passou a existir, e a
+  mesma mutação passou a matar exactamente esse.
+- `udata/tests/api/test_security_api.py` — desde o LEDG-2467, fixa o **remetente** dos mails do
+  flask_security. ⚠️ **O teste tem de fazer o `MAIL_DEFAULT_SENDER` e o `SECURITY_EMAIL_SENDER`
+  DIFERIR**, senão passa com e sem o bug — é a lacuna 7 outra vez.
 - `udata/tests/test_legacy_vulns_auth_enumeration.py` — regressão de enumeração. **O LEDG-2456
   acrescentou a classe que faltava** para o change-email: o ficheiro tinha uma por cada vetor da
   auditoria e nenhuma para este, que é a razão pela qual a fuga sobreviveu.

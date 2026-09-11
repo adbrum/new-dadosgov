@@ -29,6 +29,7 @@ a reformulação CMD/eIDAS estiver feita e validada. **Não se promove por ticke
   | 2026-09-09 | + o 6 (LEDG-2462) | **103** | 80 |
   | 2026-09-10 | + o 7 (LEDG-2465) | **108** | 80 |
   | 2026-09-10 | + o LEDG-2467 (fora da decomposição) | **113** | 80 |
+  | 2026-09-11 | + o 8 (LEDG-2466) | **116** | 80 |
 
   Uma parte é anterior a este refinamento e já lá estava; o ponto é que **o número não desce**,
   e a promoção final não será revisível commit a commit. O frontend não se moveu porque os pontos
@@ -876,7 +877,7 @@ seguro: o 10 arruma 4 casos, o 9 impede que voltem.
 | 5 | LEDG-2434 | Levantamento — **falta PPR e as perguntas 2/3/4 fora de PRD** | Spike | 🟡 Parcial | Nenhuma |
 | **6** | LEDG-2462 | **Campos de sessão vazios no login SAML** (os cinco campos trackable) | Backend | ✅ **Sim** — PR #266; 6 commits, suite completa verde, 13 testes novos; em `develop` e `tst` | Nenhuma. Paralelo ao 5 — **este é código, o 5 é humano** |
 | **7** | **LEDG-2465** | **Login recusado tratado como sucesso:** sessão marcada, log diz `OK`, auditoria diz `success`, e o link de uso único fica queimado | Backend | ✅ **Sim** — PR #268; 3 commits, suite completa verde, 11 testes novos; em `develop` e `tst` | Nenhuma — mexeu nas **mesmas duas funções** do 6, e foi de facto mais barato a seguir a ele |
-| **8** | **LEDG-2466** | **`datastore.commit()` é no-op em Mongo:** 3 chamadas que não gravam nada, e o `confirmed_at` do auto-confirm perde-se | Backend | ❌ Não | Nenhuma — o 6 deixou de o reparar de lado, deliberadamente |
+| **8** | **LEDG-2466** | **`datastore.commit()` é no-op em Mongo:** 3 chamadas que não gravam nada, e o `confirmed_at` **nunca chegava à BD** | Backend | ✅ **Sim** — PR #272, suite completa verde, 4 testes novos; em `develop` | Nenhuma — o 6 deixou de o reparar de lado, deliberadamente |
 | **9** | **LEDG-2468** | **Nada impede uma organização de ficar sem administrador** — remover membro e trocar role não contam admins | Backend | ❌ Não | Nenhuma — e **quanto mais cedo entrar, menos casos o 10 trata à mão** |
 | 10 | LEDG-2463 | **As 6 contas com conteúdo, 4 delas admin ÚNICO** — plano nomeado | Operação | ❌ Não | **Pré-requisito do LEDG-2431.** Bloqueia qualquer recusa ou limpeza |
 | **11** | **LEDG-2470** | **Contas institucionais deixam de existir:** publicar passa a ser sempre por conta pessoal, em nome próprio ou de uma organização | Operação | ❌ Não | Depende do **9**. **Contém o 10** como subconjunto, e pode ser a **causa** que o 13 trata como efeito |
@@ -893,7 +894,7 @@ seguro: o 10 arruma 4 casos, o 9 impede que voltem.
 | — | **LEDG-2474** | **Quatro razões de recusa dão a mesma resposta de sucesso** na recuperação — e uma conta inactiva fica **sem via de entrada nenhuma** | Backend + Produto | ❌ Não | **Fora da decomposição.** Bloqueado em **decisão da AMA**. 🚨 **Passou a ser o pré-requisito do 19** que o 2467 era, e agravou-se com o **7** |
 | — | ~~NOVO-D~~ | ~~**Organizações AGIT duplicadas** (3 registos)~~ | — | ❌ **Não se cria** | A consulta desfez a suspeita — ver acima |
 
-**Próximo a implementar:** o **8** (LEDG-2466) — mexe no **mesmo ficheiro** que o 7 acabou de
+**Próximo a implementar:** o **9** (LEDG-2468) — mexe no **mesmo ficheiro** que o 7 acabou de
 tocar, e o 6 deixou-o deliberadamente sem reparar de lado. Depois dele o **9** (LEDG-2468), cujos
 pontos 1 e 2 são implementáveis já; os 3, 4 e 5 estão bloqueados numa decisão da AMA. Os pontos
 1 a 4, 6 e 7 estão em `develop` e `tst`, e
@@ -1232,6 +1233,33 @@ E o `_create_pending_saml_user` é o caso em que a chamada é **só** enganadora
 
 > 💡 **É a terceira ocorrência da mesma classe de bug deste refinamento:** código que muta e
 > não grava, ou que grava sem que se veja.
+
+#### ✅ Feito — PR #272, em `develop` (2026-09-11)
+
+🚨 **O defeito era maior do que este documento descrevia.** Dizia que o `confirmed_at` *"se perde"*;
+na verdade **nunca chegava à base de dados**. O `create_user` termina em `put(user)` → `model.save()`,
+logo o documento é escrito **antes** de o campo ser atribuído; o objecto devolvido carrega o valor,
+logo o `requires_confirmation(user)` — que é `confirmed_at is None` — dizia **False** e o auto-confirm
+nem corria; e o stamp do provedor já concordava e não salvava. No login seguinte repetia-se o ciclo.
+
+🔑 **E é a causa de um sintoma que este documento atribuía a outro ponto.** Uma conta com
+`confirmed_at` nulo é recusada na recuperação de palavra-passe com `CONFIRMATION_REQUIRED` — a segunda
+linha da tabela do LEDG-2474. ⇒ **Todas as contas criadas por SAML nunca conseguiram recuperar a
+palavra-passe, e nunca foram informadas.** Parte do LEDG-2474 resolve-se sozinha com isto.
+
+**Três sítios, corrigidos de três formas diferentes de propósito:** na criação o campo passa *dentro*
+do `create_user` (uma escrita só, e o erro de ordem deixa de ser exprimível); na conta pendente a
+chamada é removida (ali o campo fica sem valor por desenho); e no login é **escrita atómica de um só
+campo** — não `save()`, que arrastaria `about`/`first_name`/`last_name` pelo `pre_save`.
+
+✅ **Critério do âmbito fechado sem código:** as 3 chamadas eram **as únicas do repositório inteiro**.
+
+⚠️ **Fica por fazer, por falta de acesso:** a contagem de contas com `confirmed_at` em falta exige
+produção. **Recomendação: não fazer migração** — o próximo login de cada conta resolve-o.
+
+⚠️ **E uma pergunta de produto:** se alguma conta legítima depende de estar não-confirmada para ficar
+bloqueada, isto desbloqueia-a. Pela leitura o auto-confirm é deliberado e não se aplica aos endereços
+auto-declarados, mas é a AMA que confirma.
 
 ### 9 — LEDG-2468 · Nada impede uma organização de ficar sem administrador *(backend)*
 

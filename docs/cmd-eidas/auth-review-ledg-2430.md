@@ -331,6 +331,12 @@ emails a colidir só na capitalização        2 grupos
 **Treze grupos onde o login CMD é ambíguo hoje, e o `migrate-nics --dry-run` reporta zero.**
 É a prova da cegueira, medida em dados reais.
 
+⚠️ **Estes números são da BD local e não de nenhum dos quatro ambientes.** A corrida contra o
+**DEV**, a 2026-09-11, dá **9 075 contas**, **931 com aparência institucional** (331 sem CMD,
+600 com) e **2 875 com link CMD** — populações diferentes, portanto **o 722 e o 386 não valem
+como contagem em lado nenhum**. O que se repete nos dois é o **13**: treze grupos a partilhar
+identificador. Coincidência ou ascendência comum do dump, não se afirma qual.
+
 **E o padrão é inequívoco: a mesma pessoa, dois emails, minutos de intervalo.**
 
 | Contas | Intervalo |
@@ -1550,10 +1556,11 @@ por local-part genérico (`geral@`, `dados@`, `sig@`), domínio `.gov.pt`, ou pe
 🔑 **E pode ser a causa das 120 contas sintéticas.** A hipótese das caixas partilhadas — um `geral@` já
 ligado à identidade do colega nº 1, o colega nº 2 entra com o seu CMD, a asserção traz o mesmo
 endereço, a conta não pode ser candidata, conta nova, endereço fabricado — tem a favor as **386 contas
-com aparência institucional E link CMD**. ⚠️ **Continua não verificada, e é a primeira coisa a fazer
+com aparência institucional E link CMD** *(BD local, 2026-09-09)* — **600 em DEV, 2026-09-11**. ⚠️ **Continua não verificada, e é a primeira coisa a fazer
 aqui**, porque decide se este ponto é uma limpeza ou a correcção da raiz do 13.
 
-⚠️ **A heurística dá 722 contas (336 sem CMD, 386 com), e não são todas institucionais** — o critério
+⚠️ **A heurística dá 722 contas (336 sem CMD, 386 com) na BD local, e 931 em DEV (331 sem CMD,
+600 com) — e não são todas institucionais** — o critério
 inclui "ser membro de uma organização", o que apanha contas pessoais legítimas. A lista tem de ser
 **revista por humano** antes de qualquer acção.
 

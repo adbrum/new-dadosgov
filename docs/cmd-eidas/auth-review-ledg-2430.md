@@ -877,6 +877,27 @@ que o **13** trata como efeito — se a hipótese das caixas partilhadas se conf
 produto elimina a raiz. E o **10** deixou de ser detalhe do 11 para ser a guarda de código que o torna
 seguro: o 11 arruma 4 casos, o 10 impede que voltem.
 
+### Decisão 12 — o levantamento em produção espera por `tst` *(2026-09-14)*
+
+**Não se corre o `audit_institutional_users.py` em produção enquanto tudo não estiver fechado
+até `tst`.** A base de dados de DEV está actualizada, e é onde os testes se fazem.
+
+**Porquê:** correr em produção agora produziria números sobre um código que ainda vai mudar —
+e obrigaria a repetir a medição no fim. Medir uma vez, no estado final, é mais barato e mais
+honesto do que medir cedo e citar valores que entretanto deixaram de valer.
+
+**O que isto custa, e fica escrito para ser uma escolha e não um esquecimento:**
+
+- **Três critérios ficam abertos mais tempo** — o 6 do LEDG-2466 (contas sem `confirmed_at`), o
+  ponto 4 do LEDG-2468 (organizações órfãs) e o requisito 1 do LEDG-2469 (o que cada duplicado
+  detém). Nenhum deles bloqueia código; bloqueiam o **fecho** dos tickets.
+- ⏳ **O ponto 14 perde margem.** A fusão dos duplicados tem de correr **antes da promoção
+  final**, e agora a medição que a informa também. Os dois passam a caber na mesma janela, no
+  fim — e essa janela é a única em que ~26 contas do ponto 9 e os donos de placeholder da
+  alínea (c) do 13 deixam de estar trancados.
+- ⚠️ **Os números de DEV continuam a não ser os de produção.** O que muda é *quando* se mede,
+  não o que os valores de DEV provam — que é que a ferramenta funciona.
+
 ## Decomposição, pela ordem de implementação
 
 > 🔄 **Reordenado a 2026-09-10, com as três decisões de produto da decisão 10.** Entraram seis
@@ -917,7 +938,7 @@ seguro: o 11 arruma 4 casos, o 10 impede que voltem.
 | **2** | LEDG-2456 | Fuga de existência de conta **+ e-mails em inglês** | Backend | ✅ **Sim** — em `develop` e `tst` | Nenhuma — e torna o 15 menor |
 | **3** | LEDG-2433 | Campo do método de autenticação (CMD/eIDAS) | Backend | ✅ **Sim** — 6 commits, suite completa verde; em `develop` e `tst` | Nenhuma — aditivo |
 | **4** | LEDG-2457 | Tipo de cidadão **declarado** (nacional/estrangeiro) | Full-stack | ✅ **Sim** — 5 commits nos dois repos; em `develop` e `tst` | **Depende do 3** |
-| **5** | LEDG-2434 | Levantamento — o script responde às três contagens numa só execução | Spike | 🟡 **Parcial** — PR #277/#278, corrido em DEV; em `develop` e `tst` | Nenhuma. 🚨 **Falta correr em PRODUÇÃO** — é acesso, não código |
+| **5** | LEDG-2434 | Levantamento — o script responde às três contagens numa execução | Spike | 🟡 **Parcial** — PR #277/#278, corrido em DEV; em `develop` e `tst` | ⏸️ **A execução em produção espera por tudo estar em `tst`** (decisão 12). Não bloqueia código — bloqueia o fecho de critérios no 8, no 10 e no 14 |
 | **6** | LEDG-2462 | **Campos de sessão vazios no login SAML** (os cinco campos trackable) | Backend | ✅ **Sim** — PR #266; 6 commits, suite completa verde, 13 testes novos; em `develop` e `tst` | Nenhuma. Paralelo ao 5 — **este é código, o 5 é humano** |
 | **7** | **LEDG-2465** | **Login recusado tratado como sucesso:** sessão marcada, log diz `OK`, auditoria diz `success`, e o link de uso único fica queimado | Backend | ✅ **Sim** — PR #268; 3 commits, suite completa verde, 11 testes novos; em `develop` e `tst` | Nenhuma — mexeu nas **mesmas duas funções** do 6, e foi de facto mais barato a seguir a ele |
 | **8** | **LEDG-2466** | **`datastore.commit()` é no-op em Mongo:** 3 chamadas que não gravam nada, e o `confirmed_at` **nunca chegava à BD** | Backend | ✅ **Sim** — PR #272, 4 testes novos; em `develop` e `tst` | Nenhuma — o 6 deixou de o reparar de lado, deliberadamente |

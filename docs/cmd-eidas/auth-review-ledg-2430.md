@@ -1921,7 +1921,24 @@ O diagnóstico do LEDG-2467 passou pelos logs e pela configuração dos ambiente
 que **não são de autenticação**. Ficam registadas aqui para não se perderem, e **deliberadamente
 fora da tabela de decomposição** — meter trabalho não-CMD/eIDAS nessa tabela dilui-a.
 
-### LEDG-2475 · O formulário de Ajuda e contactos devolve 400 em PPR e PRD
+### LEDG-2475 · O formulário de Ajuda e contactos devolvia 400 em PPR e PRD ✅ RESOLVIDO
+
+✅ **Confirmado a 2026-09-11: era a chave, como o diagnóstico dizia.** O par site/secret estava
+trocado em PPR/PRD — o browser apresentava um token do registo `6LfoyIMt` e o servidor validava-o
+contra o segredo de outro registo, e o Google respondia `success: false`. Corrigido; o envio
+funciona.
+
+🔑 **O que provou a causa foi o tamanho da resposta, e vale como método.** Os 54 bytes
+distinguiam `Invalid reCAPTCHA` (o Google respondeu e rejeitou) de `{"errors": {}}` com 14 bytes
+(falha de rede a contactar o Google) e de `reCAPTCHA validation required` com 66 (token ausente).
+Sem essa medição, a hipótese benigna — "PPR/PRD não alcançam o `siteverify`" — era indistinguível
+da real, e teria mandado investigar rede em vez de configuração.
+
+⚠️ **Fica por confirmar o resto do ticket:** se os `.mo` de português estão compilados no deploy
+de PPR/PRD (a resposta veio em inglês, e a tradução existe), e o `MAIL_DEFAULT_RECEIVER` nesses
+dois ambientes — em DEV está desviado para um endereço pessoal com um `# trocar temporariamente`.
+
+#### O diagnóstico original, mantido por ser o registo de como se chegou lá
 
 `POST /api/1/site/contact/` → **400**, com `Content-Length: 54`. Em DEV e TST devolve **204** e a
 mensagem chega. O `udata.cfg` é versionado e igual para todos, logo a diferença está na

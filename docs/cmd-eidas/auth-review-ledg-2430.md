@@ -33,6 +33,7 @@ a reformulação CMD/eIDAS estiver feita e validada. **Não se promove por ticke
   | 2026-09-11 | + o 9 (LEDG-2464) | **122** | 80 |
   | 2026-09-11 | + o 10 parcial (LEDG-2468) | **126** | 80 |
   | 2026-09-11 | + o 5 (LEDG-2434) | **132** | **101** |
+  | 2026-09-11 | + a alínea (c) do 13 (LEDG-2435) | **138** | 101 |
 
   Uma parte é anterior a este refinamento e já lá estava; o ponto é que **o número não desce**,
   e a promoção final não será revisível commit a commit.
@@ -916,7 +917,7 @@ seguro: o 11 arruma 4 casos, o 10 impede que voltem.
 | 10 | LEDG-2468 | **Nada impede uma organização de ficar sem administrador** — os dois endpoints de membro **e** os quatro caminhos de apagamento | Backend | 🟡 **Parcial** — PR #275: os **dois endpoints** guardados, em `develop` e `tst`. 🚨 **O `mark_as_deleted` continua a orfanar** | Os pontos 3/4/5 dependem da AMA. **Quanto mais cedo o resto entrar, menos casos o 11 trata à mão** |
 | 11 | LEDG-2463 | **As 6 contas com conteúdo, 4 delas admin ÚNICO** — plano nomeado | Operação | ❌ Não | **Pré-requisito do LEDG-2431.** Bloqueia qualquer recusa ou limpeza |
 | **12** | **LEDG-2470** | **Contas institucionais deixam de existir:** publicar passa a ser sempre por conta pessoal, em nome próprio ou de uma organização | Operação | ❌ Não | Depende do **10**. **Contém o 11** como subconjunto, e pode ser a **causa** que o 13 trata como efeito |
-| 13 | LEDG-2435 | **Uma identidade, uma conta** — as duas classes de duplicado | Backend | ❌ Não | Depende do **5**. 🟢 **Mais simples do que desenhado:** reconciliação é 1:1 |
+| 13 | LEDG-2435 | **Uma identidade, uma conta** — as duas classes de duplicado | Backend | 🟡 **Parcial** — a **alínea (c)** feita: PR #279/#280, 11 testes novos; em `develop` e `tst` | As (a) e (b) por fazer: a (a) depende do 5, a (b) do 15. 🚨 **A (c) deixa presos os donos de placeholder cujo endereço real está noutra grafia — é razão adicional do prazo do 14** |
 | **14** | **LEDG-2469** | **Fundir os duplicados que já existem** e depois impedi-los na BD (o `extras.auth_nic` não tem índice de unicidade) | Backend + Operação | ❌ Não | Depende do **9**, **10** e **13**. Fundir antes de o crescimento parar é limpar uma torneira aberta |
 | 15 | LEDG-2431 | Associar a uma conta tradicional existente | Full-stack | ❌ Não | Depende do **2**, **5**, **11** e **13**. ✅ **Desenho decidido pelos dados: recusar quando há conteúdo** |
 | 16 | LEDG-2438 | **Estrangeiros: identidade por documento em vez de NIC** | Backend | ❌ Não | Confirmar sobreposição com LEDG-2288 |
@@ -1588,11 +1589,40 @@ Invariante: **uma identidade CMD/eIDAS → no máximo uma conta.** Cobre as duas
 - **(b) email já pertence a outra conta** → encaminhar para a associação.
   ⚠️ **Não pode ser desligado antes do LEDG-2431 existir.**
 - **(c) capitalização diferente** → alinhar a verificação `exact` com a `ci`.
-  ⚠️ **O mesmo problema existe no `change_email`**, e o LEDG-2456 deixou-o registado como achado
-  rejeitado para este ponto o apanhar. **Cobrir os dois sítios.**
+  ✅ **FEITA** — PR #279/#280, em `develop` e `tst`. Ver abaixo.
 
 A fechar de passagem, por estarem na mesma zona: a guarda em falta na `/saml/migration/skip`, e
 o alinhamento dos três defaults da flag.
+
+#### A alínea (c), feita a 2026-09-11 *(as (a) e (b) continuam por fazer)*
+
+O helper que já fazia a coisa certa saiu do plugin SAML para junto do `User`, e os **três**
+sítios que perguntavam `exact` passaram a perguntar-lhe: o `_create_saml_user`, o `change_email`
+e o `confirm_change_email`.
+
+🔑 **O que este ponto ensinou, e não estava em lado nenhum:** o `flask_security` tem um
+`find_user(case_insensitive=True)` nativo, e **já estava a ser usado em três sítios deste
+ficheiro**. Adoptá-lo teria sido o caminho óbvio e **teria reintroduzido o bug** — é
+`objects(email__iexact=…).first()`, sem preferência pelo exacto, logo devolve sempre a linha
+mais recente. É o mesmo `.first()` que o ponto 9 provou não ser um sorteio. O docstring do
+helper diz agora porquê, para ninguém o simplificar de volta.
+
+🚨 **Consequência conhecida, aceite de olhos abertos.** Quem tem endereço com placeholder e o
+seu endereço real está noutra grafia **deixa de o poder pôr**, e a resposta genérica do
+LEDG-2456 faz com que não seja informado porquê. Antes recebia um duplicado; a recusa é
+correcta, mas é uma recusa. **A população que fica presa é exactamente a do ponto 14** — mais
+uma razão para o prazo dele.
+
+⚠️ **E o ponto 2 corrige um caminho que hoje não corre em produção:** o `_create_saml_user` só
+é alcançado no ramo `else` do `if _migration_enabled()`, e em PRD a flag está ligada. **Não se
+afirma que isto fecha a origem dos duplicados medidos** — essa origem continua por explicar.
+
+**Quatro portas ficaram abertas, todas descobertas aqui e nenhuma no ticket:** os três usos do
+kwarg nativo (`saml_govpt.py:1724`, `:3403`, `:3551`), o `proconnect.py:91` — **um terceiro
+provedor de login com exactamente o mesmo lookup `exact`** —, o `organization/api.py:651`
+(quarto padrão, `email.lower()`, que só está correcto se tudo o que está guardado já estiver em
+minúsculas, e não está), e a collation no índice único, que é a correcção estrutural e exige
+fundir os duplicados primeiro.
 
 ### 14 — LEDG-2469 · Fundir os duplicados que já existem, e depois impedi-los na BD *(backend + operação)*
 
@@ -1617,6 +1647,12 @@ fundir um lado administrador deixa uma organização órfã, que é exactamente 
 
 ✅ **A primitiva certa existe:** o `udata/features/transfer/` move um objecto de cada vez entre contas e
 organizações. Uma fusão construída por cima dele orquestra transferência em vez de a inventar.
+
+🚨 **E a alínea (c) do 13 acrescentou-lhe uma razão, a 2026-09-11.** Com o `change_email` a
+tratar a variante de capitalização como endereço tomado, quem tem placeholder e o seu endereço
+real numa grafia diferente **deixa de o poder pôr, e não é informado porquê** — a resposta é
+genérica por desenho. A recusa é correcta; o que a desfaz é a fusão. ⇒ **Estas pessoas estão
+presas até este ponto correr**, e somam-se às ~26 que o ponto 9 tranca.
 
 🚨 **E o fecho é um índice que não existe.** O `extras.auth_nic` **não tem índice de unicidade nenhum**
 — é um `MapField` (`user/models.py:123`) e os únicos índices declarados (`:141-149`) são o de texto, o
@@ -1944,11 +1980,23 @@ problema causado por divergência entre branches.
   duas classes do provedor), **169 depois do LEDG-2457** (`SAMLDeclaredCitizenTypeTest`),
   **183 depois do LEDG-2462** (`SAMLTrackableLoginFieldsTest` + o teste do clique no link),
   **194 depois do LEDG-2465** (`SAMLInactiveAccountRefusalTest` + 3 no clique do link),
-  **198 depois do LEDG-2466** (`SAMLConfirmedAtPersistenceTest`) e **204 depois do LEDG-2464**
-  (`SAMLAmbiguousIdentityTest`). Medido em `develop` com `pytest --collect-only`.
+  **198 depois do LEDG-2466** (`SAMLConfirmedAtPersistenceTest`), **204 depois do LEDG-2464**
+  (`SAMLAmbiguousIdentityTest`) e **207 depois da alínea (c) do LEDG-2435**
+  (`SAMLCaseVariantAddressTest`). Medido em `develop` com `pytest --collect-only`.
   ⚠️ **Os totais medidos são a fonte, não os resumos por ticket.** O resumo do 2465 dizia
   "13 testes novos" e o real é **11** (194 − 183) — corrigido. Vale reverificar o do 2462 pela
   mesma via, porque 183 − 169 dá **14** e o resumo dele também diz 13.
+- `udata/core/user/tests/test_user_model.py` — desde o LEDG-2435, **4 testes** do
+  `find_user_by_email_ci`, no sítio onde o helper passou a viver.
+  🚩 **A mutação que os justifica:** retirar a preferência pelo match exacto mata **exactamente
+  um** deles. Sem esse teste, o helper podia ser simplificado para `.first()` sem a suite dizer
+  nada — que é precisamente o que o `find_user(case_insensitive=True)` do flask_security faz.
+- `udata/tests/frontend/test_auth.py` — desde o LEDG-2435, **4 testes** da variante de
+  capitalização no `change_email`.
+  🚩 **Um deles NÃO morre com mutação nenhuma, de propósito:** o de indistinguibilidade prova a
+  **ausência** de um oráculo, que o bug não criava. Por isso tem ao lado um que morre — um prova
+  que o chamador não distingue os ramos, o outro que o ramo certo correu. Confundir os dois é a
+  lacuna 7 outra vez.
 - `udata/tests/api/test_organizations_api.py` — **101 testes**, **6 deles** acrescentados pelo
   LEDG-2468 para a guarda do último administrador.
   🚩 **Uma mutação provou que faltava um dos seis:** retirar a condição do papel novo

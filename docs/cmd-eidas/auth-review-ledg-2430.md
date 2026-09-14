@@ -35,6 +35,7 @@ a reformulação CMD/eIDAS estiver feita e validada. **Não se promove por ticke
   | 2026-09-11 | + o 5 (LEDG-2434) | **132** | **101** |
   | 2026-09-11 | + a alínea (c) do 13 (LEDG-2435) | **138** | 101 |
   | 2026-09-14 | *(nada deste refinamento)* — LEDG-2327, PRs #281/#282 | **144** | 101 |
+  | 2026-09-14 | + o 16 (LEDG-2438), PR #284 | **152** | 101 |
 
   🚩 **A linha de 09-14 não tem um único commit desta reformulação.** Os seis que
   levaram o backend de 138 a 144 vieram do LEDG-2327 (harvest domain / INE ownership),
@@ -949,8 +950,8 @@ honesto do que medir cedo e citar valores que entretanto deixaram de valer.
 | 13 | LEDG-2435 | **Uma identidade, uma conta** — as duas classes de duplicado | Backend | 🟡 **Parcial** — a **alínea (c)** feita: PR #279/#280, 11 testes novos; em `develop` e `tst` | As (a) e (b) por fazer: a (a) depende do 5, a (b) do 15. 🚨 **A (c) deixa presos os donos de placeholder cujo endereço real está noutra grafia — é razão adicional do prazo do 14** |
 | **14** | **LEDG-2469** | **Fundir os duplicados que já existem** e depois impedi-los na BD (o `extras.auth_nic` não tem índice de unicidade) | Backend + Operação | ❌ Não | Depende do **9**, **10** e **13**. Fundir antes de o crescimento parar é limpar uma torneira aberta |
 | 15 | LEDG-2431 | Associar a uma conta tradicional existente | Full-stack | ❌ Não | Depende do **2**, **5**, **11** e **13**. ✅ **Desenho decidido pelos dados: recusar quando há conteúdo** |
-| **16** | LEDG-2438 | **Estrangeiros: identidade por documento em vez de NIC** | Backend | ✅ **Sim** — PR #283, 15 testes novos; em `develop` | 🚨 **Por validar contra o IdP real antes de promover** — os testes mockam o pysaml2. 🔻 **Tira os estrangeiros do âmbito do 17** |
-| 17 | LEDG-2436 | Identidade sem identificador (eIDAS **e** CMD) | Backend | ❌ Não | **Depende do 16, que está feito** ⇒ desbloqueado. 🔻 **Despromovido:** zero casos nas 120; o que sobra é o caso mal formado, onde recusar é defensável |
+| **16** | LEDG-2438 | **Estrangeiros: identidade por documento em vez de NIC** | Backend | ✅ **Sim** — PR #283/#284, 15 testes novos; em `develop` e `tst` | 🚨 **Por validar contra o IdP real antes de sair de `tst`** — os testes mockam o pysaml2. 🔻 **Tirou os estrangeiros do âmbito do 17** |
+| 17 | LEDG-2436 | Identidade sem identificador (eIDAS **e** CMD) | Backend | ⏸️ **Estacionado a 2026-09-14** | O 16 tirou-lhe os estrangeiros, mas **a escolha entre recusar e ligar pelo email continua proibida antes do LEDG-2288** — e nem DEV nem a auditoria conseguem responder. Ver a secção |
 | **18** | **LEDG-2472** | **Consolidação self-service:** avisar que só haverá uma conta por pessoa, e deixar a pessoa mover os dados das secundárias para a principal | Full-stack | ❌ Não | Depende do **requisito 4 do 14** e do **10**. 🛑 **Tem de vir ANTES do 19** — depois da obrigatoriedade, quem perdeu o email de uma conta secundária já não entra nela para empurrar o conteúdo |
 | **19** | **LEDG-2471** | **Descontinuar o login por email e palavra-passe:** inventário e gate no backend | Full-stack | ❌ Não | Depende do **15**, **17**, **18**, e do LEDG-2437 e **LEDG-2474** (era o LEDG-2467, que ficou feito — a substância passou para o 2474) |
 | **20** | **LEDG-1277** | **Obrigatoriedade do Autenticação.gov** — o fim do arco | Produto | 🟡 Em curso | Depende do **19**. ⚠️ **Não activar antes dele** |
@@ -1813,7 +1814,41 @@ que não.
 é o caso genuinamente mal formado, onde recusar é defensável — que era exactamente o argumento
 para este vir primeiro.
 
-### 17 — LEDG-2436 · Identidade sem identificador *(bug)*
+### 17 — LEDG-2436 · Identidade sem identificador *(bug)* ⏸️ ESTACIONADO
+
+#### Arrancado e parado a 2026-09-14, antes de haver código
+
+O ticket tem uma instrução explícita: **"não escolher entre (a) recusar e (b) ligar pelo email
+antes da resposta do LEDG-2288"**. O 2288 continua em **To Do**, atribuído a outra pessoa.
+
+**Em vez de devolver a pergunta, tentei respondê-la com dados.** Medido em DEV, que está
+actualizado:
+
+| Medida | DEV, 2026-09-14 |
+| --- | --- |
+| Contas activas | 9 075 |
+| Com `auth_provider=eidas` | **0** |
+| Com `auth_provider=cmd` | **1** |
+| Sem `auth_provider` | 9 074 |
+| `saml-*` sem `auth_nic` | **0** |
+
+🚩 **DEV não pode responder, e não é por falta de procurar.** O campo que diria quantos logins
+eIDAS chegam sem `PersonIdentifier` foi criado no **ponto 3** e está praticamente vazio — uma
+conta em 9 075. E a auditoria SAML não emite (LEDG-2371), logo também não há como observar em
+produção **nem repartir "estrangeiro com CMD" de "eIDAS mal formado"**, que é exactamente a
+repartição de que este ponto precisa.
+
+**O custo de escolher às cegas, que é o que justifica parar:** a opção (a) arrisca recusar
+cidadãos legítimos de um Estado-Membro cujo IdP omita o atributo; a (b) obriga a desfazer as
+guardas `nic_required`, que existem por uma razão de segurança documentada.
+
+✅ **O que o 16 já mudou aqui:** os estrangeiros com CMD saíram do âmbito. O que sobra é o caso
+genuinamente mal formado, onde recusar é **mais** defensável do que era quando o ticket foi
+escrito — mas continua a não ser decidível sem dados.
+
+⇒ **O LEDG-2371 é o pré-requisito prático deste ponto**, e é a única coisa implementável que
+resta com efeito na tabela.
+
 
 ⚠️ **Afeta os dois provedores**, não só o eIDAS: os handlers ACS são idênticos a partir do
 `_find_or_create_saml_user`. **Uma correção num handler só deixa o outro intacto.**

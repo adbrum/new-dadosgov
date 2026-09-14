@@ -36,6 +36,7 @@ a reformulação CMD/eIDAS estiver feita e validada. **Não se promove por ticke
   | 2026-09-11 | + a alínea (c) do 13 (LEDG-2435) | **138** | 101 |
   | 2026-09-14 | *(nada deste refinamento)* — LEDG-2327, PRs #281/#282 | **144** | 101 |
   | 2026-09-14 | + o 16 (LEDG-2438), PR #284 | **152** | 101 |
+  | 2026-09-14 | + o LEDG-2371 (fora da decomposição), PR #286 | **159** | 101 |
 
   🚩 **A linha de 09-14 não tem um único commit desta reformulação.** Os seis que
   levaram o backend de 138 a 144 vieram do LEDG-2327 (harvest domain / INE ownership),
@@ -958,6 +959,52 @@ em bloco é do topo deste documento e mantém-se.
 
 ⚠️ **O 14 (LEDG-2469) NÃO está neste percurso.** É limpeza dos duplicados que já existem; não
 toca no primeiro login. Vale separá-los para não se tratar um pelo outro.
+
+## 🔍 Auditoria de estado dos tickets — 2026-09-14
+
+Pedida a revisão de todos os pontos da tabela: estão desactualizados? a ordem mantém-se?
+Comparado o estado no Jira com o que o git diz. **Oito estão desalinhados, e dois activamente
+enganadores.**
+
+| Ticket | Estado no Jira | O que o git diz | Veredicto |
+| --- | --- | --- | --- |
+| **LEDG-2436** (17) | `Ready for review` | ⏸️ **estacionado, zero linhas de código** | 🚨 **Enganador.** Quem lhe pegue procura um PR que não existe |
+| **LEDG-2435** (13) | `READY FOR TESTING` | só a **alínea (c)**; as (a) e (b) por fazer | 🚨 **Enganador.** Quem testar valida um terço e dá-o por fechado |
+| **LEDG-2371** | `Backlog` | ✅ feito, em `develop` e `tst` | Desactualizado |
+| **LEDG-2438** (16) | `In Progress` | ✅ feito, em `develop` e `tst` | Desactualizado |
+| **LEDG-2475** | `READY FOR TESTING` | ✅ **resolvido** — a chave foi corrigida e o envio funciona | Desactualizado |
+| LEDG-2465, 2466, 2464, 2468 | `Ready for review` | integrados em `develop` e `tst` | Já revistos; o estado ficou para trás |
+| LEDG-2462 | `READY FOR TESTING` | em `develop` e `tst` | Devia acompanhar os irmãos |
+| LEDG-2434 (5) | `IN TESTING` | corrido em DEV; **falta produção, por decisão** | ⚠️ Não está à espera de teste — está à espera da decisão 12 |
+
+⚠️ **Isto não é burocracia.** Dois destes fazem alguém perder tempo de forma previsível: o 2436
+promete um PR que não existe, e o 2435 promete um ticket inteiro quando só tem um terço.
+
+### A ordem — e uma inversão real que a auditoria encontrou
+
+Os pontos 1 a 10 e o 16 estão feitos ou em curso pela ordem da tabela. Os restantes estão
+**bloqueados**, não mal ordenados: o 11 pelo LEDG-2437 (promoção congelada), o 12 pela AMA, o
+13(a) pelo levantamento em produção (decisão 12), o 14 pelo 9/10/13, e o 17 pelo LEDG-2288 e por
+tempo de recolha da auditoria.
+
+🚩 **Mas há uma inversão genuína, entre o 13 e o 15.** A alínea (b) do 13 diz, textualmente:
+*"email já pertence a outra conta → encaminhar para a associação. ⚠️ Não pode ser desligado antes
+do LEDG-2431 existir."* E o 15 **é** a associação. ⇒ **A ordem certa é 15 primeiro, depois a (b)
+do 13** — a tabela tem-nos ao contrário.
+
+✅ **E o 15 está implementável agora**, ao contrário do que a sua célula de dependências diz:
+
+- **do 2** (resposta genérica) — feito, e o ticket diz explicitamente para o **estender**, não reinventar;
+- **do 5** — a contribuição dele era decidir *recusar ou transferir conteúdo*, e a **decisão 9 já a
+  tomou** com os dados de produção (só 6 das 120 têm conteúdo ⇒ recusar). A execução em produção
+  que falta não acrescenta nada a esta escolha;
+- **do 11** — a contribuição era saber o que fazer com as 4 organizações, e **a resposta é
+  conhecida** desde 2026-09-11: não há ninguém para promover, os donos entram por CMD. O fecho
+  formal espera pelo 2437, o *input de desenho* não;
+- **do 13** — só a (b) depende do 15, e não o contrário.
+
+⇒ **O 15 é o único ponto da decomposição implementável hoje**, e é a metade do primeiro login que
+**nenhuma promoção resolve**.
 
 ## Decomposição, pela ordem de implementação
 

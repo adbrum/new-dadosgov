@@ -804,9 +804,17 @@ ou do LEDG-2438 (provado).
   ⚠️ **Esse clique chega sem sessão** — tudo o que precisa viaja no registo do link.
 - **Uma guarda em falta:** de todas as rotas do wizard, **a `/saml/migration/skip` é a única sem
   a verificação da flag**.
-- **A auditoria SAML não emite em produção:** o `_audit_saml` escreve para um logger fora da
-  árvore `udata.*` (LEDG-2371). **Tudo o que está acima pode estar a acontecer há meses sem
-  deixar rasto.**
+- ✅ **A auditoria SAML não emitia em produção — corrigido a 2026-09-14** pelo LEDG-2371, PR
+  #285, em `develop`. Eram **dois** defeitos independentes, e corrigir um só não fazia aparecer
+  linha nenhuma: o logger estava fora da árvore `udata.*` (propagava para um root sem handler)
+  **e** não tinha nível próprio (herdava o `WARNING` de produção, com todas as chamadas a
+  `.info()`). ⚠️ **Tudo o que está acima aconteceu desde Maio sem deixar rasto** — o que se
+  corrigiu foi a cegueira daqui para a frente, não o passado.
+  🚩 **E dois achados que só apareceram ao corrigir:** um POST às rotas ACS sem `SAMLResponse`
+  devolvia 400 **sem passar pela auditoria**, logo nem ficava registado que tinha acontecido; e
+  fazer o logger emitir **sem o excluir do Sentry** teria empurrado o `ip` e o `ua` de cada
+  login para lá — a integração vê records a INFO mesmo sem handler, e o projecto corre com o
+  default de **não** enviar esses dados. Corrigir o bug abria o buraco.
 - **🌐 Os e-mails de autenticação saíam em inglês** — medido com `pybabel`: 56 msgids em
   `udata/auth/`, 37 traduzidos, 19 não. O e-mail de associação chegava com **assunto e corpo em
   inglês**, porque as strings estavam em `_()` sem entrada no catálogo pt — e **isso falha em
@@ -1030,9 +1038,11 @@ de PRD.
 > e aos três novos (LEDG-2462, LEDG-2463, LEDG-2464) em 2026-09-09 — que por isso não levam
 > número na sua própria descrição.
 
-O **LEDG-2371** é pré-requisito prático de tudo isto: sem ele nada é mensurável — e no caso do
-LEDG-2438/LEDG-2436 é a **única** forma de saber quantos casos são estrangeiros com CMD e
-quantos são eIDAS mal formado.
+✅ **O LEDG-2371 era pré-requisito prático de tudo isto, e está feito** (PR #285, `develop`) —
+sem ele nada era mensurável, e no caso do LEDG-2436 era a **única** forma de saber quantos casos
+são estrangeiros com CMD e quantos são eIDAS mal formado. ⏳ **Mas só mede daqui para a frente**,
+e só a partir do deploy: a repartição que o 17 precisa exige tempo de recolha, não só a
+correcção.
 
 ### 1 — LEDG-2432 · Repor o login por email e palavra-passe *(frontend)* ✅ FEITO
 

@@ -915,7 +915,7 @@ seguro: o 11 arruma 4 casos, o 10 impede que voltem.
 | **8** | **LEDG-2466** | **`datastore.commit()` é no-op em Mongo:** 3 chamadas que não gravam nada, e o `confirmed_at` **nunca chegava à BD** | Backend | ✅ **Sim** — PR #272, 4 testes novos; em `develop` e `tst` | Nenhuma — o 6 deixou de o reparar de lado, deliberadamente |
 | **9** | **LEDG-2464** | **Login ambíguo:** identificador duplicado resolvido por `.first()` — devolvia **sempre a conta mais recente** | Backend | ✅ **Sim** — PR #273, 6 testes novos; em `develop` e `tst` | Nenhuma. 🚨 **Nega acesso a ~26 contas** até o 14 as fundir |
 | 10 | LEDG-2468 | **Nada impede uma organização de ficar sem administrador** — os dois endpoints de membro **e** os quatro caminhos de apagamento | Backend | 🟡 **Parcial** — PR #275: os **dois endpoints** guardados, em `develop` e `tst`. 🚨 **O `mark_as_deleted` continua a orfanar** | Os pontos 3/4/5 dependem da AMA. **Quanto mais cedo o resto entrar, menos casos o 11 trata à mão** |
-| 11 | LEDG-2463 | **As 6 contas com conteúdo, 4 delas admin ÚNICO** — plano nomeado | Operação | ❌ Não | **Pré-requisito do LEDG-2431.** Bloqueia qualquer recusa ou limpeza |
+| 11 | LEDG-2463 | **As 6 contas com conteúdo, 4 delas admin ÚNICO** — plano nomeado | Operação | ❌ Não | 🚩 **Não há ninguém para promover** — as 4 organizações têm **1 membro**, a própria conta sintética. Os donos entram por CMD (têm `auth_nic` válido), logo passa a **depender do LEDG-2437**, não da AMA. À AMA fica só: o que fazer se algum não voltar a entrar |
 | **12** | **LEDG-2470** | **Contas institucionais deixam de existir:** publicar passa a ser sempre por conta pessoal, em nome próprio ou de uma organização | Operação | ❌ Não | Depende do **10**. **Contém o 11** como subconjunto, e pode ser a **causa** que o 13 trata como efeito |
 | 13 | LEDG-2435 | **Uma identidade, uma conta** — as duas classes de duplicado | Backend | 🟡 **Parcial** — a **alínea (c)** feita: PR #279/#280, 11 testes novos; em `develop` e `tst` | As (a) e (b) por fazer: a (a) depende do 5, a (b) do 15. 🚨 **A (c) deixa presos os donos de placeholder cujo endereço real está noutra grafia — é razão adicional do prazo do 14** |
 | **14** | **LEDG-2469** | **Fundir os duplicados que já existem** e depois impedi-los na BD (o `extras.auth_nic` não tem índice de unicidade) | Backend + Operação | ❌ Não | Depende do **9**, **10** e **13**. Fundir antes de o crescimento parar é limpar uma torneira aberta |
@@ -1548,8 +1548,40 @@ correio, e que leva **404 em produção a cada login** (LEDG-2437). **Recusar ou
 uma deixa a organização órfã**, e a da AGIT leva 5 datasets consigo.
 
 **O que o ticket tem de produzir:** quem passa a administrar cada uma das quatro, e por que via
-— promover outro membro, ou associar a conta sintética ao seu dono real primeiro. **Decisão da
-AMA, não do código.**
+— promover outro membro, ou associar a conta sintética ao seu dono real primeiro.
+
+#### 🚩 Consultado a 2026-09-11: uma das duas vias não existe
+
+**As quatro organizações têm exactamente UM membro — a própria conta sintética.** Não há
+ninguém para promover, logo a pergunta *"quem passa a administrar"* **não tem candidatos**, e a
+decisão que este ticket pedia à AMA estava a ser feita sobre uma opção inexistente.
+
+| Organização | Membros | Papel do único membro | datasets |
+| --- | --- | --- | --- |
+| AGIT | **1** | `admin` — `saml-dde8d633@…` | **5** |
+| Instituto Nacional de Administração, I.P. | **1** | `admin` — `saml-9a4b1075@…` | 0 |
+| GREEN METRICS LDA | **1** | `admin` — `saml-64f971fb@…` | 0 |
+| EazyAL | **1** | `admin` — `saml-c0437c35@…` | 0 |
+
+✅ **A segunda via funciona, e o acesso nunca se perdeu.** As quatro contas têm `auth_nic` em
+**hash 64-hex válido** e estão **activas** ⇒ a pessoa real entra por CMD e cai exactamente nessa
+conta. O que a bloqueia é o ecrã de conclusão levar **404 em produção** — o LEDG-2437.
+
+⇒ **Este ponto deixa de ser uma decisão sobre pessoas e passa a ser consequência do 2437.**
+Reposto o ecrã, cada dono entra, dá um email real, e a organização mantém o administrador.
+Nenhuma fica órfã e os 5 datasets da AGIT não se movem.
+
+🚨 **A decisão da AMA que resta é mais estreita:** o que fazer se, passado o 2437, alguma destas
+quatro pessoas **não voltar a entrar**. Aí sim é preciso um sysadmin — e é a única pergunta que
+sobra deste ponto.
+
+🔑 **E uma ligação que ninguém tinha feito:** as quatro têm `confirmed_at` **a nulo**. São parte
+das 730 que o levantamento contou ⇒ além do 404, **nenhuma consegue recuperar a palavra-passe**.
+Estão presas pelos dois lados, que é o padrão do LEDG-2474.
+
+⚠️ **Medido em DEV**, onde as quatro contas existem com os mesmos endereços — o que sugere um
+dump restaurado de produção, mas esta doc já teve de retratar uma conclusão tirada assim.
+**Confirmar em produção antes de fechar o ticket**; é o mesmo comando de leitura.
 
 ### 12 — LEDG-2470 · Contas institucionais deixam de existir *(operação)*
 
@@ -1971,6 +2003,14 @@ problema causado por divergência entre branches.
 > receber **404 em produção, em cada login**, desde ~2026-08-25 e até a reformulação completa
 > subir a `main`. **É a consequência direta da decisão de promoção em bloco**, e fica escrito
 > para ser uma escolha e não um esquecimento.
+>
+> 🔑 **E o 2437 vale mais do que se julgava, descoberto a 2026-09-11.** Não é só um 404
+> incómodo: é **o que resolve o ponto 11**. As 4 organizações com admin único não têm ninguém
+> para promover — têm um membro cada, a própria conta sintética — mas essas contas têm
+> `auth_nic` válido e estão activas, logo os donos **entram por CMD e caem na conta certa**. O
+> único passo que lhes falta é o ecrã de conclusão, que é exactamente o que o 2437 repõe.
+> ⇒ **Enquanto o 2437 não subir, quatro organismos — um deles com 5 datasets — não têm forma
+> de recuperar o seu administrador**, e o ponto 11 não pode fechar.
 
 ---
 

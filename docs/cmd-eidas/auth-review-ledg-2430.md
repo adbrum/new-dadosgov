@@ -1068,7 +1068,24 @@ do 13** — a tabela tem-nos ao contrário.
 ⇒ **O 15 é o único ponto da decomposição implementável hoje**, e é a metade do primeiro login que
 **nenhuma promoção resolve**.
 
-## Decomposição, pela ordem de implementação
+## Decomposição — ordenada pelo que foi FEITO, e depois pelo que falta
+
+> 🔄 **Reordenada a 2026-09-14 para se ler pela ordem real.** Antes, os tickets feitos **fora da
+> numeração** — o LEDG-2467, o LEDG-2475, o LEDG-2371 — estavam despejados no fim, como se fossem
+> resto. Não são: foram feitos **no meio do trabalho**, e lê-los no fim dava a impressão errada de
+> que a numeração era a cronologia.
+>
+> **Agora a tabela lê-se assim:** primeiro tudo o que está **feito, pela ordem em que foi feito**
+> — e aí o número da coluna `#` salta (7, —, 8, 9, 10, 5, 14, —, 16, —), porque **a numeração é o
+> plano e a ordem das linhas é a execução**. Depois, tudo o que falta, pela ordem de
+> implementação. As linhas `—` são tickets fora da decomposição.
+>
+> 🚩 **O salto é a informação, não um defeito.** O ponto 5 foi feito depois do 10; o 16 antes do
+> 11; e três tickets sem número entraram pelo meio. Uma tabela que escondesse isso faria parecer
+> que o plano foi seguido à letra, quando o que aconteceu foi que **se fez o que estava
+> desbloqueado** — e é essa a lição que estes vinte pontos deixam.
+
+
 
 > 🔄 **Reordenado a 2026-09-10, com as três decisões de produto da decisão 10.** Entraram seis
 > tickets e a tabela passou de catorze pontos a vinte. **O LEDG-2472 entrou por último**, da ideia
@@ -1121,26 +1138,30 @@ do 13** — a tabela tem-nos ao contrário.
 | **2** | LEDG-2456 | Fuga de existência de conta **+ e-mails em inglês** | Backend | ✅ **Sim** — em `develop` e `tst` | Nenhuma — e torna o 15 menor |
 | **3** | LEDG-2433 | Campo do método de autenticação (CMD/eIDAS) | Backend | ✅ **Sim** — 6 commits, suite completa verde; em `develop` e `tst` | Nenhuma — aditivo |
 | **4** | LEDG-2457 | Tipo de cidadão **declarado** (nacional/estrangeiro) | Full-stack | ✅ **Sim** — 5 commits nos dois repos; em `develop` e `tst` | **Depende do 3** |
-| **5** | LEDG-2434 | Levantamento — o script responde às três contagens numa execução | Spike | 🟡 **Parcial** — PR #277/#278, corrido em DEV; em `develop` e `tst` | ⏸️ **A execução em produção espera por tudo estar em `tst`** (decisão 12). Não bloqueia código — bloqueia o fecho de critérios no 8, no 10 e no 14 |
 | **6** | LEDG-2462 | **Campos de sessão vazios no login SAML** (os cinco campos trackable) | Backend | ✅ **Sim** — PR #266; 6 commits, suite completa verde, 13 testes novos; em `develop` e `tst` | Nenhuma. Paralelo ao 5 — **este é código, o 5 é humano** |
 | **7** | **LEDG-2465** | **Login recusado tratado como sucesso:** sessão marcada, log diz `OK`, auditoria diz `success`, e o link de uso único fica queimado | Backend | ✅ **Sim** — PR #268; 3 commits, suite completa verde, 11 testes novos; em `develop` e `tst` | Nenhuma — mexeu nas **mesmas duas funções** do 6, e foi de facto mais barato a seguir a ele |
+| — | **LEDG-2467** | **Recuperação de palavra-passe:** os mails do flask_security saíam de `webmaster@udata` | Backend | ✅ **Sim** — PR #270; em `develop` e `tst`, e **verificado em DEV** com mail recebido do remetente certo | **Fora da decomposição** — não é CMD/eIDAS |
 | **8** | **LEDG-2466** | **`datastore.commit()` é no-op em Mongo:** 3 chamadas que não gravam nada, e o `confirmed_at` **nunca chegava à BD** | Backend | ✅ **Sim** — PR #272, 4 testes novos; em `develop` e `tst` | Nenhuma — o 6 deixou de o reparar de lado, deliberadamente |
 | **9** | **LEDG-2464** | **Login ambíguo:** identificador duplicado resolvido por `.first()` — devolvia **sempre a conta mais recente** | Backend | ✅ **Sim** — PR #273, 6 testes novos; em `develop` e `tst` | Nenhuma. 🚨 **Nega acesso a ~26 contas** até o 14 as fundir |
 | 10 | LEDG-2468 | **Nada impede uma organização de ficar sem administrador** — os dois endpoints de membro **e** os quatro caminhos de apagamento | Backend | 🟡 **Parcial** — PR #275: os **dois endpoints** guardados, em `develop` e `tst`. 🚨 **O `mark_as_deleted` continua a orfanar** | Os pontos 3/4/5 dependem da AMA. **Quanto mais cedo o resto entrar, menos casos o 11 trata à mão** |
+| **5** | LEDG-2434 | Levantamento — o script responde às três contagens numa execução | Spike | 🟡 **Parcial** — PR #277/#278, corrido em DEV; em `develop` e `tst` | ⏸️ **A execução em produção espera por tudo estar em `tst`** (decisão 12). Não bloqueia código — bloqueia o fecho de critérios no 8, no 10 e no 14 |
+| **14** | LEDG-2435 | **Uma identidade, uma conta** — as duas classes de duplicado | Backend | 🟡 **Parcial** — a **alínea (c)** feita: PR #279/#280, 11 testes | 🔄 **Desceu do 13.** A **(b) depende do 13 (LEDG-2431)**, que agora vem antes — era a inversão. A **(a)** depende do **5** |
+| — | LEDG-2475 | **Ajuda e contactos devolvia 400 em PPR/PRD** — chave reCAPTCHA de registo trocada | Backend | ✅ **Resolvido a 09-11** | Fora da decomposição. 🔑 A causa foi provada pelo **tamanho da resposta**: 54 bytes = o Google rejeitou; 14 = nem chegou lá |
+| **16** | LEDG-2438 | **Estrangeiros: identidade por documento em vez de NIC** | Backend | ✅ **Sim** — PR #283/#284, 15 testes novos; em `develop` e `tst` | 🚨 **Por validar contra o IdP real antes de sair de `tst`** — os testes mockam o pysaml2. 🔻 **Tirou os estrangeiros do âmbito do 17** |
+| — | LEDG-2371 | **A auditoria SAML estava cega** — nenhuma linha chegava ao ficheiro | Backend | ✅ **Feito a 09-14** — PR #285/#286, em `develop` e `tst` | Era pré-requisito prático de tudo. Desbloqueou o **17** e o LEDG-2473 |
 | 11 | LEDG-2463 | **As 6 contas com conteúdo, 4 delas admin ÚNICO** — plano nomeado | Operação | ❌ Não | 🚩 **Não há ninguém para promover** — as 4 organizações têm **1 membro**, a própria conta sintética. Os donos entram por CMD (têm `auth_nic` válido), logo passa a **depender do LEDG-2437**, não da AMA. À AMA fica só: o que fazer se algum não voltar a entrar |
 | **12** | **LEDG-2470** | **Contas institucionais deixam de existir:** publicar passa a ser sempre por conta pessoal, em nome próprio ou de uma organização | Operação | ❌ Não | Depende do **10**. **Contém o 11** como subconjunto, e pode ser a **causa** que o 13 trata como efeito |
 | **13** | **LEDG-2431** | **Associar a uma conta tradicional existente** — a segunda via do ecrã de conclusão | Full-stack | ❌ **Não — é o próximo implementável** | 🔄 **Subiu do 15 a 2026-09-14.** Depende do **2** (feito) e do **5**/**11**, cujo *input de desenho* já está entregue. ⚠️ **Coordenar com o LEDG-2356 e o LEDG-2350**, que mexem no mesmo ecrã |
 | — | **LEDG-2356** | **Melhorias da revisão UX/conteúdo do fluxo de autenticação** | Full-stack | ❌ Não | 🚩 **Nunca esteve nesta tabela, e está `To Do`.** É o **mesmo ecrã do 13** — coordenar antes de o 13 arrancar |
 | — | **LEDG-2350** | **Reescrever o e-mail de confirmação da autenticação** | Conteúdo | ❌ Não | 🚩 **Nunca esteve nesta tabela.** O **13** muda o que esse email diz: passa a poder levar um link que *associa* |
-| **14** | LEDG-2435 | **Uma identidade, uma conta** — as duas classes de duplicado | Backend | 🟡 **Parcial** — a **alínea (c)** feita: PR #279/#280, 11 testes | 🔄 **Desceu do 13.** A **(b) depende do 13 (LEDG-2431)**, que agora vem antes — era a inversão. A **(a)** depende do **5** |
 | **15** | **LEDG-2469** | **Fundir os duplicados que já existem** e impedi-los na BD | Backend + Operação | ❌ Não | 🔄 **Desceu do 14.** Depende do **9**, **10** e **14**. 🚨 **Antes da promoção final**, senão as \~26 contas ficam de fora |
-| **16** | LEDG-2438 | **Estrangeiros: identidade por documento em vez de NIC** | Backend | ✅ **Sim** — PR #283/#284, 15 testes novos; em `develop` e `tst` | 🚨 **Por validar contra o IdP real antes de sair de `tst`** — os testes mockam o pysaml2. 🔻 **Tirou os estrangeiros do âmbito do 17** |
 | 17 | LEDG-2436 | Identidade sem identificador (eIDAS **e** CMD) | Backend | ⏸️ **Estacionado a 2026-09-14** | O 16 tirou-lhe os estrangeiros, mas **a escolha entre recusar e ligar pelo email continua proibida antes do LEDG-2288** — e nem DEV nem a auditoria conseguem responder. Ver a secção |
 | **18** | **LEDG-2472** | **Consolidação self-service:** avisar que só haverá uma conta por pessoa, e deixar a pessoa mover os dados das secundárias para a principal | Full-stack | ❌ Não | Depende do **requisito 4 do 14** e do **10**. 🛑 **Tem de vir ANTES do 19** — depois da obrigatoriedade, quem perdeu o email de uma conta secundária já não entra nela para empurrar o conteúdo |
 | **19** | **LEDG-2471** | **Descontinuar o login por email e palavra-passe:** inventário e gate no backend | Full-stack | ❌ Não | Depende do **15**, **17**, **18**, e do LEDG-2437 e **LEDG-2474** (era o LEDG-2467, que ficou feito — a substância passou para o 2474) |
 | **20** | **LEDG-1277** | **Obrigatoriedade do Autenticação.gov** — o fim do arco | Produto | 🟡 Em curso | Depende do **19**. ⚠️ **Não activar antes dele** |
-| — | **LEDG-2467** | **Recuperação de palavra-passe:** os mails do flask_security saíam de `webmaster@udata` | Backend | ✅ **Sim** — PR #270; em `develop` e `tst`, e **verificado em DEV** com mail recebido do remetente certo | **Fora da decomposição** — não é CMD/eIDAS |
+| — | LEDG-2473 | **A linha `outcome=success` prematura** na auditoria | Backend | ❌ Não | ✅ **Desbloqueado pelo LEDG-2371.** Falta decidir o vocabulário de dois ramos |
 | — | **LEDG-2474** | **Quatro razões de recusa dão a mesma resposta de sucesso** na recuperação — e uma conta inactiva fica **sem via de entrada nenhuma** | Backend + Produto | ❌ Não | **Fora da decomposição.** Bloqueado em **decisão da AMA**. 🚨 **Passou a ser o pré-requisito do 19** que o 2467 era, e agravou-se com o **7** |
+| — | LEDG-2288 | **Analisar autenticação eIDAS** | Análise | ❌ Não — **outra pessoa** | 🚨 **Bloqueia o 17.** A pergunta: algum IdP europeu real omite o `PersonIdentifier`? |
 | — | ~~NOVO-D~~ | ~~**Organizações AGIT duplicadas** (3 registos)~~ | — | ❌ **Não se cria** | A consulta desfez a suspeita — ver acima |
 
 **Próximo a implementar:** o **11** (LEDG-2463) — ou o resto do **10**, quando a AMA decidir — mexe no **mesmo ficheiro** que o 7 acabou de

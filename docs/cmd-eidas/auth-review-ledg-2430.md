@@ -34,6 +34,14 @@ a reformulação CMD/eIDAS estiver feita e validada. **Não se promove por ticke
   | 2026-09-11 | + o 10 parcial (LEDG-2468) | **126** | 80 |
   | 2026-09-11 | + o 5 (LEDG-2434) | **132** | **101** |
   | 2026-09-11 | + a alínea (c) do 13 (LEDG-2435) | **138** | 101 |
+  | 2026-09-14 | *(nada deste refinamento)* — LEDG-2327, PRs #281/#282 | **144** | 101 |
+
+  🚩 **A linha de 09-14 não tem um único commit desta reformulação.** Os seis que
+  levaram o backend de 138 a 144 vieram do LEDG-2327 (harvest domain / INE ownership),
+  promovido a `tst` por outra frente. O ponto 16 (LEDG-2438) está em `develop` e **ainda
+  não subiu**. ⚠️ É a segunda vez que isto se regista, e é o custo concreto de promover
+  em bloco: a dívida que a promoção final vai ter de rever **cresce sozinha**, por
+  trabalho que esta revisão não controla nem consegue validar.
 
   Uma parte é anterior a este refinamento e já lá estava; o ponto é que **o número não desce**,
   e a promoção final não será revisível commit a commit.
@@ -920,8 +928,8 @@ seguro: o 11 arruma 4 casos, o 10 impede que voltem.
 | 13 | LEDG-2435 | **Uma identidade, uma conta** — as duas classes de duplicado | Backend | 🟡 **Parcial** — a **alínea (c)** feita: PR #279/#280, 11 testes novos; em `develop` e `tst` | As (a) e (b) por fazer: a (a) depende do 5, a (b) do 15. 🚨 **A (c) deixa presos os donos de placeholder cujo endereço real está noutra grafia — é razão adicional do prazo do 14** |
 | **14** | **LEDG-2469** | **Fundir os duplicados que já existem** e depois impedi-los na BD (o `extras.auth_nic` não tem índice de unicidade) | Backend + Operação | ❌ Não | Depende do **9**, **10** e **13**. Fundir antes de o crescimento parar é limpar uma torneira aberta |
 | 15 | LEDG-2431 | Associar a uma conta tradicional existente | Full-stack | ❌ Não | Depende do **2**, **5**, **11** e **13**. ✅ **Desenho decidido pelos dados: recusar quando há conteúdo** |
-| 16 | LEDG-2438 | **Estrangeiros: identidade por documento em vez de NIC** | Backend | ❌ Não | Confirmar sobreposição com LEDG-2288 |
-| 17 | LEDG-2436 | Identidade sem identificador (eIDAS **e** CMD) | Backend | ❌ Não | **Depende do 13**. 🔻 **Despromovido:** zero casos nas 120; só se justifica pelo eIDAS |
+| **16** | LEDG-2438 | **Estrangeiros: identidade por documento em vez de NIC** | Backend | ✅ **Sim** — PR #283, 15 testes novos; em `develop` | 🚨 **Por validar contra o IdP real antes de promover** — os testes mockam o pysaml2. 🔻 **Tira os estrangeiros do âmbito do 17** |
+| 17 | LEDG-2436 | Identidade sem identificador (eIDAS **e** CMD) | Backend | ❌ Não | **Depende do 16, que está feito** ⇒ desbloqueado. 🔻 **Despromovido:** zero casos nas 120; o que sobra é o caso mal formado, onde recusar é defensável |
 | **18** | **LEDG-2472** | **Consolidação self-service:** avisar que só haverá uma conta por pessoa, e deixar a pessoa mover os dados das secundárias para a principal | Full-stack | ❌ Não | Depende do **requisito 4 do 14** e do **10**. 🛑 **Tem de vir ANTES do 19** — depois da obrigatoriedade, quem perdeu o email de uma conta secundária já não entra nela para empurrar o conteúdo |
 | **19** | **LEDG-2471** | **Descontinuar o login por email e palavra-passe:** inventário e gate no backend | Full-stack | ❌ Não | Depende do **15**, **17**, **18**, e do LEDG-2437 e **LEDG-2474** (era o LEDG-2467, que ficou feito — a substância passou para o 2474) |
 | **20** | **LEDG-1277** | **Obrigatoriedade do Autenticação.gov** — o fim do arco | Produto | 🟡 Em curso | Depende do **19**. ⚠️ **Não activar antes dele** |
@@ -1706,7 +1714,7 @@ ponto 5). Entra pelo `_link_identity_and_login`.
 É também aqui que entra a decisão 6: **um campo de email**, com o endereço do CMD pré-preenchido
 quando existe, e a prova por link mantida mesmo nesse caso.
 
-### 16 — LEDG-2438 · Estrangeiros: a identidade é o documento, não o NIC *(backend)*
+### 16 — LEDG-2438 · Estrangeiros: a identidade é o documento, não o NIC *(backend)* ✅ FEITO
 
 Um cidadão estrangeiro com CMD **não tem NIC**. O portal pede o NIC como obrigatório e **não
 pede** nenhum dos três atributos que o identificam:
@@ -1728,6 +1736,51 @@ recomenda **rejeitar** quem não tem identificador; um estrangeiro **tem**, só 
 Resolver este primeiro **tira os estrangeiros do âmbito do LEDG-2436**.
 
 **O ponto 4 ajuda aqui:** o tipo declarado dá a verificação cruzada contra o que a asserção traz.
+
+#### ✅ Feito a 2026-09-14 — PR #283, em `develop`. 222 testes (eram 207)
+
+A composição escolhida, **congelada a partir do primeiro deploy**:
+
+```
+MDC/{DocType}/{DocNationality}/{DocNumber}      (os três em .strip().upper())
+```
+
+🚩 **O segmento `MDC` é o que impede um acesso indevido, e a razão não é óbvia.** `TR` e `CR`
+são códigos **ISO 3166-1 alpha-2 válidos** (Turquia, Costa Rica), e um `PersonIdentifier` do
+eIDAS tem a forma `<alpha2>/<alpha2>/<id>`. Com a nacionalidade forçada a `PT`, um titular de
+título de residência comporia `TR/PT/123456` — **byte a byte o que um cidadão turco apresenta
+por eIDAS**. Partilhariam conta, permanentemente e sem ninguém dar por isso. `MDC` tem três
+caracteres e nunca pode ser um alpha-2.
+
+🔑 **E a decisão central deste ponto já estava tomada no código, o que ninguém tinha visto.** O
+docstring do `nic.py`, escrito no ponto 3, diz: *"the document type and nationality of a foreign
+citizen's identity go in **sibling keys** when those attributes start arriving"*. E o
+`constants.py` repetia-o. ⇒ O tipo e a nacionalidade foram para `extras.auth_doc_type` e
+`extras.auth_doc_nationality`; **o número não**, porque identifica a pessoa e vive só dentro do
+digest.
+
+⚠️ **Isto não é o prefixo que o `nic.py` proíbe.** Aquela proibição é sobre o **valor
+armazenado**, e o argumento dela é que os hashes já gravados não se recalculam. Este segmento
+está na **pré-imagem**: o gravado continua a ser 64 hex e nenhum valor existente é tocado.
+
+**O NIC ganha sempre que existe** — é a não-regressão inteira. Inverter a precedência
+reescreveria a identidade de todos os nacionais cuja asserção também traga atributos de
+documento, e há um teste que morre exactamente nessa mutação.
+
+🚨 **A guarda que o auditor do plano obrigou a acrescentar:** a composição é gateada por
+`DocType ∈ {TR, PAS, CR, DR}`. Sem ela, um **nacional** cuja asserção perdesse o NIC mas
+trouxesse os três atributos receberia uma identidade composta nova em vez de cair no ramo
+email/nome — o oposto do que este ponto existe para fazer.
+
+⚠️ **E o que continua por provar:** os testes **mockam o pysaml2**, logo provam o nosso lado e
+não o do IdP. Fica como condição de promoção: que o `isRequired="False"` no NIC é aceite e não
+muda o ecrã de consentimento dos nacionais, o formato exacto dos três atributos, e **que uma
+asserção de nacional não traz o trio completo com um `DocType` do conjunto** — a guarda assume
+que não.
+
+🔻 **Consequência para o ponto 17:** os estrangeiros saem do âmbito do LEDG-2436. O que lá sobra
+é o caso genuinamente mal formado, onde recusar é defensável — que era exactamente o argumento
+para este vir primeiro.
 
 ### 17 — LEDG-2436 · Identidade sem identificador *(bug)*
 

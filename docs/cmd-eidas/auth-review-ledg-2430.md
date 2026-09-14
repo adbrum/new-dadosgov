@@ -899,6 +899,58 @@ honesto do que medir cedo e citar valores que entretanto deixaram de valer.
 - ⚠️ **Os números de DEV continuam a não ser os de produção.** O que muda é *quando* se mede,
   não o que os valores de DEV provam — que é que a ferramenta funciona.
 
+## 🚨 O percurso do PRIMEIRO login, traçado de raiz a 2026-09-14
+
+Nunca esteve escrito como percurso. Andou repartido por cinco pontos, e por isso ninguém via
+que **falha inteiro** — foi preciso segui-lo de ponta a ponta para responder à pergunta *"o
+cidadão que entra pela primeira vez tem de conseguir completar o processo, certo?"*. Tem.
+
+**Quem recebe endereço `saml-*` e é obrigado a passar pelo ecrã de conclusão:**
+
+- **eIDAS: SEMPRE.** Não existe atributo de email no Minimum Data Set do eIDAS. **Toda** a conta
+  eIDAS passa por lá, e sempre passará — não é caso de fronteira, é a população inteira.
+- **CMD, nacional ou estrangeiro:** quando o IdP não devolve email, ou quando o email devolvido
+  **já pertence a outra conta**.
+
+O backend, depois de autenticar, faz `redirect(f"{frontend_url}/complete-registration")` e
+**descarta o destino original de propósito** — completar o registo é pré-condição dura.
+
+**Onde essa página existe, verificado por branch no frontend:**
+
+| Branch | `complete-registration` |
+| --- | --- |
+| `develop` | ✅ |
+| `tst` | ✅ |
+| `ppr` | ✅ |
+| **`main`** | ❌ **não existe** |
+
+⇒ **Em produção, todo o primeiro login por eIDAS termina num 404.** E todo o login CMD cujo
+email já esteja tomado, também. Em cada tentativa.
+
+### Duas falhas distintas, e só uma é o 404
+
+| Onde falha | Quem | O que resolve |
+| --- | --- | --- |
+| **Só em produção** | todos os que precisam do ecrã | **LEDG-2437** — a página chegar a `main` |
+| **Em todo o lado** | quem tem o email real numa conta sua já existente | **LEDG-2431** (ponto 15) |
+
+A segunda é a menos visível e não se resolve com promoção nenhuma: o ecrã **só permite indicar
+um email novo**. Quem escreve o seu endereço real, e ele pertence à sua conta antiga, recebe a
+resposta genérica do LEDG-2456 — **sem mail, sem explicação** — e fica preso. É o mesmo beco que
+a alínea (c) do 13 agravou, e é literalmente metade do requisito que o PR #206 não resolveu.
+
+### A cadeia, e onde ela encalha
+
+O **15** devia estar mais acima por isto. A tabela põe-no a depender do **11**, e o **11** depende
+do **LEDG-2437** — que é uma promoção, retida pela decisão do topo.
+
+⇒ **Enquanto o 2437 não subir, o primeiro login por eIDAS não completa em produção, e nem o 11
+nem o 15 fecham.** Fica escrito como facto, não como pedido de excepção: a decisão de promover
+em bloco é do topo deste documento e mantém-se.
+
+⚠️ **O 14 (LEDG-2469) NÃO está neste percurso.** É limpeza dos duplicados que já existem; não
+toca no primeiro login. Vale separá-los para não se tratar um pelo outro.
+
 ## Decomposição, pela ordem de implementação
 
 > 🔄 **Reordenado a 2026-09-10, com as três decisões de produto da decisão 10.** Entraram seis

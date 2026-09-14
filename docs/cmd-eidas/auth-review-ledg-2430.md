@@ -1778,6 +1778,16 @@ muda o ecrã de consentimento dos nacionais, o formato exacto dos três atributo
 asserção de nacional não traz o trio completo com um `DocType` do conjunto** — a guarda assume
 que não.
 
+**Duas lições deste ponto, que valem para lá dele:**
+
+1. 🚩 **Dois códigos de duas letras podem ser a mesma coisa noutro alfabeto.** `TR` e `CR` são
+   tipos de documento **e** códigos ISO de país. Antes de compor um identificador, verificar se
+   algum segmento pode ser lido como pertencendo a outro namespace.
+2. 🚩 **Uma decisão de desenho pode já estar tomada num docstring.** Este ponto ia inventar onde
+   guardar o tipo e a nacionalidade; o `nic.py` e o `constants.py` já o diziam desde o ponto 3.
+   **Ler os comentários da zona antes de decidir** — este projecto escreve as razões, e não as
+   reler é decidir duas vezes, mal.
+
 🔻 **Consequência para o ponto 17:** os estrangeiros saem do âmbito do LEDG-2436. O que lá sobra
 é o caso genuinamente mal formado, onde recusar é defensável — que era exactamente o argumento
 para este vir primeiro.
@@ -2091,8 +2101,17 @@ problema causado por divergência entre branches.
   **183 depois do LEDG-2462** (`SAMLTrackableLoginFieldsTest` + o teste do clique no link),
   **194 depois do LEDG-2465** (`SAMLInactiveAccountRefusalTest` + 3 no clique do link),
   **198 depois do LEDG-2466** (`SAMLConfirmedAtPersistenceTest`), **204 depois do LEDG-2464**
-  (`SAMLAmbiguousIdentityTest`) e **207 depois da alínea (c) do LEDG-2435**
-  (`SAMLCaseVariantAddressTest`). Medido em `develop` com `pytest --collect-only`.
+  (`SAMLAmbiguousIdentityTest`), **207 depois da alínea (c) do LEDG-2435**
+  (`SAMLCaseVariantAddressTest`) e **222 depois do LEDG-2438** (quatro classes novas, mais os
+  três atributos de documento acrescentados aos dois helpers que constroem as asserções).
+  Medido em `develop` com `pytest --collect-only`.
+  🚩 **O LEDG-2438 fechou a lacuna mais antiga deste ficheiro sem ser esse o objectivo:**
+  `grep RequestedAttribute` nos testes devolvia **zero**. Os 207 cobriam todos os ramos do que
+  se faz com a resposta do IdP e **nenhum da pergunta** — que era precisamente a única coisa
+  que o ponto 16 mudava para os nacionais.
+  🚩 **E nove mutações, todas apanhadas, duas delas por testes diferentes:** voltar a `user_nic`
+  no resolvedor mata só o teste dos três logins; deixar o documento ganhar ao NIC mata só a
+  não-regressão do nacional. São as duas metades da mesma decisão, e precisavam de duas provas.
   ⚠️ **Os totais medidos são a fonte, não os resumos por ticket.** O resumo do 2465 dizia
   "13 testes novos" e o real é **11** (194 − 183) — corrigido. Vale reverificar o do 2462 pela
   mesma via, porque 183 − 169 dá **14** e o resumo dele também diz 13.

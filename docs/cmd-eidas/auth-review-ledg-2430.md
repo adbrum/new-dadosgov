@@ -960,6 +960,68 @@ em bloco é do topo deste documento e mantém-se.
 ⚠️ **O 14 (LEDG-2469) NÃO está neste percurso.** É limpeza dos duplicados que já existem; não
 toca no primeiro login. Vale separá-los para não se tratar um pelo outro.
 
+## 🗺️ Tudo o que orbita esta reformulação — consolidado a 2026-09-14
+
+A tabela de decomposição é o **plano de trabalho**. Mas há tickets relacionados que nunca
+entraram nela, e quatro que esta própria revisão criou e **deixou órfãos**. Levantado por JQL
+sobre o épico, as labels e os sumários, e cruzado com os links do LEDG-2430.
+
+### ❌ Estavam órfãos — criados por esta revisão e nunca ligados ao LEDG-2430
+
+| Ticket | O quê | Estado |
+| --- | --- | --- |
+| LEDG-2473 | A linha `outcome=success` prematura na auditoria | Backlog — desbloqueado pelo LEDG-2371 |
+| LEDG-2474 | Quatro recusas indistinguíveis na recuperação | Backlog — decisão da AMA |
+| LEDG-2475 | Formulário de contactos, 400 em PPR/PRD | ✅ Resolvido |
+| LEDG-2371 | A auditoria SAML cega | ✅ Feito, em `tst` |
+
+✅ **Ligados ao LEDG-2430 a 2026-09-14.** Estavam a existir sem pertencer a nada: quem abrisse o
+2430 não os via, e quem os abrisse não sabia de onde vinham.
+
+### ⚠️ Estavam ligados ao 2430 mas NUNCA na tabela
+
+| Ticket | O quê | Estado | Porque importa |
+| --- | --- | --- | --- |
+| **LEDG-2356** | Implementar as melhorias da revisão UX/conteúdo do fluxo de autenticação | To Do | É o fluxo que o **15** reconstrói — arriscam colidir |
+| **LEDG-2350** | Reescrever o e-mail de confirmação da autenticação | Backlog | O **15** muda o que esse email diz: passa a poder levar um link que **associa** |
+
+🚩 **Estes dois são trabalho real, aberto, e no mesmo ecrã que o ponto 15.** Não estarem na
+tabela significa que podem ser feitos em paralelo por outra pessoa, sobre os mesmos ficheiros.
+
+### 📜 Antecedentes — explicam POR QUE o desenho é o que é
+
+Não são pontos a fazer; são a razão de decisões que já estão tomadas e que ninguém deve desfazer
+por não saber de onde vieram.
+
+| Ticket | O que estabeleceu |
+| --- | --- |
+| **LEDG-2045** | A origem do arco: o CMD criava utilizadores duplicados por gerar email placeholder |
+| **LEDG-2349** | 🔑 **Removeu o passo "Já possuo conta" / "Criar nova"** — é POR ISTO que o ecrã do **15** é **um campo e não dois botões** |
+| **LEDG-2351** | O beco sem saída: indicar o email da própria conta legada devolvia "email já registado". É metade do que o **15** fecha |
+| **LEDG-2361** | Fechou o oráculo de enumeração — a razão pela qual a resposta tem de ser genérica |
+| **LEDG-2357** | O link de e-mail com login automático — **o mecanismo que o 15 estende**, não reinventa |
+| **LEDG-1431** | A migração de contas legadas original |
+| **LEDG-1691** | VULN-2077 / TICKET-58 — criou o `_audit_saml` que o LEDG-2371 destapou |
+| **LEDG-2366** | Criou o padrão `udata.mail.audit` que o LEDG-2371 retroaplicou |
+
+### 🚩 Um duplicado encontrado no levantamento
+
+**LEDG-1176** — *"Verificar data login `last_login_at`: null"*, em Backlog desde Fevereiro. É
+**exactamente** o defeito que o ponto 6 (LEDG-2462) diagnosticou e corrigiu: o plugin importava
+o `login_user` do `flask_login`, que não escreve nenhum dos cinco campos trackable. Ninguém
+tinha ligado os dois. ✅ **Ligado a 2026-09-14, com recomendação de fechar como duplicado.**
+
+### Casos de utilizador reais, em aberto
+
+| Ticket | Quem | Estado |
+| --- | --- | --- |
+| LEDG-2348 | "Acesso Clara — CMD" | In Progress |
+| LEDG-2290 | Cristina Isidro (ETF) — migração de login legado/CMD | READY FOR TESTING |
+
+⚠️ **Valem como prova viva.** Se algum destes for do padrão "o meu email pertence à minha conta
+antiga", é um caso real do beco sem saída que o **15** fecha — e vale confirmar antes de o
+implementar, porque é a validação que nenhum teste dá.
+
 ## 🔍 Auditoria de estado dos tickets — 2026-09-14
 
 Pedida a revisão de todos os pontos da tabela: estão desactualizados? a ordem mantém-se?

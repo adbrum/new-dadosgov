@@ -1096,6 +1096,19 @@ do 13** — a tabela tem-nos ao contrário.
 > **referir dependências por CHAVE, nunca por número**. As células de dependência desta tabela ainda
 > usam números e são o que dá trabalho a cada reordenação.
 
+> 🔄 **Reordenado a 2026-09-14 — sexta vez, e por uma inversão documentada.** O **LEDG-2431 sobe
+> do 15 para o 13**, e o LEDG-2435 e o LEDG-2469 descem um. Razão: a alínea **(b)** do 2435 diz,
+> nas suas próprias palavras, que *"não pode ser desligado antes do LEDG-2431 existir"* — e o
+> 2431 estava **depois** dele. Não é preferência: é uma dependência declarada ao contrário.
+>
+> ✅ **E o 2431 está implementável**, ao contrário do que a sua célula dizia: do **2** está feito;
+> do **5** a contribuição era a escolha *recusar ou transferir*, tomada pela decisão 9 com dados
+> de produção; do **11** era o que fazer com as 4 organizações, respondido a 09-11. O fecho
+> formal desses dois espera; o *input de desenho* não.
+>
+> ⚠️ **Duas linhas novas, sem número:** o **LEDG-2356** e o **LEDG-2350** estavam ligados ao
+> LEDG-2430 e **nunca tinham entrado nesta tabela** — e mexem no mesmo ecrã do 13.
+
 > ✅ **Revisto a 2026-09-11 sem reordenar.** Os pontos 1 a 10 estão feitos ou em curso pela ordem
 > da tabela. **O 11 e o 12 não são código** — param na AMA — e o único código que restava à frente
 > deles, a **alínea (c) do 13** (alinhar `exact` com `ci` nos dois sítios), não sobe sozinha porque
@@ -1116,9 +1129,11 @@ do 13** — a tabela tem-nos ao contrário.
 | 10 | LEDG-2468 | **Nada impede uma organização de ficar sem administrador** — os dois endpoints de membro **e** os quatro caminhos de apagamento | Backend | 🟡 **Parcial** — PR #275: os **dois endpoints** guardados, em `develop` e `tst`. 🚨 **O `mark_as_deleted` continua a orfanar** | Os pontos 3/4/5 dependem da AMA. **Quanto mais cedo o resto entrar, menos casos o 11 trata à mão** |
 | 11 | LEDG-2463 | **As 6 contas com conteúdo, 4 delas admin ÚNICO** — plano nomeado | Operação | ❌ Não | 🚩 **Não há ninguém para promover** — as 4 organizações têm **1 membro**, a própria conta sintética. Os donos entram por CMD (têm `auth_nic` válido), logo passa a **depender do LEDG-2437**, não da AMA. À AMA fica só: o que fazer se algum não voltar a entrar |
 | **12** | **LEDG-2470** | **Contas institucionais deixam de existir:** publicar passa a ser sempre por conta pessoal, em nome próprio ou de uma organização | Operação | ❌ Não | Depende do **10**. **Contém o 11** como subconjunto, e pode ser a **causa** que o 13 trata como efeito |
-| 13 | LEDG-2435 | **Uma identidade, uma conta** — as duas classes de duplicado | Backend | 🟡 **Parcial** — a **alínea (c)** feita: PR #279/#280, 11 testes novos; em `develop` e `tst` | As (a) e (b) por fazer: a (a) depende do 5, a (b) do 15. 🚨 **A (c) deixa presos os donos de placeholder cujo endereço real está noutra grafia — é razão adicional do prazo do 14** |
-| **14** | **LEDG-2469** | **Fundir os duplicados que já existem** e depois impedi-los na BD (o `extras.auth_nic` não tem índice de unicidade) | Backend + Operação | ❌ Não | Depende do **9**, **10** e **13**. Fundir antes de o crescimento parar é limpar uma torneira aberta |
-| 15 | LEDG-2431 | Associar a uma conta tradicional existente | Full-stack | ❌ Não | Depende do **2**, **5**, **11** e **13**. ✅ **Desenho decidido pelos dados: recusar quando há conteúdo** |
+| **13** | **LEDG-2431** | **Associar a uma conta tradicional existente** — a segunda via do ecrã de conclusão | Full-stack | ❌ **Não — é o próximo implementável** | 🔄 **Subiu do 15 a 2026-09-14.** Depende do **2** (feito) e do **5**/**11**, cujo *input de desenho* já está entregue. ⚠️ **Coordenar com o LEDG-2356 e o LEDG-2350**, que mexem no mesmo ecrã |
+| — | **LEDG-2356** | **Melhorias da revisão UX/conteúdo do fluxo de autenticação** | Full-stack | ❌ Não | 🚩 **Nunca esteve nesta tabela, e está `To Do`.** É o **mesmo ecrã do 13** — coordenar antes de o 13 arrancar |
+| — | **LEDG-2350** | **Reescrever o e-mail de confirmação da autenticação** | Conteúdo | ❌ Não | 🚩 **Nunca esteve nesta tabela.** O **13** muda o que esse email diz: passa a poder levar um link que *associa* |
+| **14** | LEDG-2435 | **Uma identidade, uma conta** — as duas classes de duplicado | Backend | 🟡 **Parcial** — a **alínea (c)** feita: PR #279/#280, 11 testes | 🔄 **Desceu do 13.** A **(b) depende do 13 (LEDG-2431)**, que agora vem antes — era a inversão. A **(a)** depende do **5** |
+| **15** | **LEDG-2469** | **Fundir os duplicados que já existem** e impedi-los na BD | Backend + Operação | ❌ Não | 🔄 **Desceu do 14.** Depende do **9**, **10** e **14**. 🚨 **Antes da promoção final**, senão as \~26 contas ficam de fora |
 | **16** | LEDG-2438 | **Estrangeiros: identidade por documento em vez de NIC** | Backend | ✅ **Sim** — PR #283/#284, 15 testes novos; em `develop` e `tst` | 🚨 **Por validar contra o IdP real antes de sair de `tst`** — os testes mockam o pysaml2. 🔻 **Tirou os estrangeiros do âmbito do 17** |
 | 17 | LEDG-2436 | Identidade sem identificador (eIDAS **e** CMD) | Backend | ⏸️ **Estacionado a 2026-09-14** | O 16 tirou-lhe os estrangeiros, mas **a escolha entre recusar e ligar pelo email continua proibida antes do LEDG-2288** — e nem DEV nem a auditoria conseguem responder. Ver a secção |
 | **18** | **LEDG-2472** | **Consolidação self-service:** avisar que só haverá uma conta por pessoa, e deixar a pessoa mover os dados das secundárias para a principal | Full-stack | ❌ Não | Depende do **requisito 4 do 14** e do **10**. 🛑 **Tem de vir ANTES do 19** — depois da obrigatoriedade, quem perdeu o email de uma conta secundária já não entra nela para empurrar o conteúdo |

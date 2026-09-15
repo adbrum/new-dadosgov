@@ -1196,7 +1196,22 @@ do 13** — a tabela tem-nos ao contrário.
 
 ## Decomposição — feito pela ordem real, e o resto pelo que é fazível
 
-> 🔄 **Reescrita a 2026-09-15 — oitava vez, e a primeira em que a tabela muda de *forma*, não só de ordem.**
+> 🔄 **Nona revisão, 2026-09-15 (segunda do dia) — e esta veio de fora do código.**
+>
+> 🚨 **O DEV partilha a base de dados de PRODUÇÃO** (decisão 16). Três linhas mudam por causa disso:
+>
+> - **O `5c` desapareceu.** A execução do levantamento "em DEV" a 09-11 **foi** o levantamento em
+>   produção. A decisão 12 — esperar por tudo estar em `tst` — ficou sem objecto, e o `5b` passou a
+>   `5b+c`, feito.
+> - **A alínea (a) do LEDG-2435 (`14b`) desbloqueou** e sobe para *A SEGUIR*: dependia do `5c`.
+>   ⚠️ Com um aviso: **rever a premissa antes de planear**, que foi exactamente o que matou a (b).
+> - **O LEDG-2473 ganhou urgência** que não tinha. Desde o LEDG-2371 as linhas de auditoria chegam
+>   mesmo ao ficheiro, logo quem contar `outcome=success` conta a mais **a partir de agora** — o
+>   defeito deixou de ser teórico e passou a sujar dados que alguém pode estar a ler.
+>
+> E o **LEDG-2356** passou a parcial: o aviso da conta existente saiu do fim de um parágrafo.
+>
+> 🔄 **Oitava revisão, mais cedo no mesmo dia — a tabela mudou de FORMA, não só de ordem.**
 >
 > **O problema que resolve:** a lista do que falta estava ordenada pelo plano, o que fazia parecer
 > que havia fila de trabalho. Não há. Os pontos passaram a estar em **três blocos declarados** —
@@ -1305,7 +1320,7 @@ do 13** — a tabela tem-nos ao contrário.
 | | | **▼ A SEGUIR — sem bloqueio externo, só âmbito por fechar** | | | |
 | — | **LEDG-2487** | 🆕 **O percurso de conclusão de inscrição, como UMA coisa** — checklist de aceitação dos 10 casos | Verificação | ❌ Não | 🚩 **Criado a 09-15 porque não existia.** O percurso nunca teve ticket próprio — estava repartido por sete, e foi essa repartição que deixou passar semanas o facto de **falhar inteiro em produção**. Sem código próprio: é onde se verifica que as peças encaixam. 🛑 **O caso 1 depende do LEDG-2437** |
 | — | **LEDG-2350** | **Os textos do ramo de conclusão de registo** | Conteúdo | ❌ Não | 🔄 **Deixou de ser um texto e passaram a ser quatro** — o 13 acrescentou o mail de **associação** e o de **recusa**, e o 2456 o aviso silencioso. 🚨 **Três deles vão para a caixa de OUTRA pessoa**: o que dizem é peça de segurança, não copy |
-| — | **LEDG-2356** | **Melhorias da revisão UX/conteúdo do fluxo de autenticação** | Full-stack | ❌ Não | 🚩 **Sem critérios de aceitação** — é o que falta para arrancar. Incide sobre o ecrã **tal como ficou**, com pré-preenchimento e mensagem de recusa |
+| — | **LEDG-2356** | **Melhorias da revisão UX/conteúdo do fluxo de autenticação** | Full-stack | 🟡 **Parcial** — 09-15, PR #641: o aviso da conta existente deixou de ser a última oração de um parágrafo e passou a **cartão próprio**, visível em todos os casos | 🚩 **O resto está bloqueado:** falta a revisão de copy, e o protótipo Figma é de **27-08** — descreve um ecrã que mudou a 09-15. ⚠️ **Perguntar à autora se ainda se aplica** antes de pegar nos 8 pontos |
 | — | LEDG-2473 | **A linha `outcome=success` prematura** na auditoria | Backend | ❌ Não | ✅ **Desbloqueado pelo LEDG-2371.** Falta só decidir o vocabulário de dois ramos — é a menor coisa em aberto. 🚨 **E passou a urgir:** desde o 2371 as linhas chegam ao log, logo quem contar `outcome=success` conta a mais **a partir de agora** |
 | **14b** | LEDG-2435 | A alínea **(a)** — não criar conta quando o IdP não dá email | Backend | ❌ Não | 🔓 **Desbloqueada a 09-15** pela decisão 16: dependia do 5c, que afinal já estava feito. ⚠️ **Rever a premissa antes de planear** — foi o que matou a alínea (b) |
 | | | **▼ PARADO EM PESSOAS — não há código a escrever** | | | |

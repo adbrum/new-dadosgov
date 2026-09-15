@@ -40,7 +40,15 @@ a reformulação CMD/eIDAS estiver feita e validada. **Não se promove por ticke
   | 2026-09-15 | + o 13 (LEDG-2431), PRs #292 e #639 | **186** | **106** |
   | 2026-09-15 | + o LEDG-2356 parcial (o aviso da conta existente), PR #641 | 186 | **108** |
   | 2026-09-15 | + o LEDG-2473, PR #294 | **192** | 108 |
-  | *(por promover)* | + o LEDG-2350, PR #296 — **18 commits ainda em `develop`**, alguns de outras frentes | 192 → **~210** | 108 |
+  | 2026-09-15 | + o LEDG-2350, PR #296/#297 | **212** | 108 |
+
+  ✅ **`develop` e `tst` estão agora idênticos nos dois repos** — verificado por diff de
+  ficheiros, não só por contagem de commits. Todo o arco desta revisão está em `tst`.
+
+  🚩 **E é aqui que a fila pára.** `develop → tst` a zero significa que **nada mais entra em
+  `tst` sem trabalho novo** — e o que falta à frente não é código. A dívida retida em
+  `tst → ppr` passou de **85 a 212** no backend desde que o congelamento foi decidido:
+  duas vezes e meia.
 
   🚩 **A dívida retida mais do que duplicou** desde a decisão: 85 → **186** no backend, 80 → **108**
   no frontend. E `develop → tst` está agora a **zero** nos dois repos — tudo o que está feito está
@@ -1322,10 +1330,10 @@ do 13** — a tabela tem-nos ao contrário.
 | — | LEDG-2473 | **A linha `outcome=success` prematura** na auditoria | Backend | ✅ **09-15** — PR #294, 6 commits, **6 mutações mortas** | 🔑 **Sem vocabulário novo:** `deleted` é `rejected`; a confirmação pendente é `migration_pending`, **não recusa** — e o `reason` separa. Os cinco desfechos passaram a viver no docstring do emissor. 🚩 **O gate da suite foi passado com override**, com prova de que a intermitência é de `develop` |
 | — | **LEDG-2350** | **Os quatro textos do ramo de conclusão de registo** | Conteúdo | ✅ **09-15** — PR #296, 6 commits, **13 mutações mortas** | 🚨 **Achado: o mail de recusa saía em INGLÊS em produção** — zero entradas no catálogo pt, e o `gettext` devolve o msgid em silêncio. Durou uma semana porque o teste que o apanharia lista as strings à mão e o mail nasceu depois. 🔑 O aviso silencioso deixou de dar um passo impossível a quem está retido no ecrã |
 | | | **▼ A SEGUIR — sem bloqueio externo, só âmbito por fechar** | | | |
+| — | **LEDG-2489** | **A suite do backend é intermitente sob execução paralela** — 13 falhas em `develop`, testes diferentes a cada corrida | Testes | ❌ Não | 🚨 **Subiu ao topo a 09-15.** Não é autenticação, mas **mede tudo o que esta revisão entrega** — e agora que `develop` e `tst` estão iguais, é o único item onde escrever código ainda muda alguma coisa. 🚩 **Um gate que ninguém consegue passar deixa de ser um gate:** o do 2473 teve de ser contornado, e olhar para a lista e dizer *"estas não são minhas"* é como uma regressão real passa camuflada |
 | — | **LEDG-2487** | 🆕 **O percurso de conclusão de inscrição, como UMA coisa** — checklist de aceitação dos 10 casos | Verificação | ❌ Não | 🚩 **Criado a 09-15 porque não existia.** O percurso nunca teve ticket próprio — estava repartido por sete, e foi essa repartição que deixou passar semanas o facto de **falhar inteiro em produção**. Sem código próprio: é onde se verifica que as peças encaixam. 🛑 **O caso 1 depende do LEDG-2437** |
 | — | **LEDG-2356** | **Melhorias da revisão UX/conteúdo do fluxo de autenticação** | Full-stack | 🟡 **Parcial** — 09-15, PR #641: o aviso da conta existente deixou de ser a última oração de um parágrafo e passou a **cartão próprio**, visível em todos os casos | 🚩 **O resto está bloqueado:** falta a revisão de copy, e o protótipo Figma é de **27-08** — descreve um ecrã que mudou a 09-15. ⚠️ **Perguntar à autora se ainda se aplica** antes de pegar nos 8 pontos |
 | **14b** | LEDG-2435 | A alínea **(a)** — não criar conta quando o IdP não dá email | Backend | ❌ Não | 🔓 **Desbloqueada a 09-15** pela decisão 16: dependia do 5c, que afinal já estava feito. ⚠️ **Rever a premissa antes de planear** — foi o que matou a alínea (b) |
-| — | **LEDG-2489** | 🆕 **A suite do backend é intermitente sob execução paralela** — 13 falhas em `develop`, testes diferentes a cada corrida | Testes | ❌ Não | 🚨 **Criado a 09-15.** Não é autenticação, mas **mede tudo o que esta revisão entrega**. O gate do 2473 teve de ser passado com override. 🚩 **Um gate que ninguém consegue passar deixa de ser um gate** — e olhar para a lista e dizer *"estas não são minhas"* é como uma regressão real passa camuflada |
 | | | **▼ PARADO EM PESSOAS — não há código a escrever** | | | |
 | **10** (resto) | LEDG-2468 | Os **quatro caminhos de apagamento** que continuam a orfanar | Backend | 🛑 Bloqueado | **Decisão da AMA** nos pontos 3/4/5. 🚨 **63 organizações já órfãs** (DEV). É o que trava a fila |
 | **11** | LEDG-2463 | **As 6 contas com conteúdo, 4 delas admin ÚNICO** | Operação | 🛑 Bloqueado | 🚩 **Não há ninguém para promover** — as 4 organizações têm **1 membro**, a própria conta. Os donos entram por CMD ⇒ depende do **LEDG-2437**, que é promoção retida |

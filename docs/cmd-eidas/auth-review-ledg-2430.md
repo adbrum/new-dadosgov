@@ -908,6 +908,41 @@ honesto do que medir cedo e citar valores que entretanto deixaram de valer.
 - ⚠️ **Os números de DEV continuam a não ser os de produção.** O que muda é *quando* se mede,
   não o que os valores de DEV provam — que é que a ferramenta funciona.
 
+### Decisão 13 — a ordem das escritas de uma associação *(2026-09-15)*
+
+**Limpar o `auth_nic` da conta temporária ANTES de gravar na conta antiga, e retirar a temporária
+DEPOIS.** Não é a ordem óbvia, e a razão é a janela de falha.
+
+🚩 **Gravar primeiro abre uma janela em que uma identidade fica em DUAS contas** — e o login recusa
+exactamente esse estado (`ambiguous_identity`, o que o ponto 9 introduziu). Uma falha nessa janela
+trancaria a pessoa **fora das duas contas**, até intervenção humana. Com esta ordem, uma falha
+deixa a identidade em **nenhuma**, e o login seguinte por CMD resolve-a sozinho: a pessoa fica onde
+estava, sem ninguém ter de lá ir.
+
+⚠️ **No caminho feliz as duas ordens são indistinguíveis** — o `mark_as_deleted` limpa os `extras`
+de qualquer maneira. Só a **injecção de falha** as separa, e foi preciso escrevê-la no teste para a
+mutação morrer. É a segunda vez nesta revisão que uma decisão correcta quase ficou sem prova por o
+caminho feliz não a mostrar.
+
+### Decisão 14 — o registo tradicional fica exactamente como está *(2026-09-15)*
+
+🔎 **Apareceu ao analisar o LEDG-2350:** a rota `/register/` **existe no backend** e aceita `POST`,
+com `SECURITY_REGISTERABLE=True`, enquanto o frontend **não tem formulário nenhum** —
+`register/page.tsx` é um `redirect("/login")`. Tentei criar conta por ela em testes e não consegui,
+mas **também não encontrei código que a feche**.
+
+⇒ A decisão 10 (*"só se entra por CMD/eIDAS"*) **não está imposta por código que eu tenha
+encontrado**. Está a ser sustentada pela ausência de interface.
+
+> 🛑 **Decisão do dono do produto: não se mexe.** Não se activa o registo tradicional, e **também
+> não se fecha a rota**. Fica como está.
+
+🚩 **O que isto significa para quem vier a seguir:** a decisão 10 é uma decisão de **produto**, não
+uma garantia técnica. Quem escrever o ponto 19 — descontinuar o login por palavra-passe — não pode
+assumir que a entrada por registo já está fechada, porque não está: está apenas **sem porta à
+vista**. É o mesmo padrão do LEDG-2432, em que o frontend escondeu uma coisa que o backend
+continuava a servir — e desse já se sabe como acabou.
+
 ## 🚨 O percurso do PRIMEIRO login, traçado de raiz a 2026-09-14
 
 Nunca esteve escrito como percurso. Andou repartido por cinco pontos, e por isso ninguém via

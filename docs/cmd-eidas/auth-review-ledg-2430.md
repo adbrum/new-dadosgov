@@ -1147,44 +1147,55 @@ do 13** — a tabela tem-nos ao contrário.
 
 | # | Ticket | O quê | Onde | Feito? | Dependência |
 | --- | --- | --- | --- | --- | --- |
-| **1** | LEDG-2432 | Repor o login por email e palavra-passe | Frontend | ✅ **Sim** — em `develop` e `tst` | 🚨 Regressão; desbloqueou o `tst → ppr` |
-| **2** | LEDG-2456 | Fuga de existência de conta **+ e-mails em inglês** | Backend | ✅ **Sim** — em `develop` e `tst` | Nenhuma — e torna o 15 menor |
-| **3** | LEDG-2433 | Campo do método de autenticação (CMD/eIDAS) | Backend | ✅ **Sim** — 6 commits, suite completa verde; em `develop` e `tst` | Nenhuma — aditivo |
-| **4** | LEDG-2457 | Tipo de cidadão **declarado** (nacional/estrangeiro) | Full-stack | ✅ **Sim** — 5 commits nos dois repos; em `develop` e `tst` | **Depende do 3** |
-| **6** | LEDG-2462 | **Campos de sessão vazios no login SAML** (os cinco campos trackable) | Backend | ✅ **Sim** — PR #266; 6 commits, suite completa verde, 13 testes novos; em `develop` e `tst` | Nenhuma. Paralelo ao 5 — **este é código, o 5 é humano** |
-| **7** | **LEDG-2465** | **Login recusado tratado como sucesso:** sessão marcada, log diz `OK`, auditoria diz `success`, e o link de uso único fica queimado | Backend | ✅ **Sim** — PR #268; 3 commits, suite completa verde, 11 testes novos; em `develop` e `tst` | Nenhuma — mexeu nas **mesmas duas funções** do 6, e foi de facto mais barato a seguir a ele |
-| — | **LEDG-2467** | **Recuperação de palavra-passe:** os mails do flask_security saíam de `webmaster@udata` | Backend | ✅ **Sim** — PR #270; em `develop` e `tst`, e **verificado em DEV** com mail recebido do remetente certo | **Fora da decomposição** — não é CMD/eIDAS |
-| **8** | **LEDG-2466** | **`datastore.commit()` é no-op em Mongo:** 3 chamadas que não gravam nada, e o `confirmed_at` **nunca chegava à BD** | Backend | ✅ **Sim** — PR #272, 4 testes novos; em `develop` e `tst` | Nenhuma — o 6 deixou de o reparar de lado, deliberadamente |
-| **9** | **LEDG-2464** | **Login ambíguo:** identificador duplicado resolvido por `.first()` — devolvia **sempre a conta mais recente** | Backend | ✅ **Sim** — PR #273, 6 testes novos; em `develop` e `tst` | Nenhuma. 🚨 **Nega acesso a ~26 contas** até o 14 as fundir |
-| 10 | LEDG-2468 | **Nada impede uma organização de ficar sem administrador** — os dois endpoints de membro **e** os quatro caminhos de apagamento | Backend | 🟡 **Parcial** — PR #275: os **dois endpoints** guardados, em `develop` e `tst`. 🚨 **O `mark_as_deleted` continua a orfanar** | Os pontos 3/4/5 dependem da AMA. **Quanto mais cedo o resto entrar, menos casos o 11 trata à mão** |
-| **5** | LEDG-2434 | Levantamento — o script responde às três contagens numa execução | Spike | 🟡 **Parcial** — PR #277/#278, corrido em DEV; em `develop` e `tst` | ⏸️ **A execução em produção espera por tudo estar em `tst`** (decisão 12). Não bloqueia código — bloqueia o fecho de critérios no 8, no 10 e no 14 |
-| **14** | LEDG-2435 | **Uma identidade, uma conta** — as duas classes de duplicado | Backend | 🟡 **Parcial** — a **alínea (c)** feita: PR #279/#280, 11 testes | 🔄 **Desceu do 13.** A **(b)** ✅ **está desbloqueada** — o 13 ficou feito a 09-15, que era a condição escrita no próprio ticket. A **(a)** depende do **5** |
-| — | LEDG-2475 | **Ajuda e contactos devolvia 400 em PPR/PRD** — chave reCAPTCHA de registo trocada | Backend | ✅ **Resolvido a 09-11** | Fora da decomposição. 🔑 A causa foi provada pelo **tamanho da resposta**: 54 bytes = o Google rejeitou; 14 = nem chegou lá |
-| **16** | LEDG-2438 | **Estrangeiros: identidade por documento em vez de NIC** | Backend | ✅ **Sim** — PR #283/#284, 15 testes novos; em `develop` e `tst` | 🚨 **Por validar contra o IdP real antes de sair de `tst`** — os testes mockam o pysaml2. 🔻 **Tirou os estrangeiros do âmbito do 17** |
-| — | LEDG-2371 | **A auditoria SAML estava cega** — nenhuma linha chegava ao ficheiro | Backend | ✅ **Feito a 09-14** — PR #285/#286, em `develop` e `tst` | Era pré-requisito prático de tudo. Desbloqueou o **17** e o LEDG-2473 |
-| **13** | **LEDG-2431** | **Associar a uma conta tradicional existente** — a segunda via do ecrã de conclusão | Full-stack | ✅ **Sim** — **nos dois repos, em `develop`** — backend PR #292, frontend PR #639. 9 pontos, 14/14 critérios, **45 mutações mortas** | 🔄 **Subiu do 15 a 09-14 e foi feito a 09-15.** 🚨 **A revisão apanhou um bloqueio:** o mail de associação interpolava o nome **editável pelo próprio** — corrigido antes do PR. 🔓 **Desbloqueia a alínea (b) do 14** |
-| 11 | LEDG-2463 | **As 6 contas com conteúdo, 4 delas admin ÚNICO** — plano nomeado | Operação | ❌ Não | 🚩 **Não há ninguém para promover** — as 4 organizações têm **1 membro**, a própria conta sintética. Os donos entram por CMD (têm `auth_nic` válido), logo passa a **depender do LEDG-2437**, não da AMA. À AMA fica só: o que fazer se algum não voltar a entrar |
-| **12** | **LEDG-2470** | 🔄 **Contas institucionais MANTÊM-SE** — não são descontinuadas. Publicar por conta pessoal (própria ou de organização) passa a ser o caminho recomendado, não o único | Operação | ⏸️ **Não, e não avançar** | 🛑 **Premissa corrigida a 2026-09-15 pelo dono do produto:** as contas institucionais **continuam a existir até estar disponível o login tradicional com email e palavra-passe**. O ticket deixa de ser *remover* e passa a *manter, com fim condicionado*. ⚠️ **Ver a nota de ambiguidade na secção 12** |
-| — | **LEDG-2356** | **Melhorias da revisão UX/conteúdo do fluxo de autenticação** | Full-stack | ❌ Não | 🚩 **Nunca esteve nesta tabela, e está `To Do`.** É o **mesmo ecrã do 13**, que **já foi feito** — logo isto passa a incidir sobre o ecrã tal como ficou, incluindo o pré-preenchimento e a nova mensagem de recusa |
-| — | **LEDG-2350** | **Reescrever o e-mail de confirmação da autenticação** | Conteúdo | ❌ Não | 🚩 **Nunca esteve nesta tabela.** O **13**, agora feito, **já mudou** o que sai deste ramo: além do mail de confirmação, há um mail que leva um **link de associação** e um terceiro que **recusa** e diz porquê. São três textos a rever, não um |
-| **15** | **LEDG-2469** | **Fundir os duplicados que já existem** e impedi-los na BD | Backend + Operação | ❌ Não | 🔄 **Desceu do 14.** Depende do **9**, **10** e **14**. 🚨 **Antes da promoção final**, senão as \~26 contas ficam de fora |
-| 17 | LEDG-2436 | Identidade sem identificador (eIDAS **e** CMD) | Backend | ⏸️ **Estacionado a 2026-09-14** | O 16 tirou-lhe os estrangeiros, mas **a escolha entre recusar e ligar pelo email continua proibida antes do LEDG-2288** — e nem DEV nem a auditoria conseguem responder. Ver a secção |
-| **18** | **LEDG-2472** | **Consolidação self-service:** avisar que só haverá uma conta por pessoa, e deixar a pessoa mover os dados das secundárias para a principal | Full-stack | ❌ Não | Depende do **requisito 4 do 14** e do **10**. 🛑 **Tem de vir ANTES do 19** — depois da obrigatoriedade, quem perdeu o email de uma conta secundária já não entra nela para empurrar o conteúdo |
-| **19** | **LEDG-2471** | **Descontinuar o login por email e palavra-passe:** inventário e gate no backend | Full-stack | ❌ Não | Depende do **15**, **17**, **18**, e do LEDG-2437 e **LEDG-2474** (era o LEDG-2467, que ficou feito — a substância passou para o 2474) |
-| **20** | **LEDG-1277** | **Obrigatoriedade do Autenticação.gov** — o fim do arco | Produto | 🟡 Em curso | Depende do **19**. ⚠️ **Não activar antes dele** |
-| — | LEDG-2473 | **A linha `outcome=success` prematura** na auditoria | Backend | ❌ Não | ✅ **Desbloqueado pelo LEDG-2371.** Falta decidir o vocabulário de dois ramos |
-| — | **LEDG-2474** | **Quatro razões de recusa dão a mesma resposta de sucesso** na recuperação — e uma conta inactiva fica **sem via de entrada nenhuma** | Backend + Produto | ❌ Não | **Fora da decomposição.** Bloqueado em **decisão da AMA**. 🚨 **Passou a ser o pré-requisito do 19** que o 2467 era, e agravou-se com o **7** |
-| — | LEDG-2288 | **Analisar autenticação eIDAS** | Análise | ❌ Não — **outra pessoa** | 🚨 **Bloqueia o 17.** A pergunta: algum IdP europeu real omite o `PersonIdentifier`? |
-| — | ~~NOVO-D~~ | ~~**Organizações AGIT duplicadas** (3 registos)~~ | — | ❌ **Não se cria** | A consulta desfez a suspeita — ver acima |
+| | | **▼ FEITO — pela ordem em que foi feito, confirmada nos merges** | | | |
+| **1** | LEDG-2432 | Repor o login por email e palavra-passe | Frontend | ✅ **09-07** — PR #621, `develop`+`tst` | 🚨 Regressão; desbloqueou o `tst → ppr` |
+| **2** | LEDG-2456 | Fuga de existência de conta **+ e-mails em inglês** | Backend | ✅ **09-08** — PR #257, `develop`+`tst` | Nenhuma — e tornou o **13** menor |
+| **3** | LEDG-2433 | Campo do método de autenticação (CMD/eIDAS) | Backend | ✅ **09-08** — PR #258, `develop`+`tst` | Nenhuma — aditivo |
+| **4** | LEDG-2457 | Tipo de cidadão **declarado** (nacional/estrangeiro) | Full-stack | ✅ **09-08** — PR #260/#262 e #624/#626, nos dois repos | **Depende do 3** |
+| **5a** | LEDG-2434 | O script de levantamento **versionado**, com os dois eixos de colisão | Spike | ✅ **09-09** — PR #264 | 🚩 **Metade do 5, e a primeira coisa feita depois do 4** — a tabela antiga escondia-o ao mostrar só a segunda metade |
+| **6** | LEDG-2462 | **Campos de sessão vazios no login SAML** (os cinco campos trackable) | Backend | ✅ **09-09** — PR #266 | Nenhuma. 🚩 **Resolve também o LEDG-1176**, que ninguém tinha ligado |
+| **7** | LEDG-2465 | **Login recusado tratado como sucesso** — sessão marcada, log diz `OK`, link de uso único queimado | Backend | ✅ **09-10** — PR #268, 11 testes | Nenhuma — mexeu nas **mesmas duas funções** do 6, e por isso saiu mais barato logo a seguir |
+| — | LEDG-2467 | **Recuperação de palavra-passe:** os mails saíam de `webmaster@udata` | Backend | ✅ **09-10** — PR #270, verificado em DEV | **Fora da decomposição** — não é CMD/eIDAS |
+| **8** | LEDG-2466 | **`datastore.commit()` é no-op em Mongo** — o `confirmed_at` **nunca chegava à BD** | Backend | ✅ **09-11** — PR #272, 4 testes | ⚠️ **As 730 já criadas só se curam ao voltar a entrar por CMD** |
+| **9** | LEDG-2464 | **Login ambíguo:** identificador duplicado resolvido por `.first()` — devolvia **sempre a mais recente** | Backend | ✅ **09-11** — PR #273, 6 testes | 🚨 **Nega acesso a ~26 contas** até o **15** as fundir |
+| **10** | LEDG-2468 | **Nada impede uma organização de ficar sem administrador** | Backend | 🟡 **09-11 (parcial)** — PR #275: os **dois endpoints**. 🚨 **O `mark_as_deleted` continua a orfanar** | Os pontos 3/4/5 dependem da AMA |
+| **5b** | LEDG-2434 | O script responde às **três contagens** numa execução | Spike | 🟡 **09-11 (parcial)** — PR #277/#278, corrido em DEV | ⏸️ **A execução em produção espera por tudo estar em `tst`** (decisão 12) |
+| **14a** | LEDG-2435 | A alínea **(c)** — alinhar os três lookups `exact` com o resolvedor | Backend | ✅ **09-11** — PR #279/#280, 11 testes | Fechou a **classe 2** de duplicado |
+| — | LEDG-2475 | **Ajuda e contactos devolvia 400 em PPR/PRD** — chave reCAPTCHA trocada | Backend | ✅ **09-11** — sem PR, era configuração | Fora da decomposição. 🔑 A causa provou-se pelo **tamanho da resposta**: 54 bytes = o Google rejeitou; 14 = nem lá chegou |
+| **16** | LEDG-2438 | **Estrangeiros: identidade por documento em vez de NIC** | Backend | ✅ **09-14** — PR #283/#284, 15 testes | 🚨 **Por validar contra o IdP real antes de sair de `tst`** — os testes mockam o pysaml2. 🔻 **Tirou os estrangeiros do âmbito do 17** |
+| — | LEDG-2371 | **A auditoria SAML estava cega** — nenhuma linha chegava ao ficheiro | Backend | ✅ **09-14** — PR #285/#286 | Era pré-requisito prático de tudo. Desbloqueou o **17** e o LEDG-2473 |
+| **13** | **LEDG-2431** | **Associar a uma conta tradicional existente** — a segunda via do ecrã de conclusão | Full-stack | ✅ **09-15** — PR #292 e #639, **em `develop` E `tst`**. 9 pontos, 14/14 critérios, **45 mutações mortas** | 🔄 Subiu do 15 a 09-14. 🚨 **A revisão apanhou um bloqueio** — o mail nomeava um campo editável pelo próprio. 🔓 **Desbloqueou a (b) do 14** |
+| | | **▼ A SEGUIR — sem bloqueio externo, só âmbito por fechar** | | | |
+| — | **LEDG-2350** | **Os textos do ramo de conclusão de registo** | Conteúdo | ❌ Não | 🔄 **Deixou de ser um texto e passaram a ser quatro** — o 13 acrescentou o mail de **associação** e o de **recusa**, e o 2456 o aviso silencioso. 🚨 **Três deles vão para a caixa de OUTRA pessoa**: o que dizem é peça de segurança, não copy |
+| — | **LEDG-2356** | **Melhorias da revisão UX/conteúdo do fluxo de autenticação** | Full-stack | ❌ Não | 🚩 **Sem critérios de aceitação** — é o que falta para arrancar. Incide sobre o ecrã **tal como ficou**, com pré-preenchimento e mensagem de recusa |
+| — | LEDG-2473 | **A linha `outcome=success` prematura** na auditoria | Backend | ❌ Não | ✅ **Desbloqueado pelo LEDG-2371.** Falta só decidir o vocabulário de dois ramos — é a menor coisa em aberto |
+| | | **▼ PARADO EM PESSOAS — não há código a escrever** | | | |
+| **10** (resto) | LEDG-2468 | Os **quatro caminhos de apagamento** que continuam a orfanar | Backend | 🛑 Bloqueado | **Decisão da AMA** nos pontos 3/4/5. 🚨 **63 organizações já órfãs** (DEV). É o que trava a fila |
+| **11** | LEDG-2463 | **As 6 contas com conteúdo, 4 delas admin ÚNICO** | Operação | 🛑 Bloqueado | 🚩 **Não há ninguém para promover** — as 4 organizações têm **1 membro**, a própria conta. Os donos entram por CMD ⇒ depende do **LEDG-2437**, que é promoção retida |
+| **5c** | LEDG-2434 | A execução **em produção** | Spike | ⏸️ À espera | **Decisão 12:** espera por tudo estar em `tst`. Não bloqueia código — bloqueia o fecho de critérios no 8, no 10 e no 14 |
+| **12** | **LEDG-2470** | 🔄 **Contas institucionais MANTÊM-SE** — não são descontinuadas | Operação | ⏸️ **Não avançar** | 🛑 **Premissa corrigida a 09-15 pelo dono do produto:** existem **até haver login tradicional com email e palavra-passe**. ⚠️ **A condição não encaixa nem no 1 nem no 19** — três leituras possíveis, nenhuma escolhida. Ver a secção 12 |
+| **17** | LEDG-2436 | Identidade sem identificador (eIDAS **e** CMD) | Backend | ⏸️ **Estacionado a 09-14** | O 16 tirou-lhe os estrangeiros, mas a escolha entre recusar e ligar pelo email continua **proibida antes do LEDG-2288** |
+| — | **LEDG-2474** | **Quatro razões de recusa dão a mesma resposta** na recuperação — e uma conta inactiva fica **sem via de entrada** | Backend + Produto | 🛑 Bloqueado | **Decisão da AMA.** 🚨 **Pré-requisito do 19**, herdado do 2467, e agravado pelo **7** |
+| — | LEDG-2288 | **Analisar autenticação eIDAS** | Análise | 🛑 **Outra pessoa** | 🚨 **Bloqueia o 17.** A pergunta: algum IdP europeu real omite o `PersonIdentifier`? |
+| | | **▼ SEQUENCIADO — a ordem importa mais do que a data** | | | |
+| **14b** | LEDG-2435 | As alíneas **(a)** e **(b)** — deixar de fabricar endereços | Backend | ❌ Não | 🔓 A **(b)** foi desbloqueada pelo 13. A **(a)** depende do **5c** |
+| **15** | LEDG-2469 | **Fundir os duplicados que já existem** e impedi-los na BD | Backend + Operação | ❌ Não | Depende do **9**, **10** e **14**. 🚨 **Antes da promoção final**, senão as ~26 contas ficam de fora |
+| **18** | LEDG-2472 | **Consolidação self-service** — mover os dados das contas secundárias | Full-stack | ❌ Não | Depende do **14b** e do **10**. 🛑 **Tem de vir ANTES do 19** — depois da obrigatoriedade, quem perdeu o email de uma conta secundária já não entra nela |
+| **19** | LEDG-2471 | **Descontinuar o login por email e palavra-passe** | Full-stack | ❌ Não | Depende do **15**, **17**, **18**, do LEDG-2437 e do **LEDG-2474**. ⚠️ **E agora do 12** — enquanto as institucionais dependerem do login tradicional, descontinuá-lo tira-lhes a via de entrada |
+| **20** | LEDG-1277 | **Obrigatoriedade do Autenticação.gov** — o fim do arco | Produto | 🟡 Em curso | Depende do **19**. ⚠️ **Não activar antes dele** |
 
-**Próximo a implementar:** o **11** (LEDG-2463) — ou o resto do **10**, quando a AMA decidir — mexe no **mesmo ficheiro** que o 7 acabou de
-tocar, e o 6 deixou-o deliberadamente sem reparar de lado. Depois dele o **9** (LEDG-2468), cujos
-pontos 1 e 2 são implementáveis já; os 3, 4 e 5 estão bloqueados numa decisão da AMA. Os pontos
-1 a 4, 6 e 7 estão em `develop` e `tst`, e
-o 5 é o único que não depende de nada — e é o que desbloqueia o desenho do LEDG-2435 e do
-LEDG-2431. O dry-run já correu, o script de levantamento já está versionado com os dois eixos
-de colisão, e DEV e TST já foram medidos (ver acima); **falta PPR**, e as perguntas 2/3/4 fora
-de PRD.
+**Próximo a implementar:** 🚩 **nenhum ponto de código da decomposição está desbloqueado.** O **13**
+era o último, e ficou feito a 09-15. O que resta à frente para em **pessoas**, não em código — e é
+por isso que a tabela acima passou a separar *a seguir*, *parado em pessoas* e *sequenciado*, em vez
+de os misturar numa lista que dava a impressão de haver fila de trabalho.
+
+O que **é** fazível agora não veio da decomposição: o **LEDG-2350** (quatro textos, não um), o
+**LEDG-2356** (falta escrever critérios de aceitação) e o **LEDG-2473** (falta decidir um
+vocabulário). Nenhum deles depende de terceiros.
+
+🛑 **O que trava a fila, por ordem de impacto:** os pontos 3/4/5 do **10**, à espera da AMA, com 63
+organizações já órfãs em DEV; o **LEDG-2437**, retido pelo congelamento, que é quem desbloqueia o
+**11**; e o **LEDG-2474**, também na AMA, que é pré-requisito do **19**.
 
 > ⚠️ **Os números desta tabela mudam.** Entrou o LEDG-2457 e tudo o que vinha depois desceu uma
 > posição. Quatro tickets referiam-se ao seu próprio lugar por número (*"é o ponto 2 da

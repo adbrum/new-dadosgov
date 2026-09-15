@@ -1096,7 +1096,7 @@ sobre o épico, as labels e os sumários, e cruzado com os links do LEDG-2430.
 
 | Ticket | O quê | Estado |
 | --- | --- | --- |
-| LEDG-2473 | A linha `outcome=success` prematura na auditoria | Backlog — desbloqueado pelo LEDG-2371 |
+| LEDG-2473 | A linha `outcome=success` prematura na auditoria | ✅ **Resolvido a 09-15** |
 | LEDG-2474 | Quatro recusas indistinguíveis na recuperação | Backlog — decisão da AMA |
 | LEDG-2475 | Formulário de contactos, 400 em PPR/PRD | ✅ Resolvido |
 | LEDG-2371 | A auditoria SAML cega | ✅ Feito, em `tst` |
@@ -1321,7 +1321,7 @@ do 13** — a tabela tem-nos ao contrário.
 | — | **LEDG-2487** | 🆕 **O percurso de conclusão de inscrição, como UMA coisa** — checklist de aceitação dos 10 casos | Verificação | ❌ Não | 🚩 **Criado a 09-15 porque não existia.** O percurso nunca teve ticket próprio — estava repartido por sete, e foi essa repartição que deixou passar semanas o facto de **falhar inteiro em produção**. Sem código próprio: é onde se verifica que as peças encaixam. 🛑 **O caso 1 depende do LEDG-2437** |
 | — | **LEDG-2350** | **Os textos do ramo de conclusão de registo** | Conteúdo | ❌ Não | 🔄 **Deixou de ser um texto e passaram a ser quatro** — o 13 acrescentou o mail de **associação** e o de **recusa**, e o 2456 o aviso silencioso. 🚨 **Três deles vão para a caixa de OUTRA pessoa**: o que dizem é peça de segurança, não copy |
 | — | **LEDG-2356** | **Melhorias da revisão UX/conteúdo do fluxo de autenticação** | Full-stack | 🟡 **Parcial** — 09-15, PR #641: o aviso da conta existente deixou de ser a última oração de um parágrafo e passou a **cartão próprio**, visível em todos os casos | 🚩 **O resto está bloqueado:** falta a revisão de copy, e o protótipo Figma é de **27-08** — descreve um ecrã que mudou a 09-15. ⚠️ **Perguntar à autora se ainda se aplica** antes de pegar nos 8 pontos |
-| — | LEDG-2473 | **A linha `outcome=success` prematura** na auditoria | Backend | ❌ Não | ✅ **Desbloqueado pelo LEDG-2371.** Falta só decidir o vocabulário de dois ramos — é a menor coisa em aberto. 🚨 **E passou a urgir:** desde o 2371 as linhas chegam ao log, logo quem contar `outcome=success` conta a mais **a partir de agora** |
+| — | LEDG-2473 | **A linha `outcome=success` prematura** na auditoria | Backend | ✅ **Sim** — 09-15, 5 commits, **6 mutações mortas**, suite completa verde | 🔑 **Sem vocabulário novo:** `deleted` é `rejected`; a confirmação pendente é `migration_pending`, **não recusa** — e o `reason` separa os casos. Os cinco desfechos passaram a viver no docstring do emissor |
 | **14b** | LEDG-2435 | A alínea **(a)** — não criar conta quando o IdP não dá email | Backend | ❌ Não | 🔓 **Desbloqueada a 09-15** pela decisão 16: dependia do 5c, que afinal já estava feito. ⚠️ **Rever a premissa antes de planear** — foi o que matou a alínea (b) |
 | | | **▼ PARADO EM PESSOAS — não há código a escrever** | | | |
 | **10** (resto) | LEDG-2468 | Os **quatro caminhos de apagamento** que continuam a orfanar | Backend | 🛑 Bloqueado | **Decisão da AMA** nos pontos 3/4/5. 🚨 **63 organizações já órfãs** (DEV). É o que trava a fila |
@@ -1697,11 +1697,23 @@ desfazer algo.
   `_create_saml_user` vai pelo `datastore.create_user`, e o `_prepare_create_user_args` do
   flask_security faz `kwargs.setdefault("active", True)`. Nascem activas.
 
-⚠️ **E um defeito real que este ponto NÃO corrigiu, deliberadamente:** a linha `outcome=success`
-prematura continua a existir para os ramos `deleted` e confirmação-pendente, que são alcançados
-antes da emissão da rota. Quem contar `outcome=success` continua a contar a mais nesses dois.
-Corrigi-lo exige decidir o vocabulário de cada ramo — em particular, a confirmação pendente **não
-é** uma recusa de segurança e já tem `migration_pending`. **Recomendação: ticket próprio.**
+✅ **O defeito que este ponto deixou deliberadamente por corrigir ficou fechado a 2026-09-15**, pelo
+LEDG-2473 — e **o vocabulário implementado é exactamente o que esta secção recomendou**: a
+confirmação pendente **não é** recusa e ficou com `migration_pending`; o `deleted` ficou `rejected`
+com um `reason` próprio. Nenhum sexto valor.
+
+🔑 **O que mudou face ao que aqui se antecipava:** a emissão desceu para **dentro do funil** em vez
+de a decisão subir para a rota, ao contrário do que o LEDG-2465 fez para a conta inactiva. As
+razões daquele eram específicas — o guard tinha de ficar antes de duas escritas — e estes dois
+ramos já estão acima delas.
+
+🚩 **E a revisão apanhou uma lacuna que ninguém tinha nomeado:** o desfecho `user_not_found` **não
+tinha uma única asserção** em todo o repositório, e era precisamente a linha que mudava de emissor.
+Ganhou teste próprio.
+
+⚠️ **Fica em aberto, e está escrito no docstring:** o clique do link de migração **estabelece sessão
+e não emite linha nenhuma**. Quem contar estas linhas para responder a *"quantas pessoas entraram"*
+subestima pelo número de quem entrou por um link enviado por email.
 
 ### 8 — LEDG-2466 · `datastore.commit()` é no-op em Mongo *(backend)*
 

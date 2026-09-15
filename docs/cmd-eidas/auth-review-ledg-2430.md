@@ -920,6 +920,50 @@ honesto do que medir cedo e citar valores que entretanto deixaram de valer.
 - ⚠️ **Os números de DEV continuam a não ser os de produção.** O que muda é *quando* se mede,
   não o que os valores de DEV provam — que é que a ferramenta funciona.
 
+### 🚨 Decisão 16 — o ambiente DEV partilha a base de dados de PRODUÇÃO *(2026-09-15)*
+
+**Dito pelo dono do produto a 2026-09-15.** Muda a leitura de quase tudo o que este documento diz
+sobre números, e torna uma decisão anterior sem objecto.
+
+#### O que passa a ser verdade
+
+🚩 **Os números "de DEV" são números de PRODUÇÃO.** Este documento repetiu, em vários sítios, que
+*"cada ambiente é uma população própria"* e que *"nenhum número é uma contagem de produção"*. **É
+falso para o DEV.** O que foi medido a 09-11 e 09-14 descreve a base de dados real:
+
+- **63 organizações sem administrador** — são 63 organizações reais, agora
+- **730 contas com link CMD e sem `confirmed_at`** — são 730 pessoas que **não conseguem recuperar
+  a palavra-passe** neste momento
+- **13 grupos a partilhar identificador** — e o ponto 9 passou a **recusar** o login ambíguo, logo
+  são pessoas reais sem acesso enquanto o ponto 15 não as fundir
+- **120 contas com endereço sintético**, 6 delas com conteúdo, 4 dessas admin único
+
+⇒ **Não são números de laboratório.** Cada um deles tem pessoas do outro lado.
+
+#### ✅ A decisão 12 fica sem objecto
+
+Dizia: *"não se corre o levantamento em produção enquanto tudo não estiver fechado até `tst`"*. **O
+levantamento já correu contra a produção** — foi a execução de 09-11, em DEV. Não havia nada a
+esperar, e o custo que a decisão 12 aceitou (três critérios abertos mais tempo, o ponto 15 com menos
+margem) foi pago por nada.
+
+⇒ **A alínea (5c) está feita**, e com ela desbloqueia o que dependia dela: a **alínea (a) do
+LEDG-2435**, e os critérios que ficaram pendentes nos pontos **8**, **10** e **14**.
+
+#### ⚠️ E um risco operacional que ninguém nomeou
+
+**Testar em DEV é escrever na produção.** O script de levantamento é só de leitura — isso verificou-se
+—, mas qualquer teste manual que crie uma conta, associe uma identidade ou apague alguma coisa em
+DEV está a fazê-lo **sobre dados reais de cidadãos**.
+
+🚩 **Isto atravessa tudo o que este documento recomenda verificar "em DEV".** A validação do
+pré-preenchimento, a do documento do estrangeiro, o exercício do percurso de conclusão — todas
+foram escritas a assumir um ambiente descartável. Nenhuma o é.
+
+**Não decido aqui o que fazer com isso** — separar as bases, ou tratar DEV como produção para
+efeitos de cuidado, é decisão de quem opera a infraestrutura. Fica escrito porque nenhuma das duas
+coisas pode ser decidida por quem não sabe que o problema existe.
+
 ### Decisão 13 — a ordem das escritas de uma associação *(2026-09-15)*
 
 **Limpar o `auth_nic` da conta temporária ANTES de gravar na conta antiga, e retirar a temporária
@@ -1252,8 +1296,8 @@ do 13** — a tabela tem-nos ao contrário.
 | **8** | LEDG-2466 | **`datastore.commit()` é no-op em Mongo** — o `confirmed_at` **nunca chegava à BD** | Backend | ✅ **09-11** — PR #272, 4 testes | ⚠️ **As 730 já criadas só se curam ao voltar a entrar por CMD** |
 | **9** | LEDG-2464 | **Login ambíguo:** identificador duplicado resolvido por `.first()` — devolvia **sempre a mais recente** | Backend | ✅ **09-11** — PR #273, 6 testes | 🚨 **Nega acesso a ~26 contas** até o **15** as fundir |
 | **10** | LEDG-2468 | **Nada impede uma organização de ficar sem administrador** | Backend | 🟡 **09-11 (parcial)** — PR #275: os **dois endpoints**. 🚨 **O `mark_as_deleted` continua a orfanar** | Os pontos 3/4/5 dependem da AMA |
-| **5b** | LEDG-2434 | O script responde às **três contagens** numa execução | Spike | 🟡 **09-11 (parcial)** — PR #277/#278, corrido em DEV | ⏸️ **A execução em produção espera por tudo estar em `tst`** (decisão 12) |
 | **14a** | LEDG-2435 | A alínea **(c)** — alinhar os três lookups `exact` com o resolvedor | Backend | ✅ **09-11** — PR #279/#280, 11 testes | Fechou a **classe 2** de duplicado |
+| **5b+c** | LEDG-2434 | O script responde às três contagens **e a execução conta como produção** | Spike | ✅ **09-11** — PR #277/#278 | 🚨 **Reclassificado a 09-15:** DEV partilha a BD de PRD (decisão 16), logo esta execução **foi** o levantamento em produção. A decisão 12 ficou sem objecto |
 | — | LEDG-2475 | **Ajuda e contactos devolvia 400 em PPR/PRD** — chave reCAPTCHA trocada | Backend | ✅ **09-11** — sem PR, era configuração | Fora da decomposição. 🔑 A causa provou-se pelo **tamanho da resposta**: 54 bytes = o Google rejeitou; 14 = nem lá chegou |
 | **16** | LEDG-2438 | **Estrangeiros: identidade por documento em vez de NIC** | Backend | ✅ **09-14** — PR #283/#284, 15 testes | 🚨 **Por validar contra o IdP real antes de sair de `tst`** — os testes mockam o pysaml2. 🔻 **Tirou os estrangeiros do âmbito do 17** |
 | — | LEDG-2371 | **A auditoria SAML estava cega** — nenhuma linha chegava ao ficheiro | Backend | ✅ **09-14** — PR #285/#286 | Era pré-requisito prático de tudo. Desbloqueou o **17** e o LEDG-2473 |
@@ -1262,17 +1306,16 @@ do 13** — a tabela tem-nos ao contrário.
 | — | **LEDG-2487** | 🆕 **O percurso de conclusão de inscrição, como UMA coisa** — checklist de aceitação dos 10 casos | Verificação | ❌ Não | 🚩 **Criado a 09-15 porque não existia.** O percurso nunca teve ticket próprio — estava repartido por sete, e foi essa repartição que deixou passar semanas o facto de **falhar inteiro em produção**. Sem código próprio: é onde se verifica que as peças encaixam. 🛑 **O caso 1 depende do LEDG-2437** |
 | — | **LEDG-2350** | **Os textos do ramo de conclusão de registo** | Conteúdo | ❌ Não | 🔄 **Deixou de ser um texto e passaram a ser quatro** — o 13 acrescentou o mail de **associação** e o de **recusa**, e o 2456 o aviso silencioso. 🚨 **Três deles vão para a caixa de OUTRA pessoa**: o que dizem é peça de segurança, não copy |
 | — | **LEDG-2356** | **Melhorias da revisão UX/conteúdo do fluxo de autenticação** | Full-stack | ❌ Não | 🚩 **Sem critérios de aceitação** — é o que falta para arrancar. Incide sobre o ecrã **tal como ficou**, com pré-preenchimento e mensagem de recusa |
-| — | LEDG-2473 | **A linha `outcome=success` prematura** na auditoria | Backend | ❌ Não | ✅ **Desbloqueado pelo LEDG-2371.** Falta só decidir o vocabulário de dois ramos — é a menor coisa em aberto |
+| — | LEDG-2473 | **A linha `outcome=success` prematura** na auditoria | Backend | ❌ Não | ✅ **Desbloqueado pelo LEDG-2371.** Falta só decidir o vocabulário de dois ramos — é a menor coisa em aberto. 🚨 **E passou a urgir:** desde o 2371 as linhas chegam ao log, logo quem contar `outcome=success` conta a mais **a partir de agora** |
+| **14b** | LEDG-2435 | A alínea **(a)** — não criar conta quando o IdP não dá email | Backend | ❌ Não | 🔓 **Desbloqueada a 09-15** pela decisão 16: dependia do 5c, que afinal já estava feito. ⚠️ **Rever a premissa antes de planear** — foi o que matou a alínea (b) |
 | | | **▼ PARADO EM PESSOAS — não há código a escrever** | | | |
 | **10** (resto) | LEDG-2468 | Os **quatro caminhos de apagamento** que continuam a orfanar | Backend | 🛑 Bloqueado | **Decisão da AMA** nos pontos 3/4/5. 🚨 **63 organizações já órfãs** (DEV). É o que trava a fila |
 | **11** | LEDG-2463 | **As 6 contas com conteúdo, 4 delas admin ÚNICO** | Operação | 🛑 Bloqueado | 🚩 **Não há ninguém para promover** — as 4 organizações têm **1 membro**, a própria conta. Os donos entram por CMD ⇒ depende do **LEDG-2437**, que é promoção retida |
-| **5c** | LEDG-2434 | A execução **em produção** | Spike | ⏸️ À espera | **Decisão 12:** espera por tudo estar em `tst`. Não bloqueia código — bloqueia o fecho de critérios no 8, no 10 e no 14 |
 | **12** | **LEDG-2470** | 🔄 **Contas institucionais MANTÊM-SE** — não são descontinuadas | Operação | ⏸️ **Não avançar** | 🛑 **Premissa corrigida a 09-15 pelo dono do produto:** existem **até haver login tradicional com email e palavra-passe**. ⚠️ **A condição não encaixa nem no 1 nem no 19** — três leituras possíveis, nenhuma escolhida. Ver a secção 12 |
 | **17** | LEDG-2436 | Identidade sem identificador (eIDAS **e** CMD) | Backend | ⏸️ **Estacionado a 09-14** | O 16 tirou-lhe os estrangeiros, mas a escolha entre recusar e ligar pelo email continua **proibida antes do LEDG-2288** |
 | — | **LEDG-2474** | **Quatro razões de recusa dão a mesma resposta** na recuperação — e uma conta inactiva fica **sem via de entrada** | Backend + Produto | 🛑 Bloqueado | **Decisão da AMA.** 🚨 **Pré-requisito do 19**, herdado do 2467, e agravado pelo **7** |
 | — | LEDG-2288 | **Analisar autenticação eIDAS** | Análise | 🛑 **Outra pessoa** | 🚨 **Bloqueia o 17.** A pergunta: algum IdP europeu real omite o `PersonIdentifier`? |
 | | | **▼ SEQUENCIADO — a ordem importa mais do que a data** | | | |
-| **14b** | LEDG-2435 | As alíneas **(a)** e **(b)** — deixar de fabricar endereços | Backend | ❌ Não | 🔓 A **(b)** foi desbloqueada pelo 13. A **(a)** depende do **5c** |
 | **15** | LEDG-2469 | **Fundir os duplicados que já existem** e impedi-los na BD | Backend + Operação | ❌ Não | Depende do **9**, **10** e **14**. 🚨 **Antes da promoção final**, senão as ~26 contas ficam de fora |
 | **18** | LEDG-2472 | **Consolidação self-service** — mover os dados das contas secundárias | Full-stack | ❌ Não | Depende do **14b** e do **10**. 🛑 **Tem de vir ANTES do 19** — depois da obrigatoriedade, quem perdeu o email de uma conta secundária já não entra nela |
 | **19** | LEDG-2471 | **Descontinuar o login por email e palavra-passe** | Full-stack | ❌ Não | Depende do **15**, **17**, **18**, do LEDG-2437 e do **LEDG-2474**. ⚠️ **E agora do 12** — enquanto as institucionais dependerem do login tradicional, descontinuá-lo tira-lhes a via de entrada |

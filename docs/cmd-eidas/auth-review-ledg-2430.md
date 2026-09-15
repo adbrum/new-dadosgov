@@ -37,6 +37,18 @@ a reformulação CMD/eIDAS estiver feita e validada. **Não se promove por ticke
   | 2026-09-14 | *(nada deste refinamento)* — LEDG-2327, PRs #281/#282 | **144** | 101 |
   | 2026-09-14 | + o 16 (LEDG-2438), PR #284 | **152** | 101 |
   | 2026-09-14 | + o LEDG-2371 (fora da decomposição), PR #286 | **159** | 101 |
+  | 2026-09-15 | + o 13 (LEDG-2431), PRs #292 e #639 | **186** | **106** |
+  | 2026-09-15 | + o LEDG-2356 parcial (o aviso da conta existente), PR #641 | 186 | **108** |
+
+  🚩 **A dívida retida mais do que duplicou** desde a decisão: 85 → **186** no backend, 80 → **108**
+  no frontend. E `develop → tst` está agora a **zero** nos dois repos — tudo o que está feito está
+  em `tst`, e nada mais entra ali sem trabalho novo.
+
+  ⚠️ **Isto inverte o cálculo original.** O congelamento foi decidido para evitar promover
+  correcções parciais de um fluxo a meio. Esse risco já não existe da mesma forma: o percurso de
+  conclusão está fechado (ver o LEDG-2487). O que existe agora é o custo simétrico — **sete pontos
+  feitos que ninguém em produção vê**, e uma revisão de 186 commits a fazer de uma vez quando
+  finalmente passar.
 
   🚩 **A linha de 09-14 não tem um único commit desta reformulação.** Os seis que
   levaram o backend de 138 a 144 vieram do LEDG-2327 (harvest domain / INE ownership),

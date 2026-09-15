@@ -924,6 +924,41 @@ de qualquer maneira. Só a **injecção de falha** as separa, e foi preciso escr
 mutação morrer. É a segunda vez nesta revisão que uma decisão correcta quase ficou sem prova por o
 caminho feliz não a mostrar.
 
+### Decisão 15 — a alínea (b) do LEDG-2435 não avança *(2026-09-15)*
+
+**Não se faz.** O plano foi escrito por inteiro e auditado até ao fim; foi a auditoria de
+julgamento que mostrou porquê — e o motivo é que **a premissa do ticket caducou quando o
+LEDG-2431 ficou feito, no dia anterior**.
+
+**A (b) dizia:** quando a asserção traz um email que já pertence a outra conta, o portal cria uma
+segunda conta com endereço fabricado; deixar de a criar e encaminhar para a associação.
+
+🚩 **Mas o que acontece hoje já não é isso.** Desde o 2431, quem cai neste caminho é logado, aterra
+em `/complete-registration` **com o endereço tomado já pré-preenchido**, submete-o, recebe o link de
+associação e **acaba com uma conta só** — a temporária é retirada com `mark_as_deleted`. Há sessão,
+ecrã, explicação e endereço preenchido.
+
+⇒ **A (b) trocaria isso por uma expulsão para `/login` com um código que o frontend não lê.**
+Verificado: `grep -rn "saml_error\|saml_info" frontend/src` não devolve nada. A pessoa aterraria
+numa página de login muda, e o único sinal seria um email.
+
+🚨 **E uma falha de envio trancava-a meia hora.** O `send_mail` **re-levanta** a excepção, e o
+registo do link é gravado **antes** do envio. Logo: mail falha → 500 na callback SAML → o
+`SAMLResponse` já foi consumido pelo replay cache → o registo vivo fica no alvo → o login seguinte
+bate na guarda de link vivo e não envia nada. Sem conta, sem sessão, sem mail. E o `SEND_MAIL` tem
+por omissão `not DEBUG` — precisamente ao contrário de onde a flag costuma estar desligada.
+
+**O que fica em pé, e é a lição:** o invariante *"uma identidade, uma conta"* passou a ser servido
+pelo **desfecho** (a temporária é retirada ao concluir) em vez de pela **abstenção** (não criar).
+Para quem usa o portal o resultado é o mesmo, e o percurso é melhor. O resíduo real — a conta
+temporária de quem **nunca** conclui — é limpeza, e pertence ao **LEDG-2469**, não à ACS.
+
+⚠️ **E nada disto se via em produção de qualquer forma:** PRD tem a flag **ligada**, logo este ramo
+não é percorrido lá.
+
+📄 O plano auditado está preservado em `scratchpad/plano-2435b.md` — se a premissa voltar a mudar,
+não é preciso reescrevê-lo.
+
 ### Decisão 14 — o registo tradicional fica exactamente como está *(2026-09-15)*
 
 🔎 **Apareceu ao analisar o LEDG-2350:** a rota `/register/` **existe no backend** e aceita `POST`,

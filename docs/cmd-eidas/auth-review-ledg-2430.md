@@ -1074,7 +1074,7 @@ do 13** — a tabela tem-nos ao contrário.
 > Duas mudanças, e uma delas é uma **correcção de premissa**, não uma reordenação:
 >
 > ✅ **O LEDG-2431 (ponto 13) ficou feito** e sobe para junto do LEDG-2371, que é onde a execução o
-> põe. Frontend integrado em `develop` (PR #639); backend com PR aberto. Isso desbloqueia a
+> põe. Integrado em `develop` nos dois repos — backend PR #292, frontend PR #639. Isso desbloqueia a
 > **alínea (b) do ponto 14**, cuja condição — escrita no próprio ticket — era exactamente a
 > existência do 13.
 >
@@ -1162,7 +1162,7 @@ do 13** — a tabela tem-nos ao contrário.
 | — | LEDG-2475 | **Ajuda e contactos devolvia 400 em PPR/PRD** — chave reCAPTCHA de registo trocada | Backend | ✅ **Resolvido a 09-11** | Fora da decomposição. 🔑 A causa foi provada pelo **tamanho da resposta**: 54 bytes = o Google rejeitou; 14 = nem chegou lá |
 | **16** | LEDG-2438 | **Estrangeiros: identidade por documento em vez de NIC** | Backend | ✅ **Sim** — PR #283/#284, 15 testes novos; em `develop` e `tst` | 🚨 **Por validar contra o IdP real antes de sair de `tst`** — os testes mockam o pysaml2. 🔻 **Tirou os estrangeiros do âmbito do 17** |
 | — | LEDG-2371 | **A auditoria SAML estava cega** — nenhuma linha chegava ao ficheiro | Backend | ✅ **Feito a 09-14** — PR #285/#286, em `develop` e `tst` | Era pré-requisito prático de tudo. Desbloqueou o **17** e o LEDG-2473 |
-| **13** | **LEDG-2431** | **Associar a uma conta tradicional existente** — a segunda via do ecrã de conclusão | Full-stack | ✅ **Sim** — frontend PR #639 **em `develop`**; backend PR aberto. 9 pontos, 14/14 critérios, **45 mutações mortas** | 🔄 **Subiu do 15 a 09-14 e foi feito a 09-15.** 🚨 **A revisão apanhou um bloqueio:** o mail de associação interpolava o nome **editável pelo próprio** — corrigido antes do PR. 🔓 **Desbloqueia a alínea (b) do 14** |
+| **13** | **LEDG-2431** | **Associar a uma conta tradicional existente** — a segunda via do ecrã de conclusão | Full-stack | ✅ **Sim** — **nos dois repos, em `develop`** — backend PR #292, frontend PR #639. 9 pontos, 14/14 critérios, **45 mutações mortas** | 🔄 **Subiu do 15 a 09-14 e foi feito a 09-15.** 🚨 **A revisão apanhou um bloqueio:** o mail de associação interpolava o nome **editável pelo próprio** — corrigido antes do PR. 🔓 **Desbloqueia a alínea (b) do 14** |
 | 11 | LEDG-2463 | **As 6 contas com conteúdo, 4 delas admin ÚNICO** — plano nomeado | Operação | ❌ Não | 🚩 **Não há ninguém para promover** — as 4 organizações têm **1 membro**, a própria conta sintética. Os donos entram por CMD (têm `auth_nic` válido), logo passa a **depender do LEDG-2437**, não da AMA. À AMA fica só: o que fazer se algum não voltar a entrar |
 | **12** | **LEDG-2470** | 🔄 **Contas institucionais MANTÊM-SE** — não são descontinuadas. Publicar por conta pessoal (própria ou de organização) passa a ser o caminho recomendado, não o único | Operação | ⏸️ **Não, e não avançar** | 🛑 **Premissa corrigida a 2026-09-15 pelo dono do produto:** as contas institucionais **continuam a existir até estar disponível o login tradicional com email e palavra-passe**. O ticket deixa de ser *remover* e passa a *manter, com fim condicionado*. ⚠️ **Ver a nota de ambiguidade na secção 12** |
 | — | **LEDG-2356** | **Melhorias da revisão UX/conteúdo do fluxo de autenticação** | Full-stack | ❌ Não | 🚩 **Nunca esteve nesta tabela, e está `To Do`.** É o **mesmo ecrã do 13**, que **já foi feito** — logo isto passa a incidir sobre o ecrã tal como ficou, incluindo o pré-preenchimento e a nova mensagem de recusa |
@@ -1976,7 +1976,7 @@ de passar a insensível e as **401 contas com maiúsculas** migradas. Alinhar co
 
 ### 13 — LEDG-2431 · Associar a uma conta tradicional existente ✅ FEITO *(2026-09-15)*
 
-> **Entregue.** Frontend integrado em `develop` (PR #639); backend com PR aberto sobre `develop`.
+> **Entregue e integrado nos dois repos, em `develop`** — backend PR #292, frontend PR #639.
 > 9 pontos, 14/14 critérios, **45 mutações mortas**, suite completa do backend verde e 440 testes
 > no frontend.
 >

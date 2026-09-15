@@ -1068,13 +1068,28 @@ do 13** — a tabela tem-nos ao contrário.
 ⇒ **O 15 é o único ponto da decomposição implementável hoje**, e é a metade do primeiro login que
 **nenhuma promoção resolve**.
 
-## Decomposição — ordenada pelo que foi FEITO, e depois pelo que falta
+## Decomposição — feito pela ordem real, e o resto pelo que é fazível
 
-> 🔄 **Actualizada a 2026-09-15 — sétima vez, e desta vez sem reordenar nada por preferência.**
-> Duas mudanças, e uma delas é uma **correcção de premissa**, não uma reordenação:
+> 🔄 **Reescrita a 2026-09-15 — oitava vez, e a primeira em que a tabela muda de *forma*, não só de ordem.**
 >
-> ✅ **O LEDG-2431 (ponto 13) ficou feito** e sobe para junto do LEDG-2371, que é onde a execução o
-> põe. Integrado em `develop` nos dois repos — backend PR #292, frontend PR #639. Isso desbloqueia a
+> **O problema que resolve:** a lista do que falta estava ordenada pelo plano, o que fazia parecer
+> que havia fila de trabalho. Não há. Os pontos passaram a estar em **três blocos declarados** —
+> *a seguir* (sem bloqueio externo), *parado em pessoas* (não há código a escrever) e *sequenciado*
+> (a ordem importa mais do que a data). Um ticket que espera pela AMA deixa de se ler como se fosse
+> o próximo a pegar.
+>
+> **E o que estava feito ganhou datas e números de PR**, confirmados nos merges e não deduzidos da
+> numeração. Duas coisas apareceram só por isso:
+> - **O LEDG-2434 está partido em três** (`5a`, `5b`, `5c`) e a tabela antiga mostrava só o meio.
+>   O script foi versionado a **09-09**, logo a seguir ao ponto 4 — foi a quinta coisa feita, não a
+>   décima primeira. A execução em produção ainda nem começou.
+> - **O LEDG-2435 está partido em dois** (`14a`, `14b`): a alínea (c) ficou feita a 09-11, as (a) e
+>   (b) não.
+>
+> Duas mudanças de conteúdo, e uma delas é uma **correcção de premissa**, não uma reordenação:
+>
+> ✅ **O LEDG-2431 (ponto 13) ficou feito** e fecha o bloco dos feitos, que é onde a execução o põe.
+> **Em `develop` e em `tst` nos dois repos** — backend PR #292, frontend PR #639. Desbloqueia a
 > **alínea (b) do ponto 14**, cuja condição — escrita no próprio ticket — era exactamente a
 > existência do 13.
 >
@@ -1088,15 +1103,11 @@ do 13** — a tabela tem-nos ao contrário.
 > resto. Não são: foram feitos **no meio do trabalho**, e lê-los no fim dava a impressão errada de
 > que a numeração era a cronologia.
 >
-> **Agora a tabela lê-se assim:** primeiro tudo o que está **feito, pela ordem em que foi feito**
-> — e aí o número da coluna `#` salta (7, —, 8, 9, 10, 5, 14, —, 16, —), porque **a numeração é o
-> plano e a ordem das linhas é a execução**. Depois, tudo o que falta, pela ordem de
-> implementação. As linhas `—` são tickets fora da decomposição.
->
-> 🚩 **O salto é a informação, não um defeito.** O ponto 5 foi feito depois do 10; o 16 antes do
-> 11; e três tickets sem número entraram pelo meio. Uma tabela que escondesse isso faria parecer
-> que o plano foi seguido à letra, quando o que aconteceu foi que **se fez o que estava
-> desbloqueado** — e é essa a lição que estes vinte pontos deixam.
+> 🚩 **O salto da coluna `#` é a informação, não um defeito.** A numeração é o **plano**; a ordem
+> das linhas é a **execução**. O 5a foi feito antes do 6, o 16 antes do 11, e quatro tickets sem
+> número entraram pelo meio. Uma tabela que escondesse isso faria parecer que o plano foi seguido
+> à letra, quando o que aconteceu foi que **se fez o que estava desbloqueado** — e é essa a lição
+> que estes vinte pontos deixam.
 
 
 

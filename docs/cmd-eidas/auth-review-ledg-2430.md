@@ -1070,6 +1070,19 @@ do 13** — a tabela tem-nos ao contrário.
 
 ## Decomposição — ordenada pelo que foi FEITO, e depois pelo que falta
 
+> 🔄 **Actualizada a 2026-09-15 — sétima vez, e desta vez sem reordenar nada por preferência.**
+> Duas mudanças, e uma delas é uma **correcção de premissa**, não uma reordenação:
+>
+> ✅ **O LEDG-2431 (ponto 13) ficou feito** e sobe para junto do LEDG-2371, que é onde a execução o
+> põe. Frontend integrado em `develop` (PR #639); backend com PR aberto. Isso desbloqueia a
+> **alínea (b) do ponto 14**, cuja condição — escrita no próprio ticket — era exactamente a
+> existência do 13.
+>
+> 🛑 **O LEDG-2470 (ponto 12) estava escrito ao contrário.** Dizia *"contas institucionais deixam de
+> existir"*. **Não deixam:** continuam a existir até estar disponível o login tradicional com email
+> e palavra-passe. O ticket passa de *remover* a *manter*, e **não se avança com ele**. Ver a
+> ambiguidade que isto abre na secção 12 — não a resolvi sozinho, de propósito.
+>
 > 🔄 **Reordenada a 2026-09-14 para se ler pela ordem real.** Antes, os tickets feitos **fora da
 > numeração** — o LEDG-2467, o LEDG-2475, o LEDG-2371 — estavam despejados no fim, como se fossem
 > resto. Não são: foram feitos **no meio do trabalho**, e lê-los no fim dava a impressão errada de
@@ -1145,15 +1158,15 @@ do 13** — a tabela tem-nos ao contrário.
 | **9** | **LEDG-2464** | **Login ambíguo:** identificador duplicado resolvido por `.first()` — devolvia **sempre a conta mais recente** | Backend | ✅ **Sim** — PR #273, 6 testes novos; em `develop` e `tst` | Nenhuma. 🚨 **Nega acesso a ~26 contas** até o 14 as fundir |
 | 10 | LEDG-2468 | **Nada impede uma organização de ficar sem administrador** — os dois endpoints de membro **e** os quatro caminhos de apagamento | Backend | 🟡 **Parcial** — PR #275: os **dois endpoints** guardados, em `develop` e `tst`. 🚨 **O `mark_as_deleted` continua a orfanar** | Os pontos 3/4/5 dependem da AMA. **Quanto mais cedo o resto entrar, menos casos o 11 trata à mão** |
 | **5** | LEDG-2434 | Levantamento — o script responde às três contagens numa execução | Spike | 🟡 **Parcial** — PR #277/#278, corrido em DEV; em `develop` e `tst` | ⏸️ **A execução em produção espera por tudo estar em `tst`** (decisão 12). Não bloqueia código — bloqueia o fecho de critérios no 8, no 10 e no 14 |
-| **14** | LEDG-2435 | **Uma identidade, uma conta** — as duas classes de duplicado | Backend | 🟡 **Parcial** — a **alínea (c)** feita: PR #279/#280, 11 testes | 🔄 **Desceu do 13.** A **(b) depende do 13 (LEDG-2431)**, que agora vem antes — era a inversão. A **(a)** depende do **5** |
+| **14** | LEDG-2435 | **Uma identidade, uma conta** — as duas classes de duplicado | Backend | 🟡 **Parcial** — a **alínea (c)** feita: PR #279/#280, 11 testes | 🔄 **Desceu do 13.** A **(b)** ✅ **está desbloqueada** — o 13 ficou feito a 09-15, que era a condição escrita no próprio ticket. A **(a)** depende do **5** |
 | — | LEDG-2475 | **Ajuda e contactos devolvia 400 em PPR/PRD** — chave reCAPTCHA de registo trocada | Backend | ✅ **Resolvido a 09-11** | Fora da decomposição. 🔑 A causa foi provada pelo **tamanho da resposta**: 54 bytes = o Google rejeitou; 14 = nem chegou lá |
 | **16** | LEDG-2438 | **Estrangeiros: identidade por documento em vez de NIC** | Backend | ✅ **Sim** — PR #283/#284, 15 testes novos; em `develop` e `tst` | 🚨 **Por validar contra o IdP real antes de sair de `tst`** — os testes mockam o pysaml2. 🔻 **Tirou os estrangeiros do âmbito do 17** |
 | — | LEDG-2371 | **A auditoria SAML estava cega** — nenhuma linha chegava ao ficheiro | Backend | ✅ **Feito a 09-14** — PR #285/#286, em `develop` e `tst` | Era pré-requisito prático de tudo. Desbloqueou o **17** e o LEDG-2473 |
+| **13** | **LEDG-2431** | **Associar a uma conta tradicional existente** — a segunda via do ecrã de conclusão | Full-stack | ✅ **Sim** — frontend PR #639 **em `develop`**; backend PR aberto. 9 pontos, 14/14 critérios, **45 mutações mortas** | 🔄 **Subiu do 15 a 09-14 e foi feito a 09-15.** 🚨 **A revisão apanhou um bloqueio:** o mail de associação interpolava o nome **editável pelo próprio** — corrigido antes do PR. 🔓 **Desbloqueia a alínea (b) do 14** |
 | 11 | LEDG-2463 | **As 6 contas com conteúdo, 4 delas admin ÚNICO** — plano nomeado | Operação | ❌ Não | 🚩 **Não há ninguém para promover** — as 4 organizações têm **1 membro**, a própria conta sintética. Os donos entram por CMD (têm `auth_nic` válido), logo passa a **depender do LEDG-2437**, não da AMA. À AMA fica só: o que fazer se algum não voltar a entrar |
-| **12** | **LEDG-2470** | **Contas institucionais deixam de existir:** publicar passa a ser sempre por conta pessoal, em nome próprio ou de uma organização | Operação | ❌ Não | Depende do **10**. **Contém o 11** como subconjunto, e pode ser a **causa** que o 13 trata como efeito |
-| **13** | **LEDG-2431** | **Associar a uma conta tradicional existente** — a segunda via do ecrã de conclusão | Full-stack | ❌ **Não — é o próximo implementável** | 🔄 **Subiu do 15 a 2026-09-14.** Depende do **2** (feito) e do **5**/**11**, cujo *input de desenho* já está entregue. ⚠️ **Coordenar com o LEDG-2356 e o LEDG-2350**, que mexem no mesmo ecrã |
-| — | **LEDG-2356** | **Melhorias da revisão UX/conteúdo do fluxo de autenticação** | Full-stack | ❌ Não | 🚩 **Nunca esteve nesta tabela, e está `To Do`.** É o **mesmo ecrã do 13** — coordenar antes de o 13 arrancar |
-| — | **LEDG-2350** | **Reescrever o e-mail de confirmação da autenticação** | Conteúdo | ❌ Não | 🚩 **Nunca esteve nesta tabela.** O **13** muda o que esse email diz: passa a poder levar um link que *associa* |
+| **12** | **LEDG-2470** | 🔄 **Contas institucionais MANTÊM-SE** — não são descontinuadas. Publicar por conta pessoal (própria ou de organização) passa a ser o caminho recomendado, não o único | Operação | ⏸️ **Não, e não avançar** | 🛑 **Premissa corrigida a 2026-09-15 pelo dono do produto:** as contas institucionais **continuam a existir até estar disponível o login tradicional com email e palavra-passe**. O ticket deixa de ser *remover* e passa a *manter, com fim condicionado*. ⚠️ **Ver a nota de ambiguidade na secção 12** |
+| — | **LEDG-2356** | **Melhorias da revisão UX/conteúdo do fluxo de autenticação** | Full-stack | ❌ Não | 🚩 **Nunca esteve nesta tabela, e está `To Do`.** É o **mesmo ecrã do 13**, que **já foi feito** — logo isto passa a incidir sobre o ecrã tal como ficou, incluindo o pré-preenchimento e a nova mensagem de recusa |
+| — | **LEDG-2350** | **Reescrever o e-mail de confirmação da autenticação** | Conteúdo | ❌ Não | 🚩 **Nunca esteve nesta tabela.** O **13**, agora feito, **já mudou** o que sai deste ramo: além do mail de confirmação, há um mail que leva um **link de associação** e um terceiro que **recusa** e diz porquê. São três textos a rever, não um |
 | **15** | **LEDG-2469** | **Fundir os duplicados que já existem** e impedi-los na BD | Backend + Operação | ❌ Não | 🔄 **Desceu do 14.** Depende do **9**, **10** e **14**. 🚨 **Antes da promoção final**, senão as \~26 contas ficam de fora |
 | 17 | LEDG-2436 | Identidade sem identificador (eIDAS **e** CMD) | Backend | ⏸️ **Estacionado a 2026-09-14** | O 16 tirou-lhe os estrangeiros, mas **a escolha entre recusar e ligar pelo email continua proibida antes do LEDG-2288** — e nem DEV nem a auditoria conseguem responder. Ver a secção |
 | **18** | **LEDG-2472** | **Consolidação self-service:** avisar que só haverá uma conta por pessoa, e deixar a pessoa mover os dados das secundárias para a principal | Full-stack | ❌ Não | Depende do **requisito 4 do 14** e do **10**. 🛑 **Tem de vir ANTES do 19** — depois da obrigatoriedade, quem perdeu o email de uma conta secundária já não entra nela para empurrar o conteúdo |
@@ -1820,10 +1833,38 @@ Estão presas pelos dois lados, que é o padrão do LEDG-2474.
 dump restaurado de produção, mas esta doc já teve de retratar uma conclusão tirada assim.
 **Confirmar em produção antes de fechar o ticket**; é o mesmo comando de leitura.
 
-### 12 — LEDG-2470 · Contas institucionais deixam de existir *(operação)*
+### 12 — LEDG-2470 · Contas institucionais *mantêm-se* *(operação)* ⏸️ NÃO AVANÇAR
 
-Decisão de produto de 2026-09-10: publicar passa a ser sempre a partir de uma **conta pessoal**, em
-nome próprio ou de uma **organização** de que a pessoa é membro.
+🛑 **Premissa corrigida a 2026-09-15, pelo dono do produto, e nas suas palavras:** *"contas
+institucionais vão continuar a existir — até estar disponível o login tradicional com email e
+pass"*. **Não avançar com este ticket.**
+
+Tudo o que esta secção descreve abaixo foi escrito sob a premissa contrária — que as contas
+institucionais deixariam de existir — e fica aqui como **análise ainda válida do terreno**, não
+como plano a executar. Em concreto: a capacidade de publicar em nome de uma organização existe e
+está verificada; a inexistência do conceito no código continua verdadeira; a hipótese das caixas
+partilhadas continua por verificar e continua a valer a pena. O que muda é o **destino**: não há
+remoção, migração forçada nem prazo.
+
+⚠️ **E fica uma ambiguidade por resolver, que só o dono do produto fecha.** O **ponto 1**
+(LEDG-2432) diz que o login por email e palavra-passe foi **reposto** e está feito, e o **ponto
+19** (LEDG-2471) planeia **descontinuá-lo**. A condição enunciada — *"até estar disponível o login
+tradicional"* — não encaixa em nenhum dos dois como estão escritos. As leituras possíveis:
+> **(a)** o login tradicional que falta é **para contas institucionais em concreto**, e o do ponto 1
+> não serve esta população; **(b)** a condição é na verdade *"enquanto o login tradicional existir"*,
+> e o fim das institucionais passa a ser **efeito do ponto 19**, não causa; **(c)** há um login
+> tradicional novo, ainda por especificar, que não está em ticket nenhum.
+>
+> 🚩 **Não escolhi nenhuma.** Escolher por conta própria produziria o plano errado, que é
+> exactamente o que esta correcção acabou de evitar. Fica por perguntar.
+
+⚠️ Isto também esvazia a frase do ponto 13 que dizia que o 12 *"pode ser a **causa** que o 13 trata
+como efeito"*: sem remoção, não há causa a montante — o 13 ficou feito por si.
+
+---
+
+**Análise anterior, sob a premissa agora corrigida** — publicar passar a ser sempre a partir de uma
+**conta pessoal**, em nome próprio ou de uma **organização** de que a pessoa é membro:
 
 ✅ **A capacidade já existe, e isso reduz o ticket a uma migração.** Verificado: o mixin `Owned`
 (`udata/core/owned.py:80-102`) tem `owner` e `organization`; o `check_organization_is_valid_for_current_user`
@@ -1933,7 +1974,35 @@ pela qual isto é um ponto e não dois.
 **case-sensitive** (`models.py:76`, sem collation). Se o 13 decidir normalizar na escrita, o índice tem
 de passar a insensível e as **401 contas com maiúsculas** migradas. Alinhar com o 13 antes de tocar.
 
-### 15 — LEDG-2431 · Associar a uma conta tradicional existente *(a lacuna real)*
+### 13 — LEDG-2431 · Associar a uma conta tradicional existente ✅ FEITO *(2026-09-15)*
+
+> **Entregue.** Frontend integrado em `develop` (PR #639); backend com PR aberto sobre `develop`.
+> 9 pontos, 14/14 critérios, **45 mutações mortas**, suite completa do backend verde e 440 testes
+> no frontend.
+>
+> **O desenho ficou o que esta secção defendia:** um único campo, a distinção taken/livre decidida
+> no servidor e manifesta **só no que é enviado por email**, e a resposta do browser idêntica nos
+> três ramos — pinada agora também para o requerente pendente.
+>
+> **O que a implementação acrescentou ao que aqui estava escrito:**
+> - A ordem das três escritas é **limpar o `auth_nic` → gravar → retirar a placeholder**. A ordem
+>   inversa tem uma janela em que uma identidade fica em duas contas, que o login recusa
+>   (`ambiguous_identity`) — uma falha aí trancava a pessoa **fora das duas**. Assim, uma falha
+>   deixa-a em nenhuma e o login seguinte resolve sozinho.
+> - A placeholder é retirada com `mark_as_deleted`, nunca com o delete cru do merge administrativo:
+>   esta conta teve sessão completa desde antes do ecrã, logo pode ter tokens e contact points.
+> - Os **follows são movidos**, não motivo de recusa. Recusar por um dataset seguido bloquearia o
+>   caso principal a troco de nada.
+> - 🚨 **A revisão apanhou um bloqueio que este documento não tinha previsto:** o mail de associação
+>   interpolava `first_name`/`last_name` **do documento `User`**, que o próprio utilizador reescreve
+>   pelo formulário de perfil, num mail enviado para um endereço que ele escolhe. Passou a ler os
+>   nomes da **asserção**, como o wizard já fazia. Corrigido antes do PR.
+>
+> O texto abaixo é a análise que levou a este desenho, e fica como está.
+
+---
+
+#### Análise original *(a lacuna real)*
 
 Três restrições obrigatórias: **prova de posse** do email de destino, **resposta genérica** (já
 construída pelo ponto 2 — **estender, não reinventar**: o aviso ao dono da caixa passa a ser um

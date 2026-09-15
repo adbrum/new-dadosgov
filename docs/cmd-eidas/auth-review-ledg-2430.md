@@ -1347,10 +1347,16 @@ do 13** — a tabela tem-nos ao contrário.
 | **19** | LEDG-2471 | **Descontinuar o login por email e palavra-passe** | Full-stack | ❌ Não | Depende do **15**, **17**, **18**, do LEDG-2437 e do **LEDG-2474**. ⚠️ **E agora do 12** — enquanto as institucionais dependerem do login tradicional, descontinuá-lo tira-lhes a via de entrada |
 | **20** | LEDG-1277 | **Obrigatoriedade do Autenticação.gov** — o fim do arco | Produto | 🟡 Em curso | Depende do **19**. ⚠️ **Não activar antes dele** |
 
-**Próximo a implementar:** 🚩 **nenhum ponto de código da decomposição está desbloqueado.** O **13**
-era o último, e ficou feito a 09-15. O que resta à frente para em **pessoas**, não em código — e é
-por isso que a tabela acima passou a separar *a seguir*, *parado em pessoas* e *sequenciado*, em vez
-de os misturar numa lista que dava a impressão de haver fila de trabalho.
+**Próximo a implementar:** 🚩 **a fila de código acabou.** O **13** era o último ponto da
+decomposição, ficou feito a 09-15, e `develop` e `tst` estão agora **idênticos** nos dois repos —
+verificado por diff de ficheiros, não por contagem de commits. O que resta à frente para numa
+**decisão** ou numa **promoção**, e é por isso que a tabela acima separa *a seguir*, *parado em
+pessoas* e *sequenciado* em vez de os misturar numa lista que dava a impressão de haver trabalho
+por pegar.
+
+⇒ **O único item onde escrever código ainda muda alguma coisa hoje é o LEDG-2489** — que nem
+sequer é desta decomposição: é a suite intermitente que **mede** tudo o que ela entrega, e que já
+obrigou a contornar o gate uma vez.
 
 O que **é** fazível agora não veio da decomposição: o **LEDG-2350** (quatro textos, não um), o
 **LEDG-2356** (falta escrever critérios de aceitação) e o **LEDG-2473** (falta decidir um

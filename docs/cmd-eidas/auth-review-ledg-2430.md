@@ -1206,7 +1206,28 @@ do 13** — a tabela tem-nos ao contrário.
 
 ## Decomposição — feito pela ordem real, e o resto pelo que é fazível
 
-> 🔄 **Nona revisão, 2026-09-15 (segunda do dia) — e esta veio de fora do código.**
+> 🔄 **Décima primeira revisão, 2026-09-16 — e o item novo foi encontrado a USAR o portal, não a lê-lo.**
+>
+> 🚨 **O cidadão pode desmarcar todos os identificadores no ecrã de consentimento do
+> autenticacao.gov**, e sem identificador nasce **uma conta nova por cada login**. Reproduzido em
+> dados reais: uma pessoa, um CMD, **três contas** em duas tardes. O **LEDG-2503** entra a
+> encabeçar o bloco *A SEGUIR*.
+>
+> 🔓 **E o ponto 17 deixou de depender do LEDG-2288.** A pergunta que o estacionava — *"recusar ou
+> ligar pelo email quem chega sem identificador?"* — assentava em supor que esses casos eram
+> limitações do IdP. **Não são: são caixas desmarcadas.** Fechada essa porta, sobra o que o IdP
+> não conseguir fornecer: um universo muito menor, que já não precisa da análise do eIDAS para
+> ser decidido.
+>
+> 🚩 **O que o destranca passa a ser a validação do 2503** — e essa validação pode invertê-lo: se
+> o IdP recusar a autenticação com o NIC obrigatório, exclui todos os estrangeiros e o 17 volta
+> ao estado em que estava.
+>
+> 🔄 **Décima revisão, 2026-09-15 — `develop` e `tst` ficaram idênticos e a fila de código
+> esvaziou-se.** Foi por isso que o LEDG-2489, a suite intermitente, subiu ao topo: era o único
+> sítio onde escrever código ainda mudava alguma coisa. Deixou de o ser hoje.
+>
+> 🔄 **Nona revisão, 2026-09-15 (segunda do dia) — e essa veio de fora do código.**
 >
 > 🚨 **O DEV partilha a base de dados de PRODUÇÃO** (decisão 16). Três linhas mudam por causa disso:
 >
@@ -1330,6 +1351,7 @@ do 13** — a tabela tem-nos ao contrário.
 | — | LEDG-2473 | **A linha `outcome=success` prematura** na auditoria | Backend | ✅ **09-15** — PR #294, 6 commits, **6 mutações mortas** | 🔑 **Sem vocabulário novo:** `deleted` é `rejected`; a confirmação pendente é `migration_pending`, **não recusa** — e o `reason` separa. Os cinco desfechos passaram a viver no docstring do emissor. 🚩 **O gate da suite foi passado com override**, com prova de que a intermitência é de `develop` |
 | — | **LEDG-2350** | **Os quatro textos do ramo de conclusão de registo** | Conteúdo | ✅ **09-15** — PR #296, 6 commits, **13 mutações mortas** | 🚨 **Achado: o mail de recusa saía em INGLÊS em produção** — zero entradas no catálogo pt, e o `gettext` devolve o msgid em silêncio. Durou uma semana porque o teste que o apanharia lista as strings à mão e o mail nasceu depois. 🔑 O aviso silencioso deixou de dar um passo impossível a quem está retido no ecrã |
 | | | **▼ A SEGUIR — sem bloqueio externo, só âmbito por fechar** | | | |
+| — | 🆕 **LEDG-2503** | **O cidadão pode desmarcar todos os identificadores** — e sem identificador nasce **uma conta nova por cada login** | Backend | ❌ Não | 🚨 **Reproduzido em dados reais a 09-15/16: uma pessoa, um CMD, TRÊS contas.** A correcção são **quatro linhas** — os atributos passam a obrigatórios, e a lógica de decisão já existe e já está certa. ⚠️ **Tem de ser validado contra um CMD de estrangeiro**: se o IdP recusar, exclui-os a todos. 🔓 **Reduz o 17 ao que o IdP não fornecer** |
 | — | **LEDG-2489** | **A suite do backend é intermitente sob execução paralela** — 13 falhas em `develop`, testes diferentes a cada corrida | Testes | ❌ Não | 🚨 **Subiu ao topo a 09-15.** Não é autenticação, mas **mede tudo o que esta revisão entrega** — e agora que `develop` e `tst` estão iguais, é o único item onde escrever código ainda muda alguma coisa. 🚩 **Um gate que ninguém consegue passar deixa de ser um gate:** o do 2473 teve de ser contornado, e olhar para a lista e dizer *"estas não são minhas"* é como uma regressão real passa camuflada |
 | — | **LEDG-2487** | 🆕 **O percurso de conclusão de inscrição, como UMA coisa** — checklist de aceitação dos 10 casos | Verificação | ❌ Não | 🚩 **Criado a 09-15 porque não existia.** O percurso nunca teve ticket próprio — estava repartido por sete, e foi essa repartição que deixou passar semanas o facto de **falhar inteiro em produção**. Sem código próprio: é onde se verifica que as peças encaixam. 🛑 **O caso 1 depende do LEDG-2437** |
 | — | **LEDG-2356** | **Melhorias da revisão UX/conteúdo do fluxo de autenticação** | Full-stack | 🟡 **Parcial** — 09-15, PR #641: o aviso da conta existente deixou de ser a última oração de um parágrafo e passou a **cartão próprio**, visível em todos os casos | 🚩 **O resto está bloqueado:** falta a revisão de copy, e o protótipo Figma é de **27-08** — descreve um ecrã que mudou a 09-15. ⚠️ **Perguntar à autora se ainda se aplica** antes de pegar nos 8 pontos |
@@ -1338,7 +1360,7 @@ do 13** — a tabela tem-nos ao contrário.
 | **10** (resto) | LEDG-2468 | Os **quatro caminhos de apagamento** que continuam a orfanar | Backend | 🛑 Bloqueado | **Decisão da AMA** nos pontos 3/4/5. 🚨 **63 organizações já órfãs** (DEV). É o que trava a fila |
 | **11** | LEDG-2463 | **As 6 contas com conteúdo, 4 delas admin ÚNICO** | Operação | 🛑 Bloqueado | 🚩 **Não há ninguém para promover** — as 4 organizações têm **1 membro**, a própria conta. Os donos entram por CMD ⇒ depende do **LEDG-2437**, que é promoção retida |
 | **12** | **LEDG-2470** | 🔄 **Contas institucionais MANTÊM-SE** — não são descontinuadas | Operação | ⏸️ **Não avançar** | 🛑 **Premissa corrigida a 09-15 pelo dono do produto:** existem **até haver login tradicional com email e palavra-passe**. ⚠️ **A condição não encaixa nem no 1 nem no 19** — três leituras possíveis, nenhuma escolhida. Ver a secção 12 |
-| **17** | LEDG-2436 | Identidade sem identificador (eIDAS **e** CMD) | Backend | ⏸️ **Estacionado a 09-14** | O 16 tirou-lhe os estrangeiros, mas a escolha entre recusar e ligar pelo email continua **proibida antes do LEDG-2288** |
+| **17** | LEDG-2436 | Identidade sem identificador (eIDAS **e** CMD) | Backend | ⏸️ **Estacionado — mas a razão mudou a 09-16** | 🔓 **Deixou de depender do LEDG-2288.** Quase todos estes casos são **cidadãos que desmarcaram as caixas**, não limitações do IdP — e o **LEDG-2503** fecha essa porta. ⇒ **O que o destranca é a validação do 2503**, não a análise do eIDAS |
 | — | **LEDG-2474** | **Quatro razões de recusa dão a mesma resposta** na recuperação — e uma conta inactiva fica **sem via de entrada** | Backend + Produto | 🛑 Bloqueado | **Decisão da AMA.** 🚨 **Pré-requisito do 19**, herdado do 2467, e agravado pelo **7** |
 | — | LEDG-2288 | **Analisar autenticação eIDAS** | Análise | 🛑 **Outra pessoa** | 🚨 **Bloqueia o 17.** A pergunta: algum IdP europeu real omite o `PersonIdentifier`? |
 | | | **▼ SEQUENCIADO — a ordem importa mais do que a data** | | | |
@@ -2268,6 +2290,22 @@ muda o ecrã de consentimento dos nacionais, o formato exacto dos três atributo
 asserção de nacional não traz o trio completo com um `DocType` do conjunto** — a guarda assume
 que não.
 
+> 🚨 **Actualização de 2026-09-16 — duas destas suposições caíram, e a observação veio de usar o
+> portal.**
+>
+> **O `isRequired="False"` MUDA o ecrã de consentimento**, e muda-o de uma forma que não estava
+> prevista: põe os quatro atributos em *"Dados Opcionais"*, **com caixas que o cidadão pode
+> desmarcar**. Não era uma alteração inócua — é a origem de um defeito real (LEDG-2503).
+>
+> **E o ecrã oferece os três atributos de documento a um cidadão NACIONAL.** Não prova que a
+> asserção os traga preenchidos, mas desfaz o à-vontade com que a guarda assume que não os traz.
+> Se trouxer, a composição do identificador continua correcta — o `user_nic or …` prefere sempre
+> o NIC — mas a suposição deixa de poder ser citada como facto.
+>
+> 🚩 **E a terceira suposição, a de que `isRequired="True"` faz a autenticação falhar, é
+> contradita pelo próprio código:** o email é obrigatório e há **quatro ramos** a tratar o email
+> vazio. Se bloqueasse, seriam inalcançáveis.
+
 **Duas lições deste ponto, que valem para lá dele:**
 
 1. 🚩 **Dois códigos de duas letras podem ser a mesma coisa noutro alfabeto.** `TR` e `CR` são
@@ -2283,6 +2321,25 @@ que não.
 para este vir primeiro.
 
 ### 17 — LEDG-2436 · Identidade sem identificador *(bug)* ⏸️ ESTACIONADO
+
+> 🔓 **2026-09-16 — deixou de depender do LEDG-2288, e a razão muda o tamanho do problema.**
+>
+> A pergunta que estacionava este ponto — *"recusar quem chega sem identificador, ou ligar pelo
+> email?"* — assentava numa suposição que ninguém tinha verificado: **que esses casos eram
+> limitações do IdP**, e que era preciso saber quantos existiam antes de decidir.
+>
+> 🚨 **Não são limitações do IdP. São caixas desmarcadas.** O ecrã de consentimento põe os quatro
+> identificadores em *"Dados Opcionais"*, e o cidadão pode desmarcá-los todos. Reproduzido em
+> dados reais: **uma pessoa, um CMD, três contas** em duas tardes.
+>
+> ⇒ O **LEDG-2503** fecha essa porta marcando-os obrigatórios. **Se funcionar, o que sobra aqui é
+> só o que o IdP não conseguir fornecer** — um universo muito menor, e que já não precisa de
+> saber se algum IdP europeu omite o `PersonIdentifier` para ser decidido.
+>
+> 🚩 **Continua estacionado, e de propósito.** A validação do 2503 contra um CMD de cidadão
+> estrangeiro pode invertê-lo: se o IdP recusar a autenticação com o NIC obrigatório, exclui-os a
+> todos, e este ponto volta exactamente ao estado em que está. **O que o destranca é essa
+> validação, não o 2288.**
 
 #### Arrancado e parado a 2026-09-14, antes de haver código
 

@@ -1206,7 +1206,25 @@ do 13** — a tabela tem-nos ao contrário.
 
 ## Decomposição — feito pela ordem real, e o resto pelo que é fazível
 
-> 🔄 **Décima primeira revisão, 2026-09-16 — e o item novo foi encontrado a USAR o portal, não a lê-lo.**
+> 🔄 **Décima segunda revisão, 2026-09-16 — o item encontrado a usar o portal ficou feito no mesmo dia.**
+>
+> ✅ **O LEDG-2503 está em `develop`** (PR #301). Os quatro atributos identificadores passam a
+> obrigatórios, o que retira as caixas do ecrã de consentimento. **Nenhuma lógica mudou** — o
+> resolvedor já preferia o NIC quando existe e já compunha do documento quando não existe.
+>
+> ⏸️ **Mas o ticket não está fechado:** um critério ficou `unmet` de propósito — **nenhum teste
+> alcança o IdP**. A validação contra um CMD real, **nacional e estrangeiro**, é condição de
+> promoção. Se o IdP recusar quem não tem um atributo obrigatório, o impacto não é só nos
+> estrangeiros: como nenhum cidadão tem os quatro, é em toda a gente.
+>
+> 🚩 **Duas suposições foram desfeitas por medição, e a segunda era minha.** A primeira: *"o
+> `isRequired` faz o IdP recusar"* — nunca foi observada, e o que foi é que `tst` correu com o
+> NIC obrigatório duas semanas e meia, com logins a funcionar. A segunda: escrevi no comentário
+> que *"ninguém tem os quatro atributos"*, argumentando a partir do compositor — que é sobre o
+> que **nós** fazemos com a resposta, não sobre o que o IdP fornece. A revisão apanhou-a, e é a
+> mesma classe de defeito que este ticket existe para corrigir.
+>
+> 🔄 **Décima primeira revisão, 2026-09-16 — o item novo foi encontrado a USAR o portal.**
 >
 > 🚨 **O cidadão pode desmarcar todos os identificadores no ecrã de consentimento do
 > autenticacao.gov**, e sem identificador nasce **uma conta nova por cada login**. Reproduzido em
@@ -1350,8 +1368,8 @@ do 13** — a tabela tem-nos ao contrário.
 | **13** | **LEDG-2431** | **Associar a uma conta tradicional existente** — a segunda via do ecrã de conclusão | Full-stack | ✅ **09-15** — PR #292 e #639, **em `develop` E `tst`**. 9 pontos, 14/14 critérios, **45 mutações mortas** | 🔄 Subiu do 15 a 09-14. 🚨 **A revisão apanhou um bloqueio** — o mail nomeava um campo editável pelo próprio. 🔓 **Desbloqueou a (b) do 14** |
 | — | LEDG-2473 | **A linha `outcome=success` prematura** na auditoria | Backend | ✅ **09-15** — PR #294, 6 commits, **6 mutações mortas** | 🔑 **Sem vocabulário novo:** `deleted` é `rejected`; a confirmação pendente é `migration_pending`, **não recusa** — e o `reason` separa. Os cinco desfechos passaram a viver no docstring do emissor. 🚩 **O gate da suite foi passado com override**, com prova de que a intermitência é de `develop` |
 | — | **LEDG-2350** | **Os quatro textos do ramo de conclusão de registo** | Conteúdo | ✅ **09-15** — PR #296, 6 commits, **13 mutações mortas** | 🚨 **Achado: o mail de recusa saía em INGLÊS em produção** — zero entradas no catálogo pt, e o `gettext` devolve o msgid em silêncio. Durou uma semana porque o teste que o apanharia lista as strings à mão e o mail nasceu depois. 🔑 O aviso silencioso deixou de dar um passo impossível a quem está retido no ecrã |
+| — | **LEDG-2503** | **O cidadão podia desmarcar todos os identificadores** — e sem identificador nascia **uma conta nova por cada login** | Backend | ✅ **09-16** — PR #301, **3 mutações mortas** | 🚨 **Reproduzido em dados reais: uma pessoa, um CMD, TRÊS contas.** Os quatro atributos passam a obrigatórios; **nenhuma lógica muda** — a decisão já existia e já estava certa. ⏸️ **Por validar contra um CMD real, nacional E estrangeiro** — nenhum teste alcança o IdP |
 | | | **▼ A SEGUIR — sem bloqueio externo, só âmbito por fechar** | | | |
-| — | 🆕 **LEDG-2503** | **O cidadão pode desmarcar todos os identificadores** — e sem identificador nasce **uma conta nova por cada login** | Backend | ❌ Não | 🚨 **Reproduzido em dados reais a 09-15/16: uma pessoa, um CMD, TRÊS contas.** A correcção são **quatro linhas** — os atributos passam a obrigatórios, e a lógica de decisão já existe e já está certa. ⚠️ **Tem de ser validado contra um CMD de estrangeiro**: se o IdP recusar, exclui-os a todos. 🔓 **Reduz o 17 ao que o IdP não fornecer** |
 | — | **LEDG-2489** | **A suite do backend é intermitente sob execução paralela** — 13 falhas em `develop`, testes diferentes a cada corrida | Testes | ❌ Não | 🚨 **Subiu ao topo a 09-15.** Não é autenticação, mas **mede tudo o que esta revisão entrega** — e agora que `develop` e `tst` estão iguais, é o único item onde escrever código ainda muda alguma coisa. 🚩 **Um gate que ninguém consegue passar deixa de ser um gate:** o do 2473 teve de ser contornado, e olhar para a lista e dizer *"estas não são minhas"* é como uma regressão real passa camuflada |
 | — | **LEDG-2487** | 🆕 **O percurso de conclusão de inscrição, como UMA coisa** — checklist de aceitação dos 10 casos | Verificação | ❌ Não | 🚩 **Criado a 09-15 porque não existia.** O percurso nunca teve ticket próprio — estava repartido por sete, e foi essa repartição que deixou passar semanas o facto de **falhar inteiro em produção**. Sem código próprio: é onde se verifica que as peças encaixam. 🛑 **O caso 1 depende do LEDG-2437** |
 | — | **LEDG-2356** | **Melhorias da revisão UX/conteúdo do fluxo de autenticação** | Full-stack | 🟡 **Parcial** — 09-15, PR #641: o aviso da conta existente deixou de ser a última oração de um parágrafo e passou a **cartão próprio**, visível em todos os casos | 🚩 **O resto está bloqueado:** falta a revisão de copy, e o protótipo Figma é de **27-08** — descreve um ecrã que mudou a 09-15. ⚠️ **Perguntar à autora se ainda se aplica** antes de pegar nos 8 pontos |

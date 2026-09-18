@@ -1485,11 +1485,11 @@ do 13** — a tabela tem-nos ao contrário.
 > - **1 a 30** — tudo o que está feito, do mais antigo ao mais recente. **Os seis primeiros são
 >   anteriores a esta revisão** e estão aqui porque **explicam o desenho**: sem eles a
 >   decomposição parece arbitrária
-> - **31 a 39** — o que vem a seguir, **pela ordem de o fazer**, sem bloqueio externo
+> - **31 a 40** — o que vem a seguir, **pela ordem de o fazer**, sem bloqueio externo
 > - **🚨 RETIDO** — o LEDG-2437, sozinho, porque é o único com **produção partida agora**
 > - **EM CURSO NOUTRAS MÃOS** — em andamento fora desta decomposição, com estado real do Jira
 > - **🛑** — parado em decisões de pessoas; não tem ordem porque não depende de nós
-> - **40 a 41** — sequenciado: a ordem entre eles importa mais do que qualquer data
+> - **41 a 42** — sequenciado: a ordem entre eles importa mais do que qualquer data
 >
 > O `§N` a seguir à chave é o número da **secção** deste documento, e não muda.
 >
@@ -1510,6 +1510,24 @@ do 13** — a tabela tem-nos ao contrário.
 >   tradicional. Está ligado por dependência real, não por coincidência de investigação
 > - **O LEDG-1176 continua em Backlog.** Foi resolvido em código pelo LEDG-2462 a 09-09, e
 >   ninguém fechou o ticket
+
+> 🆕 **Entrou a 2026-09-18 — o LEDG-2524, no 32.** Não veio de análise nenhuma: veio de alguém a
+> configurar o seu próprio `.env` para o 31 e a perguntar por que razão um default era `True` e o
+> outro `False`.
+>
+> 🚨 **O `MIGRATION_MODE_ENABLED` tem três valores por omissão que não concordam** — `True` no
+> `udata.cfg` (que É o ficheiro de produção: é o que o `UDATA_SETTINGS` do Dockerfile aponta),
+> `True` na classe `Testing`, e `False` em quem o lê no código. Logo **um ambiente que não defina a
+> variável fica com a migração obrigatória**, que é exactamente o estado que o produto não quer.
+>
+> 🔑 **E as três partes não custam o mesmo**, o que é o que o torna um ticket e não uma linha: o
+> `udata.cfg` é uma linha sem impacto em testes; baixar o `settings.Testing` muda o significado de
+> **117 testes em silêncio** — medidos, não estimados.
+>
+> 🚩 **A mesma família de defeito apareceu duas vezes no mesmo dia.** A flag nova esteve declarada
+> e **nunca lida** no `udata.cfg`, o que a prendia a `False` dissesse o `.env` o que dissesse — e
+> foi apanhada pela mesma pessoa, pela mesma via. Nenhum teste a apanhava, porque uma linha em
+> falta e uma linha a `False` produzem a mesma aplicação a correr.
 
 > 🔄 **Ajustado a 2026-09-18 — o LEDG-2520 sobe para o 32, antes do LEDG-2472.** Não é uma
 > reordenação do plano: é o alcance do próprio 2520 que cresceu ao ser verificado.
@@ -1569,14 +1587,15 @@ do 13** — a tabela tem-nos ao contrário.
 | **30** | **LEDG-2511** | 🆕 **eIDAS: o país de origem chega na asserção e perde-se no hash** | Backend | ✅ **09-17** — PR #316, **em `develop`**. 7 pontos, 6/6 critérios | 🔑 Sabe-se que entrou por eIDAS, **nunca de que país**. 🚩 **Chave própria**: o `auth_doc_nationality` é forçado a `PT` em títulos de residência e somaria três populações |
 | | | **▼ A SEGUIR — sem bloqueio externo, só âmbito por fechar** | | | |
 | **31** | **LEDG-2517** | 🆕 **Convidar a associar CMD/eIDAS quem entra por email e palavra-passe** — facultativo e dispensável, com a flag desligada | Full-stack | ❌ Não | 🔑 **Quase tudo já existe:** o predicado certo está escrito em `migration_check` e sai antes de ser calculado; o componente do aviso existe; o fluxo é o LEDG-2431. ⚠️ **O frontend NÃO pode ler a flag** — é o LEDG-2432 a repetir-se. 🚩 **Constrói o estado de "dispensado"**, que o LEDG-2472 reutiliza |
-| **32** | **LEDG-2520** | 🆕 **Só os conjuntos de dados têm transferência** — nas reutilizações a lógica está escrita e o botão desligado; nas APIs não existe | Full-stack | ❌ Não | 🔗 **Vem ANTES do 33**, senão a consolidação entrega um caminho que não chega ao fim. 🚨 **O LEDG-1628 foi fechado a dizer que corrigia as duas** — só o dataset ficou ligado, e ninguém deu por isso durante meses. ✅ O modelo de transferência já aceita os três tipos; nas reutilizações é **ligar** o que já lá está |
-| **33** | LEDG-2472 §18 | **Consolidação self-service** — mover os dados das contas secundárias | Full-stack | ❌ Não | 🔗 **A outra metade do 31.** O 31 associa uma identidade a uma conta que ainda não tem nenhuma; **este junta duas contas que já existem**. ⚠️ Depende do 34 se oferecer "mover tudo", e do LEDG-2468 se a secundária for apagada |
-| **34** | LEDG-2469 §15 | **Fundir os duplicados que já existem** e impedi-los na BD | Backend + Operação | ❌ Não | 🔗 **O lado operacional do 33.** Contas que partilham identificador não conseguem sequer entrar — o login recusa por ambiguidade — logo não é self-service. 🛑 Depende de decisões da AMA |
-| **35** | **LEDG-2507** | **O assunto dos e-mails não nomeia o portal** — sai o título por omissão do udata em vez do nome do site | Backend | ❌ Não | 🚩 **Criado a 09-16.** Pequeno e sem dependências. Encontrado ao rever os quatro textos do LEDG-2350 |
-| **36** | LEDG-2435 §14b | A alínea **(a)** — não criar conta quando o IdP não dá email | Backend | ❌ Não | 🔓 **Desbloqueada a 09-15** pela decisão 16: dependia do 5c, que afinal já estava feito. ⚠️ **Rever a premissa antes de planear** — foi o que matou a alínea (b) |
-| **37** | **LEDG-2487** | 🆕 **O percurso de conclusão de inscrição, como UMA coisa** — checklist de aceitação dos 10 casos | Verificação | ❌ Não | 🚩 **Criado a 09-15 porque não existia.** O percurso nunca teve ticket próprio — estava repartido por sete, e foi essa repartição que deixou passar semanas o facto de **falhar inteiro em produção**. Sem código próprio: é onde se verifica que as peças encaixam. 🛑 **O caso 1 depende do LEDG-2437** |
-| **38** | **LEDG-2356** | **Melhorias da revisão UX/conteúdo do fluxo de autenticação** | Full-stack | 🟡 **Parcial** — 09-15, PR #641: o aviso da conta existente deixou de ser a última oração de um parágrafo e passou a **cartão próprio**, visível em todos os casos | 🚩 **O resto está bloqueado:** falta a revisão de copy, e o protótipo Figma é de **27-08** — descreve um ecrã que mudou a 09-15. ⚠️ **Perguntar à autora se ainda se aplica** antes de pegar nos 8 pontos |
-| **39** | **LEDG-2509** | 🆕 **Extrair a composição e o hash da identidade para módulo próprio** — o ficheiro tem 4354 linhas | Backend | ❌ Não | 🚩 **A divisão óbvia é a errada:** separar o eIDAS são 11% do ficheiro, dependentes do núcleo partilhado de 56%. A fatia que vale é a **congelada** — sem Flask nem BD — para o *"não mexer"* deixar de ser um comentário e passar a ser uma fronteira. 🛑 **Depois de a promoção desbloquear:** um teste lê o código-fonte do módulo, e há 250 commits por promover |
+| **32** | **LEDG-2524** | 🆕 **O `MIGRATION_MODE_ENABLED` tem TRÊS valores por omissão que não concordam** — e o de produção liga a obrigatoriedade | Backend | ❌ Não | 🚨 **Um ambiente que não defina a variável fica com a migração OBRIGATÓRIA**, sem ninguém a ter pedido — e a obrigatoriedade não é para usar ainda. 🔑 **As três partes não custam o mesmo:** o `udata.cfg` é uma linha sem custo; o `settings.Testing` muda o significado de **117 testes em silêncio**. 🚩 Encontrado a 09-18 ao configurar o `.env` do 31 |
+| **33** | **LEDG-2520** | 🆕 **Só os conjuntos de dados têm transferência** — nas reutilizações a lógica está escrita e o botão desligado; nas APIs não existe | Full-stack | ❌ Não | 🔗 **Vem ANTES do 34**, senão a consolidação entrega um caminho que não chega ao fim. 🚨 **O LEDG-1628 foi fechado a dizer que corrigia as duas** — só o dataset ficou ligado, e ninguém deu por isso durante meses. ✅ O modelo de transferência já aceita os três tipos; nas reutilizações é **ligar** o que já lá está |
+| **34** | LEDG-2472 §18 | **Consolidação self-service** — mover os dados das contas secundárias | Full-stack | ❌ Não | 🔗 **A outra metade do 31.** O 31 associa uma identidade a uma conta que ainda não tem nenhuma; **este junta duas contas que já existem**. ⚠️ Depende do 35 se oferecer "mover tudo", e do LEDG-2468 se a secundária for apagada |
+| **35** | LEDG-2469 §15 | **Fundir os duplicados que já existem** e impedi-los na BD | Backend + Operação | ❌ Não | 🔗 **O lado operacional do 34.** Contas que partilham identificador não conseguem sequer entrar — o login recusa por ambiguidade — logo não é self-service. 🛑 Depende de decisões da AMA |
+| **36** | **LEDG-2507** | **O assunto dos e-mails não nomeia o portal** — sai o título por omissão do udata em vez do nome do site | Backend | ❌ Não | 🚩 **Criado a 09-16.** Pequeno e sem dependências. Encontrado ao rever os quatro textos do LEDG-2350 |
+| **37** | LEDG-2435 §14b | A alínea **(a)** — não criar conta quando o IdP não dá email | Backend | ❌ Não | 🔓 **Desbloqueada a 09-15** pela decisão 16: dependia do 5c, que afinal já estava feito. ⚠️ **Rever a premissa antes de planear** — foi o que matou a alínea (b) |
+| **38** | **LEDG-2487** | 🆕 **O percurso de conclusão de inscrição, como UMA coisa** — checklist de aceitação dos 10 casos | Verificação | ❌ Não | 🚩 **Criado a 09-15 porque não existia.** O percurso nunca teve ticket próprio — estava repartido por sete, e foi essa repartição que deixou passar semanas o facto de **falhar inteiro em produção**. Sem código próprio: é onde se verifica que as peças encaixam. 🛑 **O caso 1 depende do LEDG-2437** |
+| **39** | **LEDG-2356** | **Melhorias da revisão UX/conteúdo do fluxo de autenticação** | Full-stack | 🟡 **Parcial** — 09-15, PR #641: o aviso da conta existente deixou de ser a última oração de um parágrafo e passou a **cartão próprio**, visível em todos os casos | 🚩 **O resto está bloqueado:** falta a revisão de copy, e o protótipo Figma é de **27-08** — descreve um ecrã que mudou a 09-15. ⚠️ **Perguntar à autora se ainda se aplica** antes de pegar nos 8 pontos |
+| **40** | **LEDG-2509** | 🆕 **Extrair a composição e o hash da identidade para módulo próprio** — o ficheiro tem 4354 linhas | Backend | ❌ Não | 🚩 **A divisão óbvia é a errada:** separar o eIDAS são 11% do ficheiro, dependentes do núcleo partilhado de 56%. A fatia que vale é a **congelada** — sem Flask nem BD — para o *"não mexer"* deixar de ser um comentário e passar a ser uma fronteira. 🛑 **Depois de a promoção desbloquear:** um teste lê o código-fonte do módulo, e há 250 commits por promover |
 | | | **▼ 🚨 RETIDO — produção afectada, à espera da decisão de promoção** | | | |
 | 🛑 | **LEDG-2437** | **~200 contas com endereço sintético são atiradas para um 404 em produção** | Promoção | 🛑 **Retido** | 🚨 **Medido a 09-16: o backend de `main` redirecciona para `/complete-registration` (2 ocorrências, com o gatilho `has_placeholder_email`) e os 5 ficheiros da página NÃO existem no frontend de `main`.** ⇒ Quem se autentique sem email, ou com um email já ocupado, **fica sem via de entrada**. 🚩 **A retenção não preserva produção estável: mantém um 404 vivo.** Decisão de 09-16: `ppr` e `prd` ficam de fora por agora |
 | | | **▼ EM CURSO NOUTRAS MÃOS — não são desta decomposição** | | | |
@@ -1592,8 +1611,8 @@ do 13** — a tabela tem-nos ao contrário.
 | 🛑 | **LEDG-2474** | **Quatro razões de recusa dão a mesma resposta** na recuperação — e uma conta inactiva fica **sem via de entrada** | Backend + Produto | 🛑 Bloqueado | **Decisão da AMA.** 🚨 **Pré-requisito do 19**, herdado do 2467, e agravado pelo **7** |
 | 🛑 | LEDG-2288 | **Analisar autenticação eIDAS** | Análise | 🛑 **Outra pessoa** | 🚨 **Bloqueia o 17.** A pergunta: algum IdP europeu real omite o `PersonIdentifier`? |
 | | | **▼ SEQUENCIADO — a ordem importa mais do que a data** | | | |
-| **40** | LEDG-2471 §19 | **Descontinuar o login por email e palavra-passe** | Full-stack | ❌ Não | Depende do **15**, **17**, **18**, do LEDG-2437 e do **LEDG-2474**. ⚠️ **E agora do 12** — enquanto as institucionais dependerem do login tradicional, descontinuá-lo tira-lhes a via de entrada |
-| **41** | LEDG-1277 §20 | **Obrigatoriedade do Autenticação.gov** — o fim do arco | Produto | 🟡 Em curso | Depende do **19**. ⚠️ **Não activar antes dele** |
+| **41** | LEDG-2471 §19 | **Descontinuar o login por email e palavra-passe** | Full-stack | ❌ Não | Depende do **15**, **17**, **18**, do LEDG-2437 e do **LEDG-2474**. ⚠️ **E agora do 12** — enquanto as institucionais dependerem do login tradicional, descontinuá-lo tira-lhes a via de entrada |
+| **42** | LEDG-1277 §20 | **Obrigatoriedade do Autenticação.gov** — o fim do arco | Produto | 🟡 Em curso | Depende do **19**. ⚠️ **Não activar antes dele** |
 
 **Próximo a implementar:** o **LEDG-2517**, que é o 31.
 
@@ -1608,9 +1627,9 @@ fabricam a resposta como **nós** a imaginamos. Foi por isso que o **LEDG-2438**
 marcado como feito dois dias sem nunca ter funcionado. Enquanto esta revisão não tiver uma via de
 validação contra o IdP real, é este o buraco por onde os defeitos entram.
 
-O que é fazível agora, sem depender de terceiros: **31** a **39** — o LEDG-2517, o LEDG-2520, o
-LEDG-2472, o LEDG-2469, o LEDG-2507, a alínea (a) do LEDG-2435, o LEDG-2487, o LEDG-2356 e o
-LEDG-2509.
+O que é fazível agora, sem depender de terceiros: **31** a **40** — o LEDG-2517, o LEDG-2524, o
+LEDG-2520, o LEDG-2472, o LEDG-2469, o LEDG-2507, a alínea (a) do LEDG-2435, o LEDG-2487, o
+LEDG-2356 e o LEDG-2509.
 
 🛑 **O que trava a fila, por ordem de impacto:** os quatro caminhos de apagamento do **LEDG-2468**,
 à espera da AMA, com 63 organizações já órfãs; o **LEDG-2437**, cujo 404 continua vivo em produção
@@ -2845,7 +2864,7 @@ por isso não envia mail):
 
 | Bytes | Corpo | Significado |
 | --- | --- | --- |
-| **54** | `{"errors": {"recaptcha_token": ["Invalid reCAPTCHA"]}}` | 🎯 o observado em PRD |
+| **55** | `{"errors": {"recaptcha_token": ["Invalid reCAPTCHA"]}}` | 🎯 o observado em PRD |
 | 60 | a mesma em português | — |
 | 66 | `reCAPTCHA validation required` | token ausente |
 | **14** | `{"errors": {}}` | falha de **rede** ao contactar o Google |

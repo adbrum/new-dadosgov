@@ -27,6 +27,8 @@ Mapeamento dos ambientes e evidência de resolução DNS (capturado em 2026-06-0
 | **PPR**  | `ppr-dadosgov.arte.gov.pt` | **62.28.186.196** (o **mesmo** VIP) | 10.52.37.70   |
 | **TST**  | - (acesso por IP)          | 10.55.37.38 (a própria VM)          | 10.55.37.38   |
 
+> **Revalidação de 2026-09-22:** esta tabela deixou de reproduzir a partir da rede de desenvolvimento — os nomes e os IPs mudaram, embora a conclusão da secção se mantenha. Ver o [Anexo C](#anexo-c---revalidação-de-2026-09-22) antes de usar qualquer destes valores.
+
 ```
 PRD/PPR:
   Cliente ──▶ 62.28.186.196 (F5/WAF - VIP partilhado) ──▶ VM 10.50.37.70 (PRD)
@@ -98,6 +100,8 @@ x-xss-protection: 1; mode=block      ← injetado (header obsoleto que a app
 ```
 
 No TST, cada header aparece uma única vez, com os valores definidos pela aplicação.
+
+> **Revalidação de 2026-09-22: esta observação deixou de ser verdade e este critério já não distingue nada.** O TST duplica hoje os mesmos headers (`x-frame-options` aparece 2× em `https://10.55.37.38/`), porque o nginx local passou a acrescentá-los por cima dos que a aplicação envia. A duplicação deixou portanto de ser assinatura do appliance. O critério que **continua** a discriminar são os cookies injetados — ver o [Anexo C](#anexo-c---revalidação-de-2026-09-22).
 
 ### 3.4 Reescrita histórica do `SameSite` (causa do incidente 4.1)
 
@@ -262,6 +266,8 @@ Os erros que afetam PPR e PRD não resultam de instabilidade da aplicação - o 
 
 ## Anexo A - Comandos de verificação (reproduzíveis por qualquer equipa)
 
+> **Estes comandos já não reproduzem tal como estão** (revalidação de 2026-09-22): os hostnames deixaram de resolver e o ponto 3 deixou de discriminar. A versão atualizada está no [Anexo C](#anexo-c---revalidação-de-2026-09-22). Mantém-se aqui por ser a captura que sustenta a evidência de 2026-06-04.
+
 ```bash
 # 1. Resolução DNS - PPR e PRD partilham o VIP do F5; TST é direto
 getent hosts ppr-dadosgov.arte.gov.pt    # → 62.28.186.196
@@ -280,6 +286,66 @@ curl -skI https://10.55.37.38/              | grep -ic x-frame-options   # → 1
 curl -skI --max-time 10 https://10.52.37.70/   # timeout
 curl -skI --max-time 10 https://10.50.37.70/   # timeout
 ```
+
+## Anexo C - Revalidação de 2026-09-22
+
+> Capturado a partir da rede de desenvolvimento (WSL, máquina de um programador), 3 meses e meio depois da evidência original. **Nada aqui invalida a tese do documento** — o appliance continua à frente de PPR e PRD, e continua a não existir em TST. O que mudou foram os nomes, os IPs e um dos critérios de verificação.
+
+### C.1 Os hostnames do Anexo A já não resolvem
+
+```bash
+getent hosts ppr-dadosgov.arte.gov.pt    # → sem resolução
+getent hosts prd-dadosgov.arte.gov.pt    # → sem resolução
+getent hosts preprod.dados.gov.pt        # → 62.28.186.141   (PPR)
+getent hosts dados.gov.pt                # → 62.28.186.180   (PRD)
+ping -c2 62.28.186.196                   # responde a ICMP, mas não aceita TLS em :443
+```
+
+Duas consequências práticas:
+
+- **Os nomes a usar na verificação passam a ser `preprod.dados.gov.pt` e `dados.gov.pt`.** Os `.arte.gov.pt` podem continuar a existir em DNS interno a que esta rede não chega; não foi possível confirmar.
+- **PPR e PRD deixaram de partilhar um VIP nestes nomes** (`.141` vs `.180`), ao contrário do "facto verificado 1" da secção 2. Se a partilha do VIP se mantém pelos nomes internos, a Infraestrutura pode confirmá-lo; do lado do desenvolvimento não é observável.
+
+### C.2 O appliance continua lá, e os cookies continuam a prová-lo
+
+```bash
+curl -skI https://preprod.dados.gov.pt/saml/login | grep -i set-cookie
+# session=... | cookiesession1=... | cookie_adc_ext=...
+
+curl -skI https://dados.gov.pt/saml/login | grep -i set-cookie
+# session=... | cookiesession1=...
+
+curl -skI https://10.55.37.38/saml/login | grep -i set-cookie
+# session=...          ← só o cookie da aplicação
+```
+
+`curl -skI https://dados.gov.pt/` devolve ainda `Server: GreenLeprechaun`, a identidade mascarada descrita na secção 3.
+
+**Uma diferença nova, a confirmar pela Infraestrutura:** o `cookie_adc_ext` aparece em PPR e **não** em PRD. A secção 2 afirma que "as políticas WAF aplicadas são as mesmas nos dois ambientes (evidência 3.2: cookies injetados idênticos)" — nesta captura já não são idênticos. Se as políticas divergiram, PPR deixou de ser um espelho fiel de PRD, o que agrava o problema que este documento descreve em vez de o aliviar.
+
+### C.3 O critério dos headers duplicados deixou de servir
+
+`x-frame-options` aparece **2×** em PPR, em PRD **e em TST**. O nginx do TST passou a acrescentar os headers de segurança por cima dos que a aplicação já envia, portanto a duplicação deixou de distinguir "com appliance" de "sem appliance". Usar o ponto 3 do Anexo A como prova hoje leva à conclusão errada. **O ponto 2 (cookies injetados) mantém-se válido e é o critério a usar.**
+
+### C.4 Anexo A, atualizado
+
+```bash
+# 1. Resolução DNS
+getent hosts preprod.dados.gov.pt   # → 62.28.186.141 (PPR)
+getent hosts dados.gov.pt           # → 62.28.186.180 (PRD)
+
+# 2. Cookies injetados pelo F5 — o critério que discrimina
+curl -skI https://preprod.dados.gov.pt/saml/login | grep -i set-cookie  # cookiesession1, cookie_adc_ext
+curl -skI https://dados.gov.pt/saml/login         | grep -i set-cookie  # cookiesession1
+curl -skI https://10.55.37.38/saml/login          | grep -i set-cookie  # só 'session'
+
+# 3. (obsoleto — ver C.3) headers duplicados já não discriminam
+
+# 4. Identidade do servidor mascarada em PRD
+curl -skI https://dados.gov.pt/ | grep -i '^server:'   # → Server: GreenLeprechaun
+```
+
+---
 
 ## Anexo B - Referências internas
 

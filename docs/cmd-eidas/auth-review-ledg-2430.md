@@ -1629,6 +1629,19 @@ do 13** — a tabela tem-nos ao contrário.
 | **40** | **LEDG-2487** | 🆕 **O percurso de conclusão de inscrição, como UMA coisa** — checklist de aceitação dos 10 casos | Verificação | ❌ Não | 🚩 **Criado a 09-15 porque não existia.** O percurso nunca teve ticket próprio — estava repartido por sete, e foi essa repartição que deixou passar semanas o facto de **falhar inteiro em produção**. Sem código próprio: é onde se verifica que as peças encaixam. 🛑 **O caso 1 depende do LEDG-2437** |
 | **41** | **LEDG-2356** | **Melhorias da revisão UX/conteúdo do fluxo de autenticação** | Full-stack | 🟡 **Parcial** — 09-15, PR #641: o aviso da conta existente deixou de ser a última oração de um parágrafo e passou a **cartão próprio**, visível em todos os casos | 🚩 **O Jira diz `To Do`, e o PR #641 está integrado desde 09-15** — o estado do ticket não acompanhou. 🚩 **O resto está bloqueado:** falta a revisão de copy, e o protótipo Figma é de **27-08** — descreve um ecrã que mudou a 09-15. ⚠️ **Perguntar à autora se ainda se aplica** antes de pegar nos 8 pontos |
 | **42** | **LEDG-2509** | 🆕 **Extrair a composição e o hash da identidade para módulo próprio** — o ficheiro tem 4354 linhas | Backend | ❌ Não | 🚩 **A divisão óbvia é a errada:** separar o eIDAS são 11% do ficheiro, dependentes do núcleo partilhado de 56%. A fatia que vale é a **congelada** — sem Flask nem BD — para o *"não mexer"* deixar de ser um comentário e passar a ser uma fronteira. 🛑 **Depois de a promoção desbloquear:** um teste lê o código-fonte do módulo, e há 250 commits por promover |
+
+> 🛑 **Decisão de 2026-09-23, do dono do produto: a promoção do frontend NÃO avança por agora.**
+> A recomendação era promover — é a única via que fecha o 404, e `ppr` já corre este par —
+> mas a decisão é de quem responde por produção, e está tomada.
+>
+> ✅ **O que ficou confirmado:** o `.env` de produção já tem as variáveis de migração
+> definidas, logo o `MIGRATION_MODE_ENABLED` **não** cai no default `True` do `udata.cfg`.
+> A migração continua facultativa em produção.
+>
+> ⚠️ **O que continua verdadeiro enquanto isto não mudar:** cada inscrição nova por CMD ou
+> eIDAS termina num 404. Não produz erro visível do lado de dentro — quem o encontra é o
+> cidadão, e esse desiste em vez de abrir ticket.
+
 | | | **▼ 🚨 PRODUÇÃO PARTIDA AGORA — o backend subiu sem o frontend** | | | |
 | 🚨 | **LEDG-2437** | **O backend foi a produção SEM o frontend, e agora TODA a inscrição nova termina num 404** | Promoção | 🚨 **JÁ NÃO ESTÁ RETIDO — subiu a 09-23, 10:30 (PR #340 `ppr`→`main`)** | 🚨 **Medido a 09-23: o backend de `main` é igual ao de `ppr` e redirecciona para `/complete-registration`; o frontend de `main` é de 14-08, 314 commits atrás, e a página NÃO existe lá (0 ficheiros).** 🔑 **E o 32 (LEDG-2532) alargou o alcance:** a condição passou de *sem email ou email ocupado* para **sempre que há NIC**, logo já não são as ~200 contas antigas — é **cada registo novo por CMD ou eIDAS**. 🛑 **Duas saídas, ambas decisão de pessoas: promover o frontend hoje, ou reverter o backend de `main`** |
 | | | **▼ EM CURSO NOUTRAS MÃOS — não são desta decomposição** | | | |

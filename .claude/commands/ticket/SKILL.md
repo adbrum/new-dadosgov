@@ -1,6 +1,7 @@
 ---
 name: ticket
 description: Work a Jira LEDG ticket end to end — read it, plan, implement point by point, verify, open the PR and hand off to the PR-watch loop. Detects an in-flight ticket and resumes instead of re-planning.
+model: opus[1m]
 ---
 
 Ticket: $ARGUMENTS
@@ -63,7 +64,8 @@ it locally out of habit. A CHANGELOG- or docs-only commit no longer invalidates 
 a code commit still does.
 
 **Phase 4 runs on Fable 5** (delegated subagent); everything that touches the repo runs on
-Opus 5.
+the latest Opus (alias `opus[1m]` in this command's frontmatter — follows new releases
+without an edit here).
 
 ## If this session creates a ticket
 

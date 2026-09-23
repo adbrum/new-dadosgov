@@ -126,13 +126,14 @@ by position. (Shape, not a value to reuse: `{"id": 18843, "name": "LEDG Sprint 3
   so if it did not.
 - The field takes the sprint **id** (a number), never its name.
 
-## Model split — plan with Fable 5, code with Opus 5
+## Model split — plan with Fable 5, code with the latest Opus
 
 Phase 4 is written by a **Fable 5** subagent; the session and every phase that touches the
-repo stay on **Opus 5**. The plan should not be written by the same head that is about to
-defend it in code. Record the delegation (`plan-delegated`) — without it, `plan-approved`
-refuses and demands an explicit, logged `--planned-on opus --reason`. If Fable is
-unavailable, say so and ask; never downgrade in silence.
+repo stay on the **latest Opus** (`opus[1m]` alias). The plan should not be written by the
+same head that is about to defend it in code. Record the delegation (`plan-delegated`) —
+without it, `plan-approved` refuses and demands an explicit, logged
+`--planned-on opus --reason`. If Fable is unavailable, say so and ask; never downgrade in
+silence.
 
 ---
 

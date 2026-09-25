@@ -114,7 +114,7 @@ def ticket_state(**overrides) -> dict:
         "ticket": TICKET_KEY, "title": "guard regression", "source": "jira",
         "phase": "approved", "paused": False, "repos": ["backend"],
         "deploy_order": None, "branch": {}, "plan_digest": "sha256:deadbeef",
-        "plan_delegated_to_fable": True, "precedents": [], "points": [],
+        "plan_delegated": True, "precedents": [], "points": [],
         "criteria": [{"id": 1, "text": "criterio", "status": "met", "evidence": "test"}],
         "verified": {}, "review": {"ran": True, "accepted": [], "rejected": []},
         "pr": {}, "overrides": [],

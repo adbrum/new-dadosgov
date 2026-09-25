@@ -126,14 +126,14 @@ by position. (Shape, not a value to reuse: `{"id": 18843, "name": "LEDG Sprint 3
   so if it did not.
 - The field takes the sprint **id** (a number), never its name.
 
-## Model split — plan with Fable 5, code with the latest Opus
+## Model split — plan in a fresh Opus subagent, code in the session
 
-Phase 4 is written by a **Fable 5** subagent; the session and every phase that touches the
-repo stay on the **latest Opus** (`opus[1m]` alias). The plan should not be written by the
-same head that is about to defend it in code. Record the delegation (`plan-delegated`) —
-without it, `plan-approved` refuses and demands an explicit, logged
-`--planned-on opus --reason`. If Fable is unavailable, say so and ask; never downgrade in
-silence.
+Phase 4 is written by a **Plan subagent on the latest Opus** (`model: "opus"`); the session and
+every phase that touches the repo also run on the **latest Opus** (`opus[1m]` alias). The split
+is of heads, not models: the plan should not be written by the same context that is about to
+defend it in code. Record the delegation (`plan-delegated`) — without it, `plan-approved`
+refuses and demands an explicit, logged `--planned-in-session --reason`. Fable is no longer
+used. If the subagent is unavailable, say so and ask; never plan in-session in silence.
 
 ---
 
@@ -212,10 +212,10 @@ before showing it — a plan naming a file that does not exist is your error to 
 user's.
 
 ```
-Agent(subagent_type: "Plan", model: "fable", description: "Plan LEDG-<n>",
+Agent(subagent_type: "Plan", model: "opus", description: "Plan LEDG-<n>",
       prompt: "<the restatement, the explorer's precedents, the repo decision, and the
                template + rules below>")
-python3 .claude/hooks/ticket-state.py plan-delegated LEDG-<n> --model fable
+python3 .claude/hooks/ticket-state.py plan-delegated LEDG-<n> --model opus
 ```
 
 The subagent has **no conversation context** — the prompt must carry everything or it plans

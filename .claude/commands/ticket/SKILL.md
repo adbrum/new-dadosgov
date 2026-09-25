@@ -63,9 +63,9 @@ which file forced it). The full suite for the branch is the CI run on the PR —
 it locally out of habit. A CHANGELOG- or docs-only commit no longer invalidates that green;
 a code commit still does.
 
-**Phase 4 runs on Fable 5** (delegated subagent); everything that touches the repo runs on
-the latest Opus (alias `opus[1m]` in this command's frontmatter — follows new releases
-without an edit here).
+**Phase 4 runs in a fresh Plan subagent on the latest Opus** (no more Fable); everything
+that touches the repo runs on the latest Opus too (alias `opus[1m]` in this command's
+frontmatter — follows new releases without an edit here).
 
 ## If this session creates a ticket
 

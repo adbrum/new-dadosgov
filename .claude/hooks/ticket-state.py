@@ -341,7 +341,7 @@ def cmd_start(args):
         "deploy_order": None,
         "branch": {},
         "plan_digest": None,
-        "plan_delegated_to_fable": False,
+        "plan_delegated": False,
         "precedents": [],
         "points": [],
         "criteria": [],
@@ -402,13 +402,14 @@ def cmd_criteria(args):
 
 
 def cmd_plan_delegated(args):
-    """Record that the plan was written by a Fable subagent (phase 4's model split).
+    """Record that the plan was written by a fresh Plan subagent (phase 4's head split).
 
     Self-reported, like every other transition here: the value is that not reporting it
-    makes `plan-approved` refuse and demand an explicit, logged `--planned-on opus`.
+    makes `plan-approved` refuse and demand an explicit, logged `--planned-in-session`.
     """
     state = require(args.key)
-    state["plan_delegated_to_fable"] = args.model == "fable"
+    state["plan_delegated"] = True
+    state.pop("plan_delegated_to_fable", None)
     if state["phase"] == "started":
         state["phase"] = "planned"
     save(state)
@@ -452,10 +453,13 @@ def cmd_plan_approved(args):
             file=sys.stderr,
         )
         return 1
-    if not state["plan_delegated_to_fable"] and not args.planned_on:
+    # State files written before the Fable->Opus switch still carry the old key.
+    delegated = state.get("plan_delegated", state.get("plan_delegated_to_fable", False))
+    if not delegated and not args.planned_in_session:
         print(
-            "O plano nao passou por um subagente Fable (flag nao registada). Se o utilizador "
-            "aprovou planear no Opus, repete com --planned-on opus --reason '<quem autorizou>'. "
+            "O plano nao passou por um subagente Plan (flag nao registada). Se o utilizador "
+            "aprovou planear na propria sessao, repete com --planned-in-session "
+            "--reason '<quem autorizou>'. "
             "O desvio fica registado, nao escondido.",
             file=sys.stderr,
         )
@@ -490,7 +494,7 @@ def cmd_plan_approved(args):
         }
         for i, s in enumerate(args.point or [])
     ]
-    if args.planned_on:
+    if args.planned_in_session:
         state["overrides"].append(
             {
                 "gate": "model-split",
@@ -502,7 +506,7 @@ def cmd_plan_approved(args):
     save(state)
     log(
         f"APPROVED {args.key} repos={repos} points={len(state['points'])} "
-        f"digest={state['plan_digest']} planned_on={args.planned_on or 'fable'}"
+        f"digest={state['plan_digest']} planned_on={'session' if args.planned_in_session else 'subagent'}"
     )
     print(f"Plano aprovado registado ({state['plan_digest']}).")
     print("Escritas desbloqueadas em: " + ", ".join(repos))
@@ -1696,7 +1700,7 @@ def main() -> int:
 
     p = sub.add_parser("plan-delegated", help="record which model wrote the plan (phase 4)")
     p.add_argument("key")
-    p.add_argument("--model", default="fable", choices=["fable", "opus"])
+    p.add_argument("--model", default="opus", choices=["opus"])
     p.set_defaults(func=cmd_plan_delegated)
 
     p = sub.add_parser("plan-approved", help="record the user-approved plan; unlocks the repos")
@@ -1705,7 +1709,7 @@ def main() -> int:
     p.add_argument("--point", action="append", help="one per implementation point, in order")
     p.add_argument("--deploy-order")
     p.add_argument("--no-criteria-confirmed", action="store_true")
-    p.add_argument("--planned-on", choices=["opus", "fable"])
+    p.add_argument("--planned-in-session", action="store_true")
     p.add_argument("--reason")
     p.set_defaults(func=cmd_plan_approved)
 

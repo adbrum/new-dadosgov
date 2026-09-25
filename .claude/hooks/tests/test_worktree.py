@@ -69,11 +69,23 @@ def build_root() -> str:
 
 
 def start_ticket(root, key=KEY, repos="backend"):
+    """A ticket with a tree like the ones earlier sessions left behind.
+
+    The flow no longer creates trees, so the fixture builds one the way `create` used to:
+    a detached worktree per repo, the marker, and `claim --workdir`.
+    """
     run(STATE, "start", key, "--title", "t", root=root)
-    rc, out = run(WORKTREE, "create", key, "--repos", repos, "--base", "origin/develop",
-                  "--no-install", root=root)
+    target = os.path.join(root, ".claude", "worktrees", key.lower())
+    os.makedirs(target)
+    names = [r.strip() for r in repos.split(",")]
+    for repo in names:
+        git(os.path.join(root, repo), "worktree", "add", "--detach",
+            os.path.join(target, repo), "origin/develop")
+    with open(os.path.join(target, ".ticket-worktree.json"), "w") as fh:
+        json.dump({"ticket": key, "repos": names, "root": root}, fh)
+    rc, out = run(STATE, "claim", key, "--repos", repos, "--workdir", target, root=root)
     assert rc == 0, out
-    return os.path.join(root, ".claude", "worktrees", key.lower())
+    return target
 
 
 def state_of(root, key=KEY, done=False):
@@ -93,8 +105,8 @@ def check(label, condition, detail="") -> int:
 def case_end_reclaims(root) -> int:
     """Phase 10 closes the ticket, and the tree goes with it."""
     tree = start_ticket(root)
-    failures = check("create deixa a arvore em disco", os.path.isdir(os.path.join(tree, "backend")))
-    failures += check("create regista o workdir no estado", state_of(root)["workdir"] == tree)
+    failures = check("a arvore existe em disco", os.path.isdir(os.path.join(tree, "backend")))
+    failures += check("o workdir fica registado no estado", state_of(root)["workdir"] == tree)
     rc, out = run(STATE, "end", KEY, root=root)
     failures += check("end fecha o ticket", rc == 0, out)
     failures += check("end remove a arvore", not os.path.exists(tree), out)

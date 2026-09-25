@@ -470,8 +470,8 @@ def cmd_plan_approved(args):
         print(
             "Outro ticket esta a trabalhar a mesma arvore: "
             + ", ".join(f"{t} em {r}/" for t, r in clashes)
-            + f". Da a {args.key} a sua propria arvore antes de aprovar o plano "
-            "(ticket-worktree.py create).",
+            + f". Pausa esse ticket antes de aprovar o plano de {args.key} "
+            "(ticket-state.py pause <LEDG-n>) — um checkout so pode estar numa branch.",
             file=sys.stderr,
         )
         return 1
@@ -937,7 +937,8 @@ def cmd_verify(args):
     if not os.path.isdir(workdir):
         print(
             f"A arvore deste ticket para {args.repo} nao existe: {workdir}. "
-            "Corre `ticket-worktree.py create` ou limpa o `workdir` do estado.",
+            f"Limpa o `workdir` do estado (ticket-state.py claim {args.key} --repos "
+            f"{args.repo} --no-workdir); o ticket volta ao checkout principal.",
             file=sys.stderr,
         )
         return 2
@@ -1298,7 +1299,7 @@ def other_active(key: str) -> list:
 def collisions(key: str, repos: list, workdir) -> list:
     """Tickets already working the same repo in the same tree.
 
-    Same repo in a *different* tree is exactly what the worktrees are for, so it is not a
+    Same repo in a *different* tree (a worktree left by an earlier session) is not a
     collision -- what cannot be shared is one checkout, because it can only be on one
     branch, and one Mongo test database.
     """
@@ -1510,7 +1511,7 @@ def cmd_claim(args):
     Two things follow from it. The guard stops locking the submodule this ticket does not
     touch, so another session can work that one at the same time -- before this, one ticket
     waiting for its plan froze both repos for everybody. And a second ticket aiming at the
-    same checkout is refused here, with the command that gives it its own.
+    same checkout is refused here: the other one has to be paused first.
     """
     state = require(args.key)
     repos = [r.strip() for r in args.repos.split(",") if r.strip()]
@@ -1533,9 +1534,9 @@ def cmd_claim(args):
             "Ja ha outro ticket a trabalhar a mesma arvore:\n  "
             + "\n  ".join(f"{t} em {r}/" for t, r in clashes)
             + "\n\nUm checkout so pode estar numa branch, e as duas suites de backend partilham "
-            "a mesma BD de teste. Da a este ticket a sua propria arvore:\n  "
-            f"python3 .claude/hooks/ticket-worktree.py create {args.key} "
-            f"--repos {','.join(repos)}",
+            "a mesma BD de teste. Um ticket de cada vez por checkout: pausa o outro "
+            "(o de um PR ja aberto ja nao precisa do checkout) e repete:\n  "
+            "python3 .claude/hooks/ticket-state.py pause <LEDG-n>",
             file=sys.stderr,
         )
         return 1
@@ -1790,7 +1791,7 @@ def main() -> int:
     p = sub.add_parser("claim", help="declare which repos (and which tree) this ticket touches")
     p.add_argument("key")
     p.add_argument("--repos", required=True, help="backend | frontend | backend,frontend")
-    p.add_argument("--workdir", help="the per-ticket worktree, when it has one")
+    p.add_argument("--workdir", help="a per-ticket worktree left by an earlier session")
     p.add_argument(
         "--no-workdir",
         action="store_true",

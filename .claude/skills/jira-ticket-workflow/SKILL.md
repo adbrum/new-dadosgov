@@ -45,18 +45,15 @@ one checkout is one branch, and two backend suites share one Mongo test database
 
 - `claim LEDG-<n> --repos <repos>` at Phase 3 is what frees the other submodule for another
   session, and what refuses a second ticket aiming at the same checkout.
-- When it refuses, give this ticket its own tree:
-  `python3 .claude/hooks/ticket-worktree.py create LEDG-<n> --repos <repos>`. It creates a
-  worktree per submodule, links the untracked `.env` files the suites need, installs
-  dependencies, and records the path as `workdir`.
-- **The session still runs from the monorepo root.** The worktree is a path in the ticket's
-  state, not a second project — the guards, the suites and the lint hook all read it from
-  there. `ticket-state.py doctor` prints where everything resolved to.
-- **A tree is created with the ticket and dies with it.** Each one carries its own `.venv`
-  or `node_modules` — about a gigabyte — so `ticket-state.py end` at Phase 10 removes it,
-  and `ticket-worktree.py gc` sweeps whatever earlier sessions left behind. Neither can
-  delete work: a tree with uncommitted changes, or with commits on no `origin` ref, is kept
-  and the reason printed. `list` shows every tree and which are already reclaimable.
+- When it refuses, another ticket holds that checkout. **Do not create a worktree** — the
+  flow no longer does. Tickets share each submodule checkout one at a time: pause the other
+  ticket (`ticket-state.py pause LEDG-<other>`; one whose PR is already open no longer needs
+  the checkout) and claim again, or ask the user which ticket goes first.
+- Trees left by earlier sessions under `.claude/worktrees/` are cleanup only:
+  `ticket-worktree.py list` shows them, `gc` reclaims them, and `end` at Phase 10 still
+  removes a ticket's leftover tree. Neither can delete work — a tree with uncommitted
+  changes, or with commits on no `origin` ref, is kept and the reason printed. A ticket whose
+  recorded tree is gone goes back to the main checkout with `claim … --no-workdir`.
 
 ## Language — one rule
 
@@ -201,8 +198,8 @@ does not touch, and therefore what lets another session work that repo at the sa
 python3 .claude/hooks/ticket-state.py claim LEDG-<n> --repos backend
 ```
 
-If it refuses, another ticket already holds that checkout: give this one its own tree with
-`ticket-worktree.py create LEDG-<n> --repos <repos>` and pass `--workdir`.
+If it refuses, another ticket already holds that checkout: pause that one
+(`ticket-state.py pause LEDG-<other>`) or ask which goes first. Never create a worktree.
 
 ## Phase 4 — Plan (the approval gate)
 
@@ -310,8 +307,9 @@ drifting in silence stops being an available move; then present the revised plan
 
 ## Phase 5 — Working branch
 
-`<tree>` below is this ticket's checkout: `<repo>` normally, or `<workdir>/<repo>` when the
-ticket has its own worktree — `ticket-state.py status LEDG-<n>` shows which.
+`<tree>` below is this ticket's checkout — the submodule itself (`backend` or `frontend`).
+`ticket-state.py status LEDG-<n>` shows it; a ticket from before this change may still point
+at an old worktree.
 
 ```bash
 git -C <tree> fetch origin
@@ -320,8 +318,7 @@ python3 .claude/hooks/ticket-state.py branch LEDG-<number> <repo> <branch>
 ```
 
 **Never `checkout develop` here.** Branching straight off `origin/develop` is one command
-instead of two, and worktrees share the ref namespace: with a second checkout in play,
-`checkout develop` fails with *"develop is already checked out"*.
+instead of two, and it never leaves the checkout on the environment branch by accident.
 
 🚨 **`--no-track` is not optional, and this is why.** `checkout -b X origin/develop` — what this
 line used to say — sets `branch.X.merge = refs/heads/develop`, so the new branch's upstream is
@@ -422,10 +419,6 @@ this phase decides is **when** each level runs:
   fixtures. `verify` reserves the suite (pid + timestamp) and **refuses** rather than waits:
   end the turn and run it again in a few minutes. A reservation whose process died is taken
   over automatically, so a killed session never blocks anyone.
-  A ticket with its own worktree gets its own databases (`UDATA_TEST_MONGO_PREFIX`, honoured
-  by `udata/tests/plugin.py`) and then runs in parallel with the others — `verify` checks
-  that the tree really honours the variable before it stops serialising, because a worktree
-  cut before that change landed would share `udata-test` while believing otherwise.
 
 The run that counts is the one the gate reads. A **code** commit after it invalidates it; a
 commit that touches only the CHANGELOG, a README or `docs/` does not — which is why the
@@ -536,11 +529,10 @@ in `--watch`, which pins this session for the whole run doing nothing.
 Build the criteria and review sections from `pr-body`/`status`, never from memory. Then close
 the state: `python3 .claude/hooks/ticket-state.py end LEDG-<n>`.
 
-`end` also **removes this ticket's worktree**, if it had one — the PR is open, so the commits
-are on `origin` and the checkout has nothing left to hold. It refuses if anything would be
-lost and says what; then it is a real question for the user, not something to force. Say in
-the report which tree was reclaimed, and run `ticket-worktree.py gc` when the session start
-announced trees left over from tickets that never reached this phase.
+`end` also removes a worktree left over from before this flow stopped creating them, if the
+ticket still has one. It refuses if anything would be lost and says what; then it is a real
+question for the user, not something to force. Run `ticket-worktree.py gc` when the session
+start announces leftover trees.
 
 ---
 
@@ -568,10 +560,10 @@ announced trees left over from tickets that never reached this phase.
   order by a well-meaning reviewer.
 - **A point blocked on the user.** `point blocked --reason`, continue with independent points,
   otherwise stop with the question stated.
-- **The session dies before Phase 10.** Its worktree stays on disk with nothing pointing at
-  it — a gigabyte per ticket, and they add up unnoticed. The next session start names them;
-  `ticket-worktree.py gc` collects the ones whose tickets are closed and whose work is
-  pushed, and keeps the rest with the reason. Never `--force` a tree you did not check.
+- **The session dies before Phase 10.** The ticket keeps its claim on the checkout, so the
+  next ticket's `claim` refuses until it is paused or ended. Leftover worktrees from older
+  sessions are named at session start; `ticket-worktree.py gc` collects the ones whose work is
+  pushed. Never `--force` a tree you did not check.
 
 ## Rules
 

@@ -31,24 +31,19 @@ gh pr list --repo amagovpt/dadosgov-fe --state all --search "ledg-<n>" --limit 5
 
 ## Working several tickets at once
 
-One ticket per session, and each session needs its own checkout of the repo it touches:
+One ticket per session, and one ticket per submodule checkout at a time. **The flow does not
+create worktrees.** `claim` refuses a second active ticket in the same repo and names the one
+holding it: pause that one (`ticket-state.py pause LEDG-<other>` — a ticket whose PR is
+already open no longer needs the checkout) or ask the user which goes first.
+
+Trees left by earlier sessions are cleanup only:
 
 ```bash
-python3 .claude/hooks/ticket-worktree.py list                 # what is already claimed
-python3 .claude/hooks/ticket-worktree.py create LEDG-<n> --repos backend
-python3 .claude/hooks/ticket-worktree.py gc                   # reclaim closed tickets' trees
+python3 .claude/hooks/ticket-worktree.py list   # leftover trees and whether they are dirty
+python3 .claude/hooks/ticket-worktree.py gc     # reclaim the ones whose work is pushed
 ```
 
-`claim` refuses a second active ticket in the same repo without a worktree, and says which
-command creates one. The session still runs from the monorepo root — the worktree is a path
-recorded in the ticket's state (`workdir`), not a second project. `ticket-state.py doctor`
-prints where everything resolved to if anything looks off.
-
-A tree costs about a gigabyte, so it is reclaimed with the ticket: `ticket-state.py end`
-(Phase 10) removes this one, `gc` sweeps the ones sessions that died earlier left behind.
 Both refuse over uncommitted or unpushed work rather than deleting it.
-
-Then follow `jira-ticket-workflow` to Phase 10.
 
 ## The two gates
 

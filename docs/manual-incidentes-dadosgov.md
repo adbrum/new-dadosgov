@@ -262,6 +262,7 @@ As migrações estão em `backend/udata/migrations/`; cada uma fica registada na
 [container]  udata db unrecord <ficheiro>      # desfaz o registo de uma migração
 ```
 
+- **Atenção:** `udata db migrate --record` marca como aplicadas migrações que não correram, e esconde assim alterações de esquema e de dados que ficam por fazer. Só se usa para reproduzir um histórico de migrações que se sabe já aplicado, como na sequência pós-restauro do capítulo [8](#8-problemas-de-base-de-dados). Um registo feito por engano só se desfaz com `udata db unrecord`, um ficheiro de cada vez.
 - O comando é `udata db migrate`. `udata db upgrade` não existe (o `CLAUDE.md` do monorepo refere-o por engano).
 - O `migrate` para na primeira migração que falhe e não corre as seguintes. Corrigir a causa e voltar a correr: as que já passaram estão registadas e não se repetem.
 - Em PRD, fazer sempre um dump antes (capítulo [13](#13-gestão-de-backups)) e correr primeiro `--dry-run`.
@@ -886,11 +887,14 @@ Aplicar [PC-4](#pc-4-reinício-de-serviços) com o comando da linha certa da tab
   [VM]     tar czf fs-AAAAMMDD.tgz -C /opt/dadosgov fs
   ```
   Copiar as credenciais e a configuração à parte, cifradas. Guardar tudo fora da VM que protegem.
-- **Restauro:**
+- **Restauro.** **Atenção:** `--drop` apaga cada coleção da base de destino antes de a carregar, e o que lá estava perde-se. Antes de correr:
+  1. Confirmar o `<SERVER_MONGO>` e o ambiente de destino com um segundo elemento da equipa.
+  2. Fazer um dump do estado atual do destino (comando de backup acima), mesmo que esteja danificado, para poder voltar atrás.
+  3. Parar `worker` e `beat` (`docker compose stop worker beat`), para nada escrever na base durante o restauro.
   ```
   [posto]      mongorestore --uri "mongodb://<SERVER_MONGO>:27017" --gzip --archive=udata-AAAAMMDD.gz --drop
   ```
-  Seguido **obrigatoriamente** da sequência de migrações do capítulo [8](#8-problemas-de-base-de-dados) (resolução do `FieldDoesNotExist`) e da verificação dos agendamentos ([PC-5](#pc-5-filas-celery-e-jobs-agendados)).
+  Seguido **obrigatoriamente** da sequência de migrações do capítulo [8](#8-problemas-de-base-de-dados) (resolução do `FieldDoesNotExist`) e da verificação dos agendamentos ([PC-5](#pc-5-filas-celery-e-jobs-agendados)). No fim, voltar a arrancar `worker` e `beat` (`docker compose start worker beat`).
 
 #### Verificação
 
@@ -1150,7 +1154,7 @@ Em PPR/PRD, a edição de perfil, a edição de datasets e outras operações de
 #### Resolução passo a passo
 
 - **Opção A (definitiva, da infraestrutura):** permitir `PUT`, `PATCH` e `DELETE` na regra do WAF para `/api/1/*` e `/api/2/*`. Pedido formal em `docs/infra-adc-waf-impact-ppr-prd.md`.
-- **Opção B (aplicacional):** enviar os métodos de escrita num POST com o cabeçalho `X-HTTP-Method-Override`, reescrito por um middleware antes do encaminhamento, e ligado no frontend com `NEXT_PUBLIC_USE_METHOD_OVERRIDE=true`. Está desenvolvida nas branches `feat/http-method-override` dos dois repositórios, **mas não está integrada em `develop`** (verificado a 2026-09-29); avaliação em `docs/method-override-opcao-b-avaliacao.md`.
+- **Opção B (aplicacional):** enviar os métodos de escrita num POST com o cabeçalho `X-HTTP-Method-Override`, reescrito por um middleware antes do encaminhamento, e ligado no frontend com `NEXT_PUBLIC_USE_METHOD_OVERRIDE=true`. **Não está integrada em `develop` de nenhum dos repositórios** (verificado a 2026-09-29): o lado do frontend está na branch `feat/http-method-override` de `amagovpt/dadosgov-fe`, e o middleware do backend nunca foi publicado em `amagovpt/udata-pt`, pelo que ainda não há uma versão completa que se possa testar. Avaliação em `docs/method-override-opcao-b-avaliacao.md`.
 
 #### Verificação
 
@@ -1430,7 +1434,7 @@ Valores por omissão verificados no código (ver [A3](#a3-registo-da-verificaç�
 | `DOWNLOAD_PROXY_READ_TIMEOUT_S` | 300 s | `udata.cfg` | [17](#17-bugs-conhecidos) |
 | `CMS_FETCH_TIMEOUT_MS` (frontend) | 5000 ms | `apollo-client.ts` | [7](#7-indisponibilidade-de-serviços), [18](#18-workarounds-temporários) |
 | `TABULAR_API_URL` (frontend) | sem valor útil | `.env` do frontend | [27](#27-pré-visualização-de-dados-e-análise-hydra) |
-| `NEXT_PUBLIC_USE_METHOD_OVERRIDE` (frontend) | só na branch `feat/http-method-override` | - | [21](#21-operações-de-escrita-bloqueadas-pelo-waf-putpatchdelete) |
+| `NEXT_PUBLIC_USE_METHOD_OVERRIDE` (frontend) | só na branch `feat/http-method-override` do frontend | - | [21](#21-operações-de-escrita-bloqueadas-pelo-waf-putpatchdelete) |
 | uWSGI | 4 processos, 2 threads, harakiri 120 s (600 s em CSV, upload e downloads), max-requests 50 000 | `uwsgi/front.ini` | [7](#7-indisponibilidade-de-serviços), [12](#12-reinício-de-serviços) |
 | Worker Celery | concorrência 4, filas `default`, `high`, `low` | `docker-compose.yml`, `settings.py` | [PC-5](#pc-5-filas-celery-e-jobs-agendados), [16](#16-limitações-conhecidas-da-solução) |
 | Cache da homepage | 300 s no backend, 10 s no frontend | `core/site/api.py`, `service/api/system` | [9](#9-problemas-na-apresentação-das-estatísticas-na-homepage) |

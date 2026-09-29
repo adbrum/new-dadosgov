@@ -14,10 +14,16 @@ from docx.shared import Pt, RGBColor
 
 
 INLINE_RE = re.compile(r"(\*\*.+?\*\*|`.+?`)")
+LINK_RE = re.compile(r"\[([^\]]+)\]\([^)]+\)")
 
 
 def add_runs(paragraph, text):
-    """Render inline **bold** and `code` spans into a paragraph."""
+    """Render inline **bold** and `code` spans into a paragraph.
+
+    Markdown links keep only their text: the targets are in-page anchors or
+    repo paths, which mean nothing inside a standalone .docx.
+    """
+    text = LINK_RE.sub(r"\1", text)
     for part in INLINE_RE.split(text):
         if not part:
             continue
@@ -128,11 +134,12 @@ def convert(md_path, docx_path):
             i += 1
             continue
 
-        # Numbered list
-        m = re.match(r"^(\s*)\d+\.\s+(.*)$", line)
+        # Numbered list: keep the source number, since Word's "List Number"
+        # style continues one sequence across every list in the document.
+        m = re.match(r"^(\s*)(\d+)\.\s+(.*)$", line)
         if m:
-            p = doc.add_paragraph(style="List Number")
-            add_runs(p, m.group(2))
+            p = doc.add_paragraph(style="List Paragraph")
+            add_runs(p, f"{m.group(2)}. {m.group(3)}")
             i += 1
             continue
 

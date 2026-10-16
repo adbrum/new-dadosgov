@@ -145,9 +145,34 @@ def confirm_what_will_be_published(target, source):
         print("")
         for repo, where in divergent:
             print(f"  ⚠ {repo} está em '{where}', mas este ambiente é '{target}'.")
-        if input(f"    Mudar para {target}? [S/n]: ").strip().lower() not in ("", "s", "sim", "y", "yes"):
+
+        # Três saídas, e a terceira custa de propósito. Publicar outra branch é
+        # legítimo numa máquina de desenvolvimento -- é onde se trabalha em
+        # branches de feature -- e é precisamente o acidente a evitar num
+        # servidor. Como o diálogo é o mesmo nos dois sítios, a diferença tem de
+        # estar no esforço: mudar ou cancelar é uma tecla, publicar outra coisa
+        # escreve-se por extenso.
+        print("")
+        print(f"    S       mudar para {target} e publicar este ambiente   <- o habitual")
+        print( "    n       cancelar")
+        print( "    forçar  publicar na mesma o que está em checkout")
+        answer = input("\n    Escolha [S/n/forçar]: ").strip().lower()
+
+        if answer in ("forçar", "forcar"):
+            print("")
+            print(f"    ⚠ A PUBLICAR FORA DO AMBIENTE: esta máquina é '{target}' e vai")
+            print("      subir o que está em checkout:")
+            for repo, where in divergent:
+                print(f"        {repo}: {where}")
+            print("      Numa máquina de desenvolvimento é o esperado; num servidor")
+            print(f"      não é, e o correcto aí é apagar o {ENVIRONMENT_FILE} ou")
+            print("      corrigi-lo, não forçar a cada arranque.")
+            return input("\n    Confirma? [s/N]: ").strip().lower() in ("s", "sim", "y", "yes")
+
+        if answer not in ("", "s", "sim", "y", "yes"):
             print("    Cancelado: um ambiente não deve publicar a branch de outro.")
             return False
+
         for repo, _ in divergent:
             if _git(repo, "status", "--porcelain").stdout.strip():
                 print(f"    ❌ {repo} tem alterações por guardar; não lhe toco.")

@@ -1,5 +1,6 @@
 import json
 import os
+import pathlib
 import pwd
 import re
 import subprocess
@@ -294,6 +295,51 @@ def _mounted_files_that_differ(tags, previous):
     return differing
 
 
+def declared_version(repo):
+    """A versão que o projecto declara de si próprio no checkout actual:
+    'version' do pyproject.toml no backend, do package.json no frontend."""
+    try:
+        if repo == "backend":
+            for line in (pathlib.Path(repo) / "pyproject.toml").read_text().splitlines():
+                if line.startswith("version"):
+                    return line.split('"')[1]
+        else:
+            return json.loads((pathlib.Path(repo) / "package.json").read_text()).get("version")
+    except (OSError, IndexError, ValueError):
+        return None
+    return None
+
+
+def report_declared_versions(tags):
+    """Diz o que cada projecto declara de si próprio, quando isso não coincide
+    com a tag em que está.
+
+    Nas tags antigas não coincide, e por boas razões: foram criadas
+    retroactivamente sobre commits que nunca souberam o seu próprio número --
+    o backend declarava 15.1.0 em todas elas, o frontend 0.1.0. Quem vir o
+    'uv sync' dizer udata==15.1.0 depois de escolher a v16.0.0.11 merece saber
+    porquê, em vez de pensar que escolheu mal."""
+    mismatched = []
+    for repo, tag in tags.items():
+        declared = declared_version(repo)
+        if declared and declared != tag.lstrip("v"):
+            mismatched.append((repo, tag, declared))
+
+    if not mismatched:
+        return
+
+    print("")
+    for repo, tag, declared in mismatched:
+        print(f"  Nota: em {tag}, o {repo} declara-se '{declared}' a si próprio.")
+    print("  As tags até à v16.0.0.12 (backend) e 1.4.14 (frontend) foram criadas")
+    print("  retroactivamente, sobre commits anteriores a este versionamento: o")
+    print("  número interno ficou no que estava na altura. É por isso que o 'uv")
+    print("  sync' ou o build anunciam esse número, e não a tag. A partir da")
+    print("  próxima release os dois passam a bater certo -- o tag-version.sh de")
+    print("  cada repositório recusa-se a etiquetar uma versão que o projecto")
+    print("  não declare.")
+
+
 def ask_to_restore(previous, tags, docker):
     """Pergunta se os submódulos voltam às branches onde estavam.
 
@@ -388,6 +434,8 @@ def run_specific_version():
         return
 
     print(f"\nBackend {backend_tag} · Frontend {frontend_tag}")
+    report_declared_versions({"backend": backend_tag, "frontend": frontend_tag})
+    print("")
     mode = input("Arrancar em (1) desenvolvimento ou (2) Docker? [1]: ").strip() or "1"
 
     try:

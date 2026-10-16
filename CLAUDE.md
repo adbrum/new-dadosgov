@@ -146,7 +146,7 @@ O `run_servers.py` é o mesmo em todas as máquinas — local, tst, ppr e produ�
 cp .dadosgov-env.example .dadosgov-env   # e escrever lá: develop, tst, ppr ou main
 ```
 
-As opções 1 e 2 publicam **a branch desse ambiente** e recusam-se a publicar outra: se um submódulo estiver noutra branch, param e oferecem a mudança; em *detached HEAD*, param, porque sem branch não há o que publicar. Antes de construir, mostram sempre o que vai subir — ambiente, branch, commit, data e assunto — e pedem confirmação.
+As opções 1 e 2 publicam **a branch desse ambiente**: se um submódulo estiver noutra branch, param e oferecem a mudança; em *detached HEAD*, param, porque sem branch não há o que publicar. Publicar na mesma é possível — escrevendo `forçar` por extenso e confirmando a seguir — porque numa máquina de desenvolvimento é legítimo querer correr a própria branch. Num servidor não é, e aí o correcto é apagar ou corrigir o `.dadosgov-env`, não forçar a cada arranque; é por isso que esta saída se escreve e as outras duas são uma tecla. Antes de construir, mostram sempre o que vai subir — ambiente, branch, commit, data e assunto — e pedem confirmação.
 
 O ambiente é uma propriedade da máquina, não uma escolha de quem corre o script: um servidor de tst é de tst em todos os arranques, e perguntá-lo a cada corrida transformaria uma constante numa decisão. Para correr uma versão arbitrária existe a opção 4.
 

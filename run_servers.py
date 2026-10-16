@@ -190,15 +190,75 @@ def checkout_version(repo, tag):
     return previous
 
 
+def _blocking_untracked(repo, ref):
+    """Ficheiros em disco que o git não segue e que a referência de destino
+    tem seguidos. São estes que impedem a troca: o git recusa-se a
+    sobrescrever trabalho que não conhece."""
+    status = _git(repo, "status", "--porcelain", "--untracked-files=all").stdout.splitlines()
+    untracked = [line[3:] for line in status if line.startswith("??")]
+    if not untracked:
+        return []
+
+    at_ref = set(_git(repo, "ls-tree", "-r", "--name-only", ref).stdout.splitlines())
+    return [path for path in untracked if path in at_ref]
+
+
 def restore_refs(previous):
-    """Repõe cada submódulo na referência onde estava antes da escolha."""
+    """Repõe cada submódulo na referência onde estava antes da escolha.
+
+    Falha de forma legítima quando, durante a estadia na versão antiga, algo
+    recriou em disco ficheiros que essa versão não tem -- um editor com esses
+    separadores abertos, que os volta a gravar depois de o git os apagar, é a
+    causa habitual. O git recusa então sobrescrevê-los ao voltar.
+
+    Quando é esse o caso, removê-los é seguro: a referência de destino tem-nos
+    seguidos, por isso voltam na versão do repositório. Mesmo assim pergunta-se
+    antes e mostram-se um a um, porque remover ficheiros de alguém sem avisar
+    não se faz."""
     for repo, ref in previous.items():
         if not ref:
             continue
+
         result = _git(repo, "checkout", ref)
-        state = "✓" if result.returncode == 0 else "⚠"
-        detail = ref if result.returncode == 0 else result.stderr.strip()
-        print(f"  {state} {repo}: {detail}")
+        if result.returncode == 0:
+            print(f"  ✓ {repo}: {ref}")
+            continue
+
+        print(f"  ⚠ {repo}: não foi possível voltar a {ref}")
+        blocking = _blocking_untracked(repo, ref)
+
+        if not blocking:
+            print(f"    {result.stderr.strip()}")
+            print(f"    Para voltar: git -C {repo} checkout {ref}")
+            continue
+
+        print("    Estes ficheiros estão em disco sem o git os seguir, e seriam")
+        print(f"    sobrescritos ao voltar. Como {ref} os tem seguidos, removê-los")
+        print("    repõe a versão do repositório:")
+        for path in blocking:
+            print(f"      {path}")
+        print("    (costuma ser o editor a regravá-los depois de o git os apagar)")
+
+        if input("\n    Remover e tentar de novo? [s/N]: ").strip().lower() in ("s", "sim", "y", "yes"):
+            for path in blocking:
+                try:
+                    os.remove(os.path.join(repo, path))
+                except OSError as error:
+                    print(f"      ⚠ {path}: {error}")
+            retry = _git(repo, "checkout", ref)
+            if retry.returncode == 0:
+                print(f"    ✓ {repo}: {ref}")
+            else:
+                print(f"    ⚠ {repo}: {retry.stderr.strip()}")
+                print(f"      Para voltar: git -C {repo} checkout {ref}")
+        else:
+            print(f"    Para voltar mais tarde: git -C {repo} checkout {ref}")
+
+    print("\n  Estado final dos submódulos:")
+    for repo in previous:
+        branch = _git(repo, "symbolic-ref", "--quiet", "--short", "HEAD")
+        where = branch.stdout.strip() if branch.returncode == 0 else f"detached em {_current_ref(repo)}"
+        print(f"    {repo:<9} {where}")
 
 
 def running_backend_version():
@@ -281,6 +341,9 @@ def run_specific_version():
     frontend_tag = choose_version("frontend", frontend_versions, pair_hint=backend_date)
 
     print("\nA mudar os submódulos...")
+    print("  (se tiver ficheiros destes repositórios abertos no editor, feche-os:")
+    print("   um separador que volte a gravar um ficheiro que a versão antiga não")
+    print("   tem impede o regresso no fim)")
     previous = {}
     previous["backend"] = checkout_version("backend", backend_tag)
     if previous["backend"] is None:

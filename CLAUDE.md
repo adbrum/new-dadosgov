@@ -123,6 +123,20 @@ Cada repo tem branches de ambiente de longa duração — `develop`, `tst`, `ppr
 - **Abrir PRs** — verificar primeiro com `gh auth status`. Se o GitHub CLI estiver autenticado: `gh pr create --repo amagovpt/<repo> --base <ambiente> --head <branch>`, e acompanhar o CI com `gh pr checks` / `gh run watch`. Caso contrário, abrir pelo URL de comparação `https://github.com/amagovpt/<repo>/compare/<base>...<head>?expand=1`. Não assumir nenhum dos casos: o `gh` está instalado em algumas máquinas da equipa e não noutras.
 - A mesma regra condicional está a ser aplicada aos `CLAUDE.md` dos submódulos: PRs [udata-pt#222](https://github.com/amagovpt/udata-pt/pull/222) e [dadosgov-fe#580](https://github.com/amagovpt/dadosgov-fe/pull/580), ambos para `develop`. Até serem integrados, esses ficheiros continuam a afirmar que o `gh` não existe.
 
+## Versionamento & Releases
+
+Cada submódulo é versionado por **tags**, uma por promoção para `main`, e cada tag tem a sua release no GitHub com as notas tiradas da secção correspondente do `CHANGELOG.md`. Os esquemas são diferentes de propósito:
+
+| Repo | Esquema | Exemplo | Porquê |
+| --- | --- | --- | --- |
+| `backend/` (`udata-pt`) | `vX.Y.Z.N` | `v16.0.0.12` | É um fork de [udata](https://github.com/opendatateam/udata). `X.Y.Z` é a versão upstream em que assenta; `N` é a revisão portuguesa, reiniciada a cada sync. O upstream só publica três segmentos, por isso um quarto nunca colide. |
+| `frontend/` (`dadosgov-fe`) | `vX.Y.Z` | `v1.4.15` | É inteiramente nosso, não tem upstream. SemVer simples: `feat!` → MAJOR, `feat` → MINOR, o resto → PATCH. |
+
+- **Não procurar correspondência entre os números dos dois repos** — são independentes. A única relação honesta entre uma versão de backend e uma de frontend é a **data** da tag.
+- A versão upstream do backend confirma-se por ancestralidade, nunca a ler o `pyproject.toml`: `git merge-base --is-ancestor refs/tags/upstream/vX.Y.Z origin/main`. O remote `upstream` deve ter `tagOpt = --no-tags`, para que um fetch não importe as tags dos franceses para o namespace principal.
+- Ferramentas que listem versões (p. ex. o seletor do `run_servers.py`) devem ler **tags de git**, não releases do GitHub: funcionam offline, sem token e sem API. As releases são a camada de texto.
+- Detalhe por repo em `backend/CLAUDE.md` e `frontend/CLAUDE.md`, secção **Versioning & Releases**.
+
 ## Regras Gerais
 
 - **Antes de corrigir um bug, procurar precedentes**: `git log --all --grep=<keyword>`, `git log --all -- <file>`, `grep -r` por padrões/símbolos relacionados (e.g. `Isolated*`, `Safe*` wrappers), e leitura de PRs/commits anteriores. Se já existe fix funcional, replicar o padrão. Se for possível melhorar, sugerir explicitamente antes de divergir.

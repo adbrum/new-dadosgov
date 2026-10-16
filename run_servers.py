@@ -44,6 +44,22 @@ ENVIRONMENT_BRANCHES = ("develop", "tst", "ppr", "main")
 ENVIRONMENT_FILE = ".dadosgov-env"
 
 
+class EnvironmentDeclarationError(Exception):
+    """O ambiente está declarado mas não se percebe qual é."""
+
+
+def _first_meaningful_line(text):
+    """A primeira linha que não é vazia nem comentário.
+
+    O ficheiro é feito para ser copiado do .example, que traz a explicação lá
+    dentro em comentários; ler a primeira linha a seco lia o comentário."""
+    for line in text.splitlines():
+        line = line.split("#", 1)[0].strip()
+        if line:
+            return line
+    return ""
+
+
 def resolve_environment():
     """A branch que esta máquina deve publicar, ou None se não o declarar.
 
@@ -51,22 +67,33 @@ def resolve_environment():
     servidor e por isso não vai no git. O ambiente é uma propriedade da
     máquina: um servidor de tst é de tst em todos os arranques. Perguntá-lo a
     cada corrida transformaria uma constante numa decisão, e é assim que se
-    acaba a publicar a branch errada em produção."""
-    declared = os.environ.get("DADOSGOV_ENV", "").strip()
-    source = "DADOSGOV_ENV"
+    acaba a publicar a branch errada em produção.
+
+    Declarado e ilegível é erro, não omissão: uma máquina que diz ser de tst
+    com uma gralha no ficheiro não pode cair no 'usa o que estiver em
+    checkout' -- seria publicar a branch errada por causa de um erro de
+    escrita."""
+    declared = _first_meaningful_line(os.environ.get("DADOSGOV_ENV", ""))
+    source = "a variável DADOSGOV_ENV"
 
     if not declared:
         try:
-            declared = pathlib.Path(ENVIRONMENT_FILE).read_text().strip()
-            source = ENVIRONMENT_FILE
+            raw = pathlib.Path(ENVIRONMENT_FILE).read_text()
         except OSError:
             return None, None
 
-    declared = declared.splitlines()[0].strip() if declared else ""
+        declared = _first_meaningful_line(raw)
+        source = f"o ficheiro {ENVIRONMENT_FILE}"
+
+        if not declared:
+            raise EnvironmentDeclarationError(
+                f"{source} existe mas não diz nada: só linhas vazias ou comentários."
+            )
+
     if declared not in ENVIRONMENT_BRANCHES:
-        print(f"  ⚠ {source} diz '{declared}', que não é uma branch de ambiente.")
-        print(f"    Esperado: {', '.join(ENVIRONMENT_BRANCHES)}. A ignorar.")
-        return None, None
+        raise EnvironmentDeclarationError(
+            f"{source} diz '{declared[:60]}', que não é uma branch de ambiente."
+        )
 
     return declared, source
 
@@ -934,11 +961,16 @@ def show_menu():
     print("\n" + "=" * 50)
     print("   dados.gov.pt - Gerenciador de Servidores")
     print("=" * 50)
-    target, source = resolve_environment()
-    if target:
-        print(f"\nAmbiente desta máquina: {target}  (de {source})")
-    else:
-        print(f"\nSem {ENVIRONMENT_FILE}: as opções 1 e 2 usam a branch em checkout.")
+    try:
+        target, source = resolve_environment()
+        if target:
+            print(f"\nAmbiente desta máquina: {target}  (de {source})")
+        else:
+            print(f"\nSem {ENVIRONMENT_FILE}: as opções 1 e 2 usam a branch em checkout.")
+    except EnvironmentDeclarationError as error:
+        print(f"\n❌ {error}")
+        print("   As opções 1 e 2 recusam-se a arrancar até isto estar corrigido:")
+        print("   um ambiente declarado e ilegível não se adivinha.")
 
     print("\nEscolha o modo de execução:")
     print("\n  1. Modo de Desenvolvimento (foreground)")
@@ -976,7 +1008,15 @@ def main():
                 sys.exit(0)
 
             elif choice == "1":
-                target, source = resolve_environment()
+                try:
+                    target, source = resolve_environment()
+                except EnvironmentDeclarationError as error:
+                    print(f"\n❌ {error}")
+                    print(f"   Esperado uma linha com: {', '.join(ENVIRONMENT_BRANCHES)}.")
+                    print(f"   Corrija {ENVIRONMENT_FILE} (ou apague-o para usar a branch em")
+                    print(f"   checkout) e repita. Não se adivinha o ambiente de uma máquina:")
+                    print(f"   servidores não iniciados.")
+                    break
                 if not confirm_what_will_be_published(target, source):
                     break
                 if not git_pull_submodules():
@@ -992,7 +1032,15 @@ def main():
                 break
 
             elif choice == "2":
-                target, source = resolve_environment()
+                try:
+                    target, source = resolve_environment()
+                except EnvironmentDeclarationError as error:
+                    print(f"\n❌ {error}")
+                    print(f"   Esperado uma linha com: {', '.join(ENVIRONMENT_BRANCHES)}.")
+                    print(f"   Corrija {ENVIRONMENT_FILE} (ou apague-o para usar a branch em")
+                    print(f"   checkout) e repita. Não se adivinha o ambiente de uma máquina:")
+                    print(f"   imagens não reconstruídas.")
+                    break
                 if not confirm_what_will_be_published(target, source):
                     break
                 if not git_pull_submodules():

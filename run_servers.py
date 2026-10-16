@@ -61,6 +61,13 @@ VERSION_TAG = re.compile(r"^v?\d+(?:\.\d+)*$")
 REPO_LABELS = {"backend": "Backend (udata-pt)", "frontend": "Frontend (dadosgov-fe)"}
 
 
+# Ficheiros que os containers leem do disco por bind mount, e não da imagem.
+# O código vai dentro da imagem e fica fixo no build; estes não -- mudam
+# debaixo dos containers assim que o checkout muda, e são lidos no arranque
+# seguinte. Ver os volumes em backend/docker-compose.yml.
+MOUNTED_FROM_DISK = {"backend": ["udata.cfg", "uwsgi"]}
+
+
 def _git(repo, *args):
     """Corre um comando git dentro de um submódulo e devolve o resultado."""
     return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True)
@@ -273,6 +280,20 @@ def running_backend_version():
 
 
 
+def _mounted_files_that_differ(tags, previous):
+    """Dos ficheiros que os containers leem do disco, quais mudam entre a
+    versão em que se esteve e aquela para onde se vai voltar."""
+    differing = {}
+    for repo, paths in MOUNTED_FROM_DISK.items():
+        tag, ref = tags.get(repo), previous.get(repo)
+        if not tag or not ref:
+            continue
+        result = _git(repo, "diff", "--name-only", tag, ref, "--", *paths)
+        if result.returncode == 0 and result.stdout.strip():
+            differing[repo] = sorted({line.split("/")[0] for line in result.stdout.split()})
+    return differing
+
+
 def ask_to_restore(previous, tags, docker):
     """Pergunta se os submódulos voltam às branches onde estavam.
 
@@ -289,9 +310,21 @@ def ask_to_restore(previous, tags, docker):
 
     print("")
     if docker:
-        print("Os containers já foram construídos com este código: repor o git")
-        print("NÃO os altera -- continuam a servir estas versões até correr a")
-        print("opção 2, que reconstrói a partir das branches de trabalho.")
+        print("O código está dentro das imagens: repor o git não muda o que os")
+        print("containers executam -- continuam a servir estas versões até correr")
+        print("a opção 2, que reconstrói a partir das branches de trabalho.")
+
+        changed = _mounted_files_that_differ(tags, previous)
+        if changed:
+            print("")
+            print("ATENÇÃO: estes ficheiros não vão dentro da imagem; os containers")
+            print("leem-nos do disco, e diferem entre as duas versões:")
+            for repo, paths in changed.items():
+                print(f"  {repo}: {', '.join(paths)}")
+            print("Repondo o git, os containers passam a ler a versão nova destes")
+            print("ficheiros no arranque seguinte -- a opção 3 (reiniciar) poria")
+            print("código antigo a arrancar com configuração nova. Até lá, o que")
+            print("está a correr não é afectado.")
     else:
         print("Os servidores já pararam, por isso repor o git não interrompe nada.")
 

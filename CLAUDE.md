@@ -138,6 +138,20 @@ Cada submódulo é versionado por **tags**, uma por promoção para `main`, e ca
 - **Depois de cada deploy**, confirmar que o ambiente serve mesmo a versão que foi publicada: `./scripts/check_deployed_version.sh https://dados.gov.pt [versão]`. O número que a API devolve vem da metadata do pacote **instalado**, não do `pyproject.toml` — código publicado sem o pacote ser reinstalado continua a responder com a versão anterior, e o rodapé do portal repete-a a quem lá entra. Foi assim que o rodapé anunciou uma versão errada durante meses.
 - Detalhe por repo em `backend/CLAUDE.md` e `frontend/CLAUDE.md`, secção **Versioning & Releases**.
 
+## Ambiente de cada máquina
+
+O `run_servers.py` é o mesmo em todas as máquinas — local, tst, ppr e produção — e precisa de saber qual é a desta. Essa informação vive num ficheiro **por máquina**, fora do git:
+
+```bash
+cp .dadosgov-env.example .dadosgov-env   # e escrever lá: develop, tst, ppr ou main
+```
+
+As opções 1 e 2 publicam **a branch desse ambiente** e recusam-se a publicar outra: se um submódulo estiver noutra branch, param e oferecem a mudança; em *detached HEAD*, param, porque sem branch não há o que publicar. Antes de construir, mostram sempre o que vai subir — ambiente, branch, commit, data e assunto — e pedem confirmação.
+
+O ambiente é uma propriedade da máquina, não uma escolha de quem corre o script: um servidor de tst é de tst em todos os arranques, e perguntá-lo a cada corrida transformaria uma constante numa decisão. Para correr uma versão arbitrária existe a opção 4.
+
+**Sem o ficheiro** — o caso normal numa máquina de desenvolvimento — usa-se a branch em checkout, mostrada e confirmada. Não se assume `develop`: em local trabalha-se em branches de feature, e assumir uma branch de ambiente ou impedia o arranque ou tirava a pessoa de cima do seu trabalho.
+
 ## Regras Gerais
 
 - **Antes de corrigir um bug, procurar precedentes**: `git log --all --grep=<keyword>`, `git log --all -- <file>`, `grep -r` por padrões/símbolos relacionados (e.g. `Isolated*`, `Safe*` wrappers), e leitura de PRs/commits anteriores. Se já existe fix funcional, replicar o padrão. Se for possível melhorar, sugerir explicitamente antes de divergir.

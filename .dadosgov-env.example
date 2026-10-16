@@ -1,0 +1,12 @@
+# Qual o ambiente desta máquina. Copie para .dadosgov-env (sem .example) em
+# cada servidor e escreva uma linha com develop, tst, ppr ou main.
+#
+# O run_servers.py usa isto para saber que branch publicar nas opções 1 e 2, e
+# recusa-se a publicar outra. É um ficheiro por máquina, e por isso não vai no
+# git: um servidor de tst é de tst em todos os arranques, e isso não deve
+# depender de quem corre o script nem do que ficou em checkout.
+#
+# Numa máquina de desenvolvimento, o normal é não existir: aí o script usa a
+# branch que estiver em checkout, mostra-a e pede confirmação -- é onde se
+# trabalha em branches de feature, e assumir develop só atrapalharia.
+tst

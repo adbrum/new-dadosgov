@@ -37,8 +37,110 @@ def _frontend_docker_env():
     return _docker_env("NEXTJS_UID", "NEXTJS_GID")
 
 
+# Branches de ambiente, da mais recente para a mais estável. Uma máquina
+# pertence a uma delas; não é uma escolha de quem corre o script.
+ENVIRONMENT_BRANCHES = ("develop", "tst", "ppr", "main")
+
+ENVIRONMENT_FILE = ".dadosgov-env"
+
+
+def resolve_environment():
+    """A branch que esta máquina deve publicar, ou None se não o declarar.
+
+    Lê-se de DADOSGOV_ENV ou do ficheiro .dadosgov-env, que é próprio de cada
+    servidor e por isso não vai no git. O ambiente é uma propriedade da
+    máquina: um servidor de tst é de tst em todos os arranques. Perguntá-lo a
+    cada corrida transformaria uma constante numa decisão, e é assim que se
+    acaba a publicar a branch errada em produção."""
+    declared = os.environ.get("DADOSGOV_ENV", "").strip()
+    source = "DADOSGOV_ENV"
+
+    if not declared:
+        try:
+            declared = pathlib.Path(ENVIRONMENT_FILE).read_text().strip()
+            source = ENVIRONMENT_FILE
+        except OSError:
+            return None, None
+
+    declared = declared.splitlines()[0].strip() if declared else ""
+    if declared not in ENVIRONMENT_BRANCHES:
+        print(f"  ⚠ {source} diz '{declared}', que não é uma branch de ambiente.")
+        print(f"    Esperado: {', '.join(ENVIRONMENT_BRANCHES)}. A ignorar.")
+        return None, None
+
+    return declared, source
+
+
+def describe_checkout(repo):
+    """Branch (ou detached), commit, data e assunto do que está em checkout."""
+    branch = _git(repo, "symbolic-ref", "--quiet", "--short", "HEAD")
+    where = branch.stdout.strip() if branch.returncode == 0 else None
+    details = _git(repo, "log", "-1", "--format=%h|%ad|%s", "--date=short").stdout.strip()
+    commit, _, rest = details.partition("|")
+    date, _, subject = rest.partition("|")
+    return where, commit, date, subject
+
+
+def confirm_what_will_be_published(target, source):
+    """Mostra o que vai ser construído e pede confirmação.
+
+    O ponto é não haver arranques às cegas: antes, o script fazia 'git pull' no
+    que estivesse em checkout e construía, sem dizer o quê. Um submódulo deixado
+    noutra branch subia sem ninguém reparar."""
+    if target:
+        print(f"\nAmbiente: {target}  (de {source})")
+    else:
+        print(f"\nSem {ENVIRONMENT_FILE} nem DADOSGOV_ENV: usa o que está em checkout.")
+
+    detached, divergent = [], []
+    for repo in ("backend", "frontend"):
+        where, commit, date, subject = describe_checkout(repo)
+        label = where or "DETACHED"
+        if len(label) > 26:
+            label = label[:25] + "…"
+        print(f"  {repo:<9} {label:<26} {commit:<10} {date}  {subject[:46]}")
+        if not where:
+            detached.append(repo)
+        elif target and where != target:
+            divergent.append((repo, where))
+
+    if detached:
+        print("")
+        print(f"  ❌ {', '.join(detached)} não está numa branch, e sem branch não há o que")
+        print("     publicar: um 'git pull' falha e construir-se-ia na mesma o código")
+        print("     que estiver em disco. É o estado em que a opção 4 deixa os")
+        print("     submódulos quando se escolhe ficar na versão antiga.")
+        for repo in detached:
+            print(f"     Para sair: git -C {repo} checkout {target or '<branch>'}")
+        return False
+
+    if divergent:
+        print("")
+        for repo, where in divergent:
+            print(f"  ⚠ {repo} está em '{where}', mas este ambiente é '{target}'.")
+        if input(f"    Mudar para {target}? [S/n]: ").strip().lower() not in ("", "s", "sim", "y", "yes"):
+            print("    Cancelado: um ambiente não deve publicar a branch de outro.")
+            return False
+        for repo, _ in divergent:
+            if _git(repo, "status", "--porcelain").stdout.strip():
+                print(f"    ❌ {repo} tem alterações por guardar; não lhe toco.")
+                return False
+            result = _git(repo, "checkout", target)
+            if result.returncode != 0:
+                print(f"    ❌ {repo}: {result.stderr.strip()}")
+                return False
+            print(f"    ✓ {repo}: {target}")
+
+    return input("\nContinuar? [S/n]: ").strip().lower() in ("", "s", "sim", "y", "yes")
+
+
 def git_pull_submodules():
-    """Executa git pull nos repositórios backend e frontend"""
+    """Executa git pull nos repositórios backend e frontend.
+
+    Devolve False se algum falhar: antes, um pull falhado era um aviso que
+    passava ao lado e o script construía na mesma, publicando código mais
+    antigo do que quem o corria julgava."""
+    ok = True
     for repo in ["backend", "frontend"]:
         print(f"A atualizar {repo} (git pull)...")
         result = subprocess.run(
@@ -51,7 +153,10 @@ def git_pull_submodules():
             output = result.stdout.strip()
             print(f"  ✓ {repo}: {output if output else 'já atualizado'}")
         else:
-            print(f"  ⚠ {repo}: {result.stderr.strip() or 'erro ao executar git pull'}")
+            ok = False
+            print(f"  ❌ {repo}: {result.stderr.strip() or 'erro ao executar git pull'}")
+
+    return ok
 
 
 # Uma tag de versão: 'v16.0.0.12' no backend, '1.4.14' no frontend. Marcos
@@ -829,6 +934,12 @@ def show_menu():
     print("\n" + "=" * 50)
     print("   dados.gov.pt - Gerenciador de Servidores")
     print("=" * 50)
+    target, source = resolve_environment()
+    if target:
+        print(f"\nAmbiente desta máquina: {target}  (de {source})")
+    else:
+        print(f"\nSem {ENVIRONMENT_FILE}: as opções 1 e 2 usam a branch em checkout.")
+
     print("\nEscolha o modo de execução:")
     print("\n  1. Modo de Desenvolvimento (foreground)")
     print("     - Instala dependências (uv sync + npm install) antes de iniciar")
@@ -865,7 +976,12 @@ def main():
                 sys.exit(0)
 
             elif choice == "1":
-                git_pull_submodules()
+                target, source = resolve_environment()
+                if not confirm_what_will_be_published(target, source):
+                    break
+                if not git_pull_submodules():
+                    print("\n❌ Atualização falhou; servidores não iniciados.")
+                    break
                 if not install_dependencies():
                     print("\n❌ Instalação de dependências falhou; servidores não iniciados.")
                     break
@@ -876,7 +992,12 @@ def main():
                 break
 
             elif choice == "2":
-                git_pull_submodules()
+                target, source = resolve_environment()
+                if not confirm_what_will_be_published(target, source):
+                    break
+                if not git_pull_submodules():
+                    print("\n❌ Atualização falhou; imagens não reconstruídas.")
+                    break
                 # Sem instalação de dependências no host: o build das imagens
                 # já corre 'npm ci' (frontend) e 'uv sync --no-dev' (backend),
                 # e o compose não monta volumes de código.

@@ -84,3 +84,6 @@ fs/
 
 # per-ticket git worktrees (never committed)
 .claude/worktrees/
+
+# Ambiente desta máquina (ver .dadosgov-env.example)
+.dadosgov-env

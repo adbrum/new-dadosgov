@@ -198,6 +198,14 @@ def checkout_version(repo, tag):
     return previous
 
 
+def _owner_of(path):
+    """O nome do dono de um ficheiro, para dizer a quem é preciso pedir."""
+    try:
+        return pwd.getpwuid(os.stat(path).st_uid).pw_name
+    except (KeyError, OSError):
+        return "outro utilizador"
+
+
 def _blocking_untracked(repo, ref):
     """Ficheiros em disco que o git não segue e que a referência de destino
     tem seguidos. São estes que impedem a troca: o git recusa-se a
@@ -243,24 +251,58 @@ def restore_refs(previous):
         print("    Estes ficheiros estão em disco sem o git os seguir, e seriam")
         print(f"    sobrescritos ao voltar. Como {ref} os tem seguidos, removê-los")
         print("    repõe a versão do repositório:")
-        for path in blocking:
-            print(f"      {path}")
-        print("    (costuma ser o editor a regravá-los depois de o git os apagar)")
 
-        if input("\n    Remover e tentar de novo? [s/N]: ").strip().lower() in ("s", "sim", "y", "yes"):
-            for path in blocking:
-                try:
-                    os.remove(os.path.join(repo, path))
-                except OSError as error:
-                    print(f"      ⚠ {path}: {error}")
-            retry = _git(repo, "checkout", ref)
-            if retry.returncode == 0:
-                print(f"    ✓ {repo}: {ref}")
+        mine = pwd.getpwuid(os.getuid()).pw_name
+        alheios = False
+        for path in blocking:
+            owner = _owner_of(os.path.join(repo, path))
+            if owner == mine:
+                print(f"      {path}")
             else:
-                print(f"    ⚠ {repo}: {retry.stderr.strip()}")
-                print(f"      Para voltar: git -C {repo} checkout {ref}")
+                alheios = True
+                print(f"      {path}   (de {owner}, não seu)")
+
+        if alheios:
+            print("    Ficheiros de outro dono não são apagados pelo git -- foi por")
+            print("    isso que sobreviveram à troca para a versão antiga. Costumam")
+            print("    vir de um container que correu como outro utilizador.")
         else:
+            print("    (costuma ser o editor a regravá-los depois de o git os apagar)")
+
+        if input("\n    Remover e tentar de novo? [s/N]: ").strip().lower() not in ("s", "sim", "y", "yes"):
             print(f"    Para voltar mais tarde: git -C {repo} checkout {ref}")
+            continue
+
+        denied = []
+        for path in blocking:
+            full = os.path.join(repo, path)
+            try:
+                os.remove(full)
+            except PermissionError:
+                denied.append(full)
+                print(f"      ⚠ {path}: sem permissão (pertence a {_owner_of(full)})")
+            except OSError as error:
+                denied.append(full)
+                print(f"      ⚠ {path}: {error}")
+
+        if denied:
+            # Ficheiros de outro dono não se resolvem aqui: nem o git os apaga,
+            # e é por isso que sobreviveram ao checkout para a versão antiga.
+            print("")
+            print("    Estes ficheiros não pertencem a quem está a correr isto, por")
+            print("    isso nem o git nem este script lhes podem tocar -- foi por")
+            print("    isso que sobreviveram à troca de versão. Remova-os com")
+            print("    privilégios e volte:")
+            print(f"      sudo rm -f {' '.join(denied)}")
+            print(f"      git -C {repo} checkout {ref}")
+            continue
+
+        retry = _git(repo, "checkout", ref)
+        if retry.returncode == 0:
+            print(f"    ✓ {repo}: {ref}")
+        else:
+            print(f"    ⚠ {repo}: {retry.stderr.strip()}")
+            print(f"      Para voltar: git -C {repo} checkout {ref}")
 
     print("\n  Estado final dos submódulos:")
     for repo in previous:

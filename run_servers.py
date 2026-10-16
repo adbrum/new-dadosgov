@@ -1,5 +1,6 @@
 import json
 import os
+import pathlib
 import pwd
 import re
 import subprocess
@@ -197,6 +198,14 @@ def checkout_version(repo, tag):
     return previous
 
 
+def _owner_of(path):
+    """O nome do dono de um ficheiro, para dizer a quem é preciso pedir."""
+    try:
+        return pwd.getpwuid(os.stat(path).st_uid).pw_name
+    except (KeyError, OSError):
+        return "outro utilizador"
+
+
 def _blocking_untracked(repo, ref):
     """Ficheiros em disco que o git não segue e que a referência de destino
     tem seguidos. São estes que impedem a troca: o git recusa-se a
@@ -242,24 +251,58 @@ def restore_refs(previous):
         print("    Estes ficheiros estão em disco sem o git os seguir, e seriam")
         print(f"    sobrescritos ao voltar. Como {ref} os tem seguidos, removê-los")
         print("    repõe a versão do repositório:")
-        for path in blocking:
-            print(f"      {path}")
-        print("    (costuma ser o editor a regravá-los depois de o git os apagar)")
 
-        if input("\n    Remover e tentar de novo? [s/N]: ").strip().lower() in ("s", "sim", "y", "yes"):
-            for path in blocking:
-                try:
-                    os.remove(os.path.join(repo, path))
-                except OSError as error:
-                    print(f"      ⚠ {path}: {error}")
-            retry = _git(repo, "checkout", ref)
-            if retry.returncode == 0:
-                print(f"    ✓ {repo}: {ref}")
+        mine = pwd.getpwuid(os.getuid()).pw_name
+        alheios = False
+        for path in blocking:
+            owner = _owner_of(os.path.join(repo, path))
+            if owner == mine:
+                print(f"      {path}")
             else:
-                print(f"    ⚠ {repo}: {retry.stderr.strip()}")
-                print(f"      Para voltar: git -C {repo} checkout {ref}")
+                alheios = True
+                print(f"      {path}   (de {owner}, não seu)")
+
+        if alheios:
+            print("    Ficheiros de outro dono não são apagados pelo git -- foi por")
+            print("    isso que sobreviveram à troca para a versão antiga. Costumam")
+            print("    vir de um container que correu como outro utilizador.")
         else:
+            print("    (costuma ser o editor a regravá-los depois de o git os apagar)")
+
+        if input("\n    Remover e tentar de novo? [s/N]: ").strip().lower() not in ("s", "sim", "y", "yes"):
             print(f"    Para voltar mais tarde: git -C {repo} checkout {ref}")
+            continue
+
+        denied = []
+        for path in blocking:
+            full = os.path.join(repo, path)
+            try:
+                os.remove(full)
+            except PermissionError:
+                denied.append(full)
+                print(f"      ⚠ {path}: sem permissão (pertence a {_owner_of(full)})")
+            except OSError as error:
+                denied.append(full)
+                print(f"      ⚠ {path}: {error}")
+
+        if denied:
+            # Ficheiros de outro dono não se resolvem aqui: nem o git os apaga,
+            # e é por isso que sobreviveram ao checkout para a versão antiga.
+            print("")
+            print("    Estes ficheiros não pertencem a quem está a correr isto, por")
+            print("    isso nem o git nem este script lhes podem tocar -- foi por")
+            print("    isso que sobreviveram à troca de versão. Remova-os com")
+            print("    privilégios e volte:")
+            print(f"      sudo rm -f {' '.join(denied)}")
+            print(f"      git -C {repo} checkout {ref}")
+            continue
+
+        retry = _git(repo, "checkout", ref)
+        if retry.returncode == 0:
+            print(f"    ✓ {repo}: {ref}")
+        else:
+            print(f"    ⚠ {repo}: {retry.stderr.strip()}")
+            print(f"      Para voltar: git -C {repo} checkout {ref}")
 
     print("\n  Estado final dos submódulos:")
     for repo in previous:
@@ -280,6 +323,88 @@ def running_backend_version():
 
 
 
+def _version_tuple(version):
+    """'16.0.0.12' -> (16, 0, 0, 12), para comparar números como números. Como
+    texto, '16.0.0.9' viria depois de '16.0.0.12', que é o contrário."""
+    parts = []
+    for chunk in version.lstrip("v").split("."):
+        digits = ""
+        for char in chunk:
+            if not char.isdigit():
+                break
+            digits += char
+        parts.append(int(digits) if digits else 0)
+    return tuple(parts)
+
+
+def version_below(candidate, minimum):
+    """True quando 'candidate' é anterior a 'minimum'. Compara com o mesmo
+    comprimento, para que 16.1.0 conte como 16.1.0.0 ao lado de 16.0.0.12."""
+    left, right = _version_tuple(candidate), _version_tuple(minimum)
+    width = max(len(left), len(right))
+    return left + (0,) * (width - len(left)) < right + (0,) * (width - len(right))
+
+
+def live_at(versions, moment):
+    """A versão que estava em produção numa data: a mais recente cuja data de
+    commit não lhe é posterior. None se nessa altura ainda não havia nenhuma."""
+    candidates = [(tag, date) for tag, date in versions if date <= moment]
+    return max(candidates, key=lambda item: item[1])[0] if candidates else None
+
+
+def report_pairing(backend_tag, frontend_tag, backend_versions, frontend_versions):
+    """Diz se as duas versões escolhidas chegaram a estar em produção ao mesmo
+    tempo.
+
+    É a única afirmação sobre compatibilidade que o histórico permite fazer:
+    os dois repositórios têm numerações independentes e nada declara ainda o
+    que funciona com o quê, mas que duas versões conviveram em produção é um
+    facto registado nas datas dos commits que as tags marcam."""
+    backend_date = dict(backend_versions).get(backend_tag)
+    frontend_date = dict(frontend_versions).get(frontend_tag)
+    if not backend_date or not frontend_date:
+        return
+
+    frontend_then = live_at(frontend_versions, backend_date)
+    backend_then = live_at(backend_versions, frontend_date)
+
+    if frontend_tag == frontend_then or backend_tag == backend_then:
+        print(f"  Este par esteve em produção ao mesmo tempo ({backend_date} / {frontend_date}).")
+        return
+
+    print("  ⚠ Este par nunca esteve em produção ao mesmo tempo.")
+    if frontend_then:
+        print(f"    Com o backend {backend_tag} ({backend_date}) corria o frontend {frontend_then}.")
+    if backend_then:
+        print(f"    Com o frontend {frontend_tag} ({frontend_date}) corria o backend {backend_then}.")
+    print("    Não quer dizer que não funcione: quer dizer que nunca foi testado.")
+
+
+def report_declared_minimum(backend_tag):
+    """Avisa quando o frontend em checkout exige um backend mais recente do que
+    o escolhido.
+
+    O frontend declara em package.json o backend mínimo de que precisa, porque
+    a incompatibilidade é assimétrica: um backend novo com um frontend antigo
+    costuma funcionar -- a API cresce por adição, e um campo que ninguém lê é
+    inerte -- enquanto um frontend novo com um backend antigo pede o que ainda
+    não existe. Enquanto o frontend não declarar nada, não há nada a dizer."""
+    try:
+        manifest = json.loads((pathlib.Path("frontend") / "package.json").read_text())
+    except (OSError, ValueError):
+        return
+
+    minimum = manifest.get("minBackendVersion")
+    if not minimum or not version_below(backend_tag, minimum):
+        return
+
+    print("")
+    print(f"  ⚠ Este frontend declara precisar de backend {minimum} ou mais recente,")
+    print(f"    e escolheu {backend_tag}. Vai faltar-lhe aquilo de que depende:")
+    print("    campos ou endpoints que esta versão da API ainda não serve. Espere")
+    print("    ecrãs a mostrar menos do que deviam, sem erro à vista.")
+
+
 def _mounted_files_that_differ(tags, previous):
     """Dos ficheiros que os containers leem do disco, quais mudam entre a
     versão em que se esteve e aquela para onde se vai voltar."""
@@ -292,6 +417,51 @@ def _mounted_files_that_differ(tags, previous):
         if result.returncode == 0 and result.stdout.strip():
             differing[repo] = sorted({line.split("/")[0] for line in result.stdout.split()})
     return differing
+
+
+def declared_version(repo):
+    """A versão que o projecto declara de si próprio no checkout actual:
+    'version' do pyproject.toml no backend, do package.json no frontend."""
+    try:
+        if repo == "backend":
+            for line in (pathlib.Path(repo) / "pyproject.toml").read_text().splitlines():
+                if line.startswith("version"):
+                    return line.split('"')[1]
+        else:
+            return json.loads((pathlib.Path(repo) / "package.json").read_text()).get("version")
+    except (OSError, IndexError, ValueError):
+        return None
+    return None
+
+
+def report_declared_versions(tags):
+    """Diz o que cada projecto declara de si próprio, quando isso não coincide
+    com a tag em que está.
+
+    Nas tags antigas não coincide, e por boas razões: foram criadas
+    retroactivamente sobre commits que nunca souberam o seu próprio número --
+    o backend declarava 15.1.0 em todas elas, o frontend 0.1.0. Quem vir o
+    'uv sync' dizer udata==15.1.0 depois de escolher a v16.0.0.11 merece saber
+    porquê, em vez de pensar que escolheu mal."""
+    mismatched = []
+    for repo, tag in tags.items():
+        declared = declared_version(repo)
+        if declared and declared != tag.lstrip("v"):
+            mismatched.append((repo, tag, declared))
+
+    if not mismatched:
+        return
+
+    print("")
+    for repo, tag, declared in mismatched:
+        print(f"  Nota: em {tag}, o {repo} declara-se '{declared}' a si próprio.")
+    print("  As tags até à v16.0.0.12 (backend) e 1.4.14 (frontend) foram criadas")
+    print("  retroactivamente, sobre commits anteriores a este versionamento: o")
+    print("  número interno ficou no que estava na altura. É por isso que o 'uv")
+    print("  sync' ou o build anunciam esse número, e não a tag. A partir da")
+    print("  próxima release os dois passam a bater certo -- o tag-version.sh de")
+    print("  cada repositório recusa-se a etiquetar uma versão que o projecto")
+    print("  não declare.")
 
 
 def ask_to_restore(previous, tags, docker):
@@ -388,6 +558,10 @@ def run_specific_version():
         return
 
     print(f"\nBackend {backend_tag} · Frontend {frontend_tag}")
+    report_pairing(backend_tag, frontend_tag, backend_versions, frontend_versions)
+    report_declared_minimum(backend_tag)
+    report_declared_versions({"backend": backend_tag, "frontend": frontend_tag})
+    print("")
     mode = input("Arrancar em (1) desenvolvimento ou (2) Docker? [1]: ").strip() or "1"
 
     try:

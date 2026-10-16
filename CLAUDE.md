@@ -135,6 +135,7 @@ Cada submódulo é versionado por **tags**, uma por promoção para `main`, e ca
 - **Não procurar correspondência entre os números dos dois repos** — são independentes. A única relação honesta entre uma versão de backend e uma de frontend é a **data** da tag.
 - A versão upstream do backend confirma-se por ancestralidade, nunca a ler o `pyproject.toml`: `git merge-base --is-ancestor refs/tags/upstream/vX.Y.Z origin/main`. O remote `upstream` deve ter `tagOpt = --no-tags`, para que um fetch não importe as tags dos franceses para o namespace principal.
 - Ferramentas que listem versões (p. ex. o seletor do `run_servers.py`) devem ler **tags de git**, não releases do GitHub: funcionam offline, sem token e sem API. As releases são a camada de texto.
+- **Depois de cada deploy**, confirmar que o ambiente serve mesmo a versão que foi publicada: `./scripts/check_deployed_version.sh https://dados.gov.pt [versão]`. O número que a API devolve vem da metadata do pacote **instalado**, não do `pyproject.toml` — código publicado sem o pacote ser reinstalado continua a responder com a versão anterior, e o rodapé do portal repete-a a quem lá entra. Foi assim que o rodapé anunciou uma versão errada durante meses.
 - Detalhe por repo em `backend/CLAUDE.md` e `frontend/CLAUDE.md`, secção **Versioning & Releases**.
 
 ## Regras Gerais

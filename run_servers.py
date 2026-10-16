@@ -323,6 +323,88 @@ def running_backend_version():
 
 
 
+def _version_tuple(version):
+    """'16.0.0.12' -> (16, 0, 0, 12), para comparar números como números. Como
+    texto, '16.0.0.9' viria depois de '16.0.0.12', que é o contrário."""
+    parts = []
+    for chunk in version.lstrip("v").split("."):
+        digits = ""
+        for char in chunk:
+            if not char.isdigit():
+                break
+            digits += char
+        parts.append(int(digits) if digits else 0)
+    return tuple(parts)
+
+
+def version_below(candidate, minimum):
+    """True quando 'candidate' é anterior a 'minimum'. Compara com o mesmo
+    comprimento, para que 16.1.0 conte como 16.1.0.0 ao lado de 16.0.0.12."""
+    left, right = _version_tuple(candidate), _version_tuple(minimum)
+    width = max(len(left), len(right))
+    return left + (0,) * (width - len(left)) < right + (0,) * (width - len(right))
+
+
+def live_at(versions, moment):
+    """A versão que estava em produção numa data: a mais recente cuja data de
+    commit não lhe é posterior. None se nessa altura ainda não havia nenhuma."""
+    candidates = [(tag, date) for tag, date in versions if date <= moment]
+    return max(candidates, key=lambda item: item[1])[0] if candidates else None
+
+
+def report_pairing(backend_tag, frontend_tag, backend_versions, frontend_versions):
+    """Diz se as duas versões escolhidas chegaram a estar em produção ao mesmo
+    tempo.
+
+    É a única afirmação sobre compatibilidade que o histórico permite fazer:
+    os dois repositórios têm numerações independentes e nada declara ainda o
+    que funciona com o quê, mas que duas versões conviveram em produção é um
+    facto registado nas datas dos commits que as tags marcam."""
+    backend_date = dict(backend_versions).get(backend_tag)
+    frontend_date = dict(frontend_versions).get(frontend_tag)
+    if not backend_date or not frontend_date:
+        return
+
+    frontend_then = live_at(frontend_versions, backend_date)
+    backend_then = live_at(backend_versions, frontend_date)
+
+    if frontend_tag == frontend_then or backend_tag == backend_then:
+        print(f"  Este par esteve em produção ao mesmo tempo ({backend_date} / {frontend_date}).")
+        return
+
+    print("  ⚠ Este par nunca esteve em produção ao mesmo tempo.")
+    if frontend_then:
+        print(f"    Com o backend {backend_tag} ({backend_date}) corria o frontend {frontend_then}.")
+    if backend_then:
+        print(f"    Com o frontend {frontend_tag} ({frontend_date}) corria o backend {backend_then}.")
+    print("    Não quer dizer que não funcione: quer dizer que nunca foi testado.")
+
+
+def report_declared_minimum(backend_tag):
+    """Avisa quando o frontend em checkout exige um backend mais recente do que
+    o escolhido.
+
+    O frontend declara em package.json o backend mínimo de que precisa, porque
+    a incompatibilidade é assimétrica: um backend novo com um frontend antigo
+    costuma funcionar -- a API cresce por adição, e um campo que ninguém lê é
+    inerte -- enquanto um frontend novo com um backend antigo pede o que ainda
+    não existe. Enquanto o frontend não declarar nada, não há nada a dizer."""
+    try:
+        manifest = json.loads((pathlib.Path("frontend") / "package.json").read_text())
+    except (OSError, ValueError):
+        return
+
+    minimum = manifest.get("minBackendVersion")
+    if not minimum or not version_below(backend_tag, minimum):
+        return
+
+    print("")
+    print(f"  ⚠ Este frontend declara precisar de backend {minimum} ou mais recente,")
+    print(f"    e escolheu {backend_tag}. Vai faltar-lhe aquilo de que depende:")
+    print("    campos ou endpoints que esta versão da API ainda não serve. Espere")
+    print("    ecrãs a mostrar menos do que deviam, sem erro à vista.")
+
+
 def _mounted_files_that_differ(tags, previous):
     """Dos ficheiros que os containers leem do disco, quais mudam entre a
     versão em que se esteve e aquela para onde se vai voltar."""
@@ -476,6 +558,8 @@ def run_specific_version():
         return
 
     print(f"\nBackend {backend_tag} · Frontend {frontend_tag}")
+    report_pairing(backend_tag, frontend_tag, backend_versions, frontend_versions)
+    report_declared_minimum(backend_tag)
     report_declared_versions({"backend": backend_tag, "frontend": frontend_tag})
     print("")
     mode = input("Arrancar em (1) desenvolvimento ou (2) Docker? [1]: ").strip() or "1"

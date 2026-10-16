@@ -61,6 +61,13 @@ VERSION_TAG = re.compile(r"^v?\d+(?:\.\d+)*$")
 REPO_LABELS = {"backend": "Backend (udata-pt)", "frontend": "Frontend (dadosgov-fe)"}
 
 
+# Ficheiros que os containers leem do disco por bind mount, e não da imagem.
+# O código vai dentro da imagem e fica fixo no build; estes não -- mudam
+# debaixo dos containers assim que o checkout muda, e são lidos no arranque
+# seguinte. Ver os volumes em backend/docker-compose.yml.
+MOUNTED_FROM_DISK = {"backend": ["udata.cfg", "uwsgi"]}
+
+
 def _git(repo, *args):
     """Corre um comando git dentro de um submódulo e devolve o resultado."""
     return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True)
@@ -190,15 +197,75 @@ def checkout_version(repo, tag):
     return previous
 
 
+def _blocking_untracked(repo, ref):
+    """Ficheiros em disco que o git não segue e que a referência de destino
+    tem seguidos. São estes que impedem a troca: o git recusa-se a
+    sobrescrever trabalho que não conhece."""
+    status = _git(repo, "status", "--porcelain", "--untracked-files=all").stdout.splitlines()
+    untracked = [line[3:] for line in status if line.startswith("??")]
+    if not untracked:
+        return []
+
+    at_ref = set(_git(repo, "ls-tree", "-r", "--name-only", ref).stdout.splitlines())
+    return [path for path in untracked if path in at_ref]
+
+
 def restore_refs(previous):
-    """Repõe cada submódulo na referência onde estava antes da escolha."""
+    """Repõe cada submódulo na referência onde estava antes da escolha.
+
+    Falha de forma legítima quando, durante a estadia na versão antiga, algo
+    recriou em disco ficheiros que essa versão não tem -- um editor com esses
+    separadores abertos, que os volta a gravar depois de o git os apagar, é a
+    causa habitual. O git recusa então sobrescrevê-los ao voltar.
+
+    Quando é esse o caso, removê-los é seguro: a referência de destino tem-nos
+    seguidos, por isso voltam na versão do repositório. Mesmo assim pergunta-se
+    antes e mostram-se um a um, porque remover ficheiros de alguém sem avisar
+    não se faz."""
     for repo, ref in previous.items():
         if not ref:
             continue
+
         result = _git(repo, "checkout", ref)
-        state = "✓" if result.returncode == 0 else "⚠"
-        detail = ref if result.returncode == 0 else result.stderr.strip()
-        print(f"  {state} {repo}: {detail}")
+        if result.returncode == 0:
+            print(f"  ✓ {repo}: {ref}")
+            continue
+
+        print(f"  ⚠ {repo}: não foi possível voltar a {ref}")
+        blocking = _blocking_untracked(repo, ref)
+
+        if not blocking:
+            print(f"    {result.stderr.strip()}")
+            print(f"    Para voltar: git -C {repo} checkout {ref}")
+            continue
+
+        print("    Estes ficheiros estão em disco sem o git os seguir, e seriam")
+        print(f"    sobrescritos ao voltar. Como {ref} os tem seguidos, removê-los")
+        print("    repõe a versão do repositório:")
+        for path in blocking:
+            print(f"      {path}")
+        print("    (costuma ser o editor a regravá-los depois de o git os apagar)")
+
+        if input("\n    Remover e tentar de novo? [s/N]: ").strip().lower() in ("s", "sim", "y", "yes"):
+            for path in blocking:
+                try:
+                    os.remove(os.path.join(repo, path))
+                except OSError as error:
+                    print(f"      ⚠ {path}: {error}")
+            retry = _git(repo, "checkout", ref)
+            if retry.returncode == 0:
+                print(f"    ✓ {repo}: {ref}")
+            else:
+                print(f"    ⚠ {repo}: {retry.stderr.strip()}")
+                print(f"      Para voltar: git -C {repo} checkout {ref}")
+        else:
+            print(f"    Para voltar mais tarde: git -C {repo} checkout {ref}")
+
+    print("\n  Estado final dos submódulos:")
+    for repo in previous:
+        branch = _git(repo, "symbolic-ref", "--quiet", "--short", "HEAD")
+        where = branch.stdout.strip() if branch.returncode == 0 else f"detached em {_current_ref(repo)}"
+        print(f"    {repo:<9} {where}")
 
 
 def running_backend_version():
@@ -210,6 +277,73 @@ def running_backend_version():
             return json.load(response).get("version")
     except (urllib.error.URLError, ValueError, OSError, TimeoutError):
         return None
+
+
+
+def _mounted_files_that_differ(tags, previous):
+    """Dos ficheiros que os containers leem do disco, quais mudam entre a
+    versão em que se esteve e aquela para onde se vai voltar."""
+    differing = {}
+    for repo, paths in MOUNTED_FROM_DISK.items():
+        tag, ref = tags.get(repo), previous.get(repo)
+        if not tag or not ref:
+            continue
+        result = _git(repo, "diff", "--name-only", tag, ref, "--", *paths)
+        if result.returncode == 0 and result.stdout.strip():
+            differing[repo] = sorted({line.split("/")[0] for line in result.stdout.split()})
+    return differing
+
+
+def ask_to_restore(previous, tags, docker):
+    """Pergunta se os submódulos voltam às branches onde estavam.
+
+    A pergunta é sobre os ficheiros em disco e não sobre o que está a correr,
+    e essa distinção não é óbvia para quem a lê a meio de um arranque: em
+    Docker o código já foi copiado para dentro das imagens, por isso repor o
+    git não muda nada do que está de pé. Por isso diz-se aqui o que cada
+    resposta faz, e de onde para onde."""
+    print("\n" + "-" * 58)
+    print("Os submódulos ficaram parados nas tags escolhidas (detached HEAD):")
+    for repo, tag in tags.items():
+        origin = previous.get(repo) or "?"
+        print(f"  {repo:<9} {tag:<14} (vinha de {origin})")
+
+    print("")
+    if docker:
+        print("O código está dentro das imagens: repor o git não muda o que os")
+        print("containers executam -- continuam a servir estas versões até correr")
+        print("a opção 2, que reconstrói a partir das branches de trabalho.")
+
+        changed = _mounted_files_that_differ(tags, previous)
+        if changed:
+            print("")
+            print("ATENÇÃO: estes ficheiros não vão dentro da imagem; os containers")
+            print("leem-nos do disco, e diferem entre as duas versões:")
+            for repo, paths in changed.items():
+                print(f"  {repo}: {', '.join(paths)}")
+            print("Repondo o git, os containers passam a ler a versão nova destes")
+            print("ficheiros no arranque seguinte -- a opção 3 (reiniciar) poria")
+            print("código antigo a arrancar com configuração nova. Até lá, o que")
+            print("está a correr não é afectado.")
+    else:
+        print("Os servidores já pararam, por isso repor o git não interrompe nada.")
+
+    print("")
+    back_to = " e ".join(f"{repo} em {ref}" for repo, ref in previous.items() if ref)
+    print(f"  S  voltar a {back_to}   <- o habitual")
+    print("  n  ficar no código antigo, para o ler, comparar ou depurar")
+    print("     (atenção: em detached HEAD, um commit não fica em branch")
+    print("      nenhuma e perde-se com facilidade)")
+    print("-" * 58)
+
+    answer = input("\nRepor? [S/n]: ").strip().lower()
+    if answer in ("", "s", "sim", "y", "yes"):
+        restore_refs(previous)
+    else:
+        print("\n  Ficaste no código antigo. Para voltar mais tarde:")
+        for repo, ref in previous.items():
+            if ref:
+                print(f"    git -C {repo} checkout {ref}")
 
 
 def run_specific_version():
@@ -240,6 +374,9 @@ def run_specific_version():
     frontend_tag = choose_version("frontend", frontend_versions, pair_hint=backend_date)
 
     print("\nA mudar os submódulos...")
+    print("  (se tiver ficheiros destes repositórios abertos no editor, feche-os:")
+    print("   um separador que volte a gravar um ficheiro que a versão antiga não")
+    print("   tem impede o regresso no fim)")
     previous = {}
     previous["backend"] = checkout_version("backend", backend_tag)
     if previous["backend"] is None:
@@ -264,13 +401,7 @@ def run_specific_version():
             else:
                 print("\n❌ Instalação de dependências falhou; servidores não iniciados.")
     finally:
-        print("\nOs submódulos ficaram em detached HEAD, nas tags escolhidas.")
-        answer = input("Repor as referências anteriores? [S/n]: ").strip().lower()
-        if answer in ("", "s", "sim", "y"):
-            restore_refs(previous)
-        else:
-            back = ", ".join(f"{repo}: git checkout {ref}" for repo, ref in previous.items() if ref)
-            print(f"  Para voltar mais tarde -> {back}")
+        ask_to_restore(previous, {"backend": backend_tag, "frontend": frontend_tag}, docker=mode == "2")
 
 
 def install_dependencies():

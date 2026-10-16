@@ -212,6 +212,47 @@ def running_backend_version():
         return None
 
 
+
+def ask_to_restore(previous, tags, docker):
+    """Pergunta se os submódulos voltam às branches onde estavam.
+
+    A pergunta é sobre os ficheiros em disco e não sobre o que está a correr,
+    e essa distinção não é óbvia para quem a lê a meio de um arranque: em
+    Docker o código já foi copiado para dentro das imagens, por isso repor o
+    git não muda nada do que está de pé. Por isso diz-se aqui o que cada
+    resposta faz, e de onde para onde."""
+    print("\n" + "-" * 58)
+    print("Os submódulos ficaram parados nas tags escolhidas (detached HEAD):")
+    for repo, tag in tags.items():
+        origin = previous.get(repo) or "?"
+        print(f"  {repo:<9} {tag:<14} (vinha de {origin})")
+
+    print("")
+    if docker:
+        print("Os containers já foram construídos com este código: repor o git")
+        print("NÃO os altera -- continuam a servir estas versões até correr a")
+        print("opção 2, que reconstrói a partir das branches de trabalho.")
+    else:
+        print("Os servidores já pararam, por isso repor o git não interrompe nada.")
+
+    print("")
+    back_to = " e ".join(f"{repo} em {ref}" for repo, ref in previous.items() if ref)
+    print(f"  S  voltar a {back_to}   <- o habitual")
+    print("  n  ficar no código antigo, para o ler, comparar ou depurar")
+    print("     (atenção: em detached HEAD, um commit não fica em branch")
+    print("      nenhuma e perde-se com facilidade)")
+    print("-" * 58)
+
+    answer = input("\nRepor? [S/n]: ").strip().lower()
+    if answer in ("", "s", "sim", "y", "yes"):
+        restore_refs(previous)
+    else:
+        print("\n  Ficaste no código antigo. Para voltar mais tarde:")
+        for repo, ref in previous.items():
+            if ref:
+                print(f"    git -C {repo} checkout {ref}")
+
+
 def run_specific_version():
     """Arranca o portal numa versão escolhida de cada submódulo.
 
@@ -264,13 +305,7 @@ def run_specific_version():
             else:
                 print("\n❌ Instalação de dependências falhou; servidores não iniciados.")
     finally:
-        print("\nOs submódulos ficaram em detached HEAD, nas tags escolhidas.")
-        answer = input("Repor as referências anteriores? [S/n]: ").strip().lower()
-        if answer in ("", "s", "sim", "y"):
-            restore_refs(previous)
-        else:
-            back = ", ".join(f"{repo}: git checkout {ref}" for repo, ref in previous.items() if ref)
-            print(f"  Para voltar mais tarde -> {back}")
+        ask_to_restore(previous, {"backend": backend_tag, "frontend": frontend_tag}, docker=mode == "2")
 
 
 def install_dependencies():
